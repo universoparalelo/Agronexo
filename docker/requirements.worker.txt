@@ -10,9 +10,8 @@ psycopg2-binary==2.9.10
 # MinIO
 minio==7.2.11
 
-# GIS raster — GDAL viene de la imagen base (osgeo/gdal)
+# GIS raster — GDAL y numpy vienen de la imagen base (osgeo/gdal), no reinstalar
 rasterio==1.3.11
-numpy==2.2.0
 
 # GIS vectorial
 geopandas==1.0.1
