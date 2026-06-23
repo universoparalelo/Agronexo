@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 
 app = FastAPI(
     title="AgroNexo API",
@@ -23,6 +25,14 @@ app.add_middleware(
 @app.get("/api/v1/health")
 async def health():
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/api/v1/health/db")
+async def health_db():
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(text("SELECT PostGIS_Version()"))
+        postgis_version = result.scalar()
+    return {"status": "ok", "postgis": postgis_version}
 
 
 # Los routers se registran acá a medida que se implementan los módulos

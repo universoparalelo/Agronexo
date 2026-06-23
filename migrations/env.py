@@ -8,10 +8,14 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import settings
 from app.core.database import Base
 
-# Los modelos deben importarse para que Alembic los detecte en autogenerate
-# from app.lotes.models import Lote  # se agrega cuando existan
+# Importar modelos acá para que Alembic los detecte en autogenerate.
+# Se van agregando a medida que se crean:
+# from app.auth.models import Usuario
+# from app.lotes.models import Lote
 
 config = context.config
+
+# Sobreescribir la URL del alembic.ini con la real desde pydantic-settings
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
@@ -22,12 +26,17 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
-def do_run_migrations(connection):
+def do_run_migrations(connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
