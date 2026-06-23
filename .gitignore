@@ -1,0 +1,39 @@
+# Entorno
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Docker volúmenes locales (si se mapean)
+.docker/
+
+# Alembic (no los archivos de migración, sí los temporales)
+migrations/versions/*.pyc
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archivos GeoTIFF de prueba (pueden pesar cientos de MB)
+*.tif
+*.tiff
+*.geotiff
+tests/fixtures/*.tif

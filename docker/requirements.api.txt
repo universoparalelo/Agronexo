@@ -1,0 +1,35 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# Validación y configuración
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# Base de datos
+sqlalchemy==2.0.36
+geoalchemy2==0.15.2
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# Auth
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1
+passlib[bcrypt]==1.7.4
+
+# Celery + Redis
+celery==5.4.0
+redis==5.2.1
+
+# MinIO
+minio==7.2.11
+
+# Reportes PDF
+weasyprint==63.1
+
+# Uploads
+python-multipart==0.0.20
+
+# Utils
+httpx==0.28.1
