@@ -35,8 +35,10 @@ async def health_db():
     return {"status": "ok", "postgis": postgis_version}
 
 
-# Los routers se registran acá a medida que se implementan los módulos
+from app.lotes.router import router as lotes_router
+
+app.include_router(lotes_router, prefix="/api/v1/lotes", tags=["lotes"])
+
+# Routers pendientes de implementación:
 # from app.auth.router import router as auth_router
-# from app.lotes.router import router as lotes_router
 # app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
-# app.include_router(lotes_router, prefix="/api/v1/lotes", tags=["lotes"])

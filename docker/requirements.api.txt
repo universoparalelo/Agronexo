@@ -31,5 +31,8 @@ weasyprint==63.1
 # Uploads
 python-multipart==0.0.20
 
+# GIS (validación de geometrías en schemas Pydantic)
+shapely==2.0.6
+
 # Utils
 httpx==0.28.1

@@ -9,9 +9,8 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Importar modelos acá para que Alembic los detecte en autogenerate.
-# Se van agregando a medida que se crean:
-# from app.auth.models import Usuario
-# from app.lotes.models import Lote
+from app.lotes.models import Lote, Vuelo  # noqa: F401
+# from app.auth.models import Usuario  # se agrega cuando exista Auth
 
 config = context.config
 

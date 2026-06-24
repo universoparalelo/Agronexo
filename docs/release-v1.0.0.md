@@ -119,6 +119,37 @@ Todos los tests pasaron.
 
 ---
 
+---
+
+#### Modelos Lote/Vuelo · CRUD de lotes · Validación Pydantic
+**Fecha:** 2026-06-24  
+**Rama:** `main` (commit siguiente)
+
+Se implementaron los modelos SQLAlchemy para `Lote` y `Vuelo`, los schemas Pydantic con validación geométrica, el service layer con lógica de negocio y el router FastAPI con 7 endpoints.
+
+**Decisiones tomadas:**
+- `usuario_id` nullable en `Lote` por ahora — se conecta al módulo Auth en la siguiente tarea sin tocar el service.
+- Cálculo de área con `ST_Area(ST_Transform(geometry, 32721)) / 10000` dentro de PostGIS — más preciso que calcular en Python porque usa proyección métrica.
+- Soft delete con `deleted_at` timestamp — `DELETE` físico prohibido, el registro persiste con el historial de vuelos y análisis vinculados.
+- Índice GiST sobre la columna `geometry` — habilita consultas espaciales eficientes (`ST_Intersects`, `ST_Contains`) en el futuro.
+- Shapely agregado a `requirements.api.txt` para validar geometrías en los schemas Pydantic antes de que lleguen a la DB.
+- `ondelete="RESTRICT"` en FK `vuelos.lote_id` — no se puede borrar un lote que tenga vuelos asociados (protección de integridad).
+
+**Resultado de los tests:**
+```
+POST /lotes    201 — area_ha calculada: 27.404 ha
+GET  /lotes    200 — total: 1
+GET  /lotes/{id} 200 — nombre correcto
+PUT  /lotes/{id} 200 — estadio actualizado
+GET  /vuelos   200 — lista vacía (correcto)
+DELETE         204 — soft delete
+GET  /lotes    200 — total: 0 (lote no aparece)
+GET  /lotes/{id} 404 (esperado — lote borrado)
+Verificación DB: deleted_at seteado, registro físico preservado ✓
+```
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -126,7 +157,6 @@ _Ir completando a medida que avanza el desarrollo._
 | Tarea | Responsable | Estado | Rama |
 |---|---|---|---|
 | Módulo Auth (JWT, registro, login) | _nombre_ | pendiente | — |
-| Modelo Lote + migración | _nombre_ | pendiente | — |
 | Upload GeoTIFF → MinIO | _nombre_ | pendiente | — |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | pendiente | — |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
