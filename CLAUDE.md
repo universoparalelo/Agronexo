@@ -202,6 +202,41 @@ Exportación: GeoJSON (API) / SHP.zip (maquinaria) / ISO-XML (ISOBUS)
 
 ---
 
+## Seguimiento de release (`docs/release-vX.X.X.md`)
+
+Cada release tiene su archivo de seguimiento en `docs/`. El archivo activo es `docs/release-v1.0.0.md`.
+
+**Actualizar el archivo cuando:**
+- Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.
+- Surge un error relevante al resolver una tarea → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
+- Se toma una decisión de arquitectura no obvia → agregarla a la tabla "Decisiones de arquitectura".
+- Aparece un problema abierto sin solución → agregarlo a "Problemas abiertos" y borrarlo cuando se resuelva.
+- Se cierra la release → completar la sección "Presentación" y marcar el checklist.
+
+**No documentar:**
+- Cambios internos triviales (renombrar variable, ajustar formato).
+- Errores de tipeo o de sintaxis resueltos en el mismo momento.
+- Decisiones obvias que cualquiera tomaría igual.
+
+**Formato de entrada de tarea completada:**
+```
+#### Nombre de la tarea
+**Fecha:** YYYY-MM-DD
+**Rama:** `feat/nombre` (commit `abc1234`)
+
+Descripción breve de qué se hizo y por qué.
+
+**Decisiones tomadas:**
+- decisión 1
+- decisión 2
+
+**Error encontrado — título descriptivo**
+[mensaje de error exacto o descripción]
+Cómo se resolvió.
+```
+
+---
+
 ## Mantenimiento del README.md
 
 El archivo `README.md` es la puerta de entrada para los colaboradores del proyecto. Actualizarlo es obligatorio cuando ocurre cualquiera de estos eventos:
