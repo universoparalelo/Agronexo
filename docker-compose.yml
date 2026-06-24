@@ -76,6 +76,8 @@ services:
     env_file: .env
     volumes:
       - ./workers:/app/workers
+      - ./app:/app/app
+      - ./tests:/app/tests
     depends_on:
       db:
         condition: service_healthy
