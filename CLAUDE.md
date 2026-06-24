@@ -217,6 +217,91 @@ No actualizar el README en cambios internos de implementación (refactors, renom
 
 ---
 
+## Estrategia de ramas (trunk-based development)
+
+`main` es siempre la rama estable y deployable. Nadie pushea directo a `main` — todo entra por Pull Request. Las ramas son de vida corta: máximo 2-3 días antes de mergear.
+
+### Nomenclatura de ramas
+
+| Prefijo | Cuándo usarlo | Ejemplo |
+|---|---|---|
+| `feat/` | Nueva funcionalidad del sprint | `feat/auth-jwt` |
+| `fix/` | Bug no urgente detectado en desarrollo | `fix/ndvi-division-cero` |
+| `hotfix/` | Bug en producción que rompe algo — prioridad máxima | `hotfix/upload-geotiff-crash` |
+| `chore/` | Mantenimiento sin lógica: deps, renombrar, configs | `chore/actualizar-rasterio` |
+| `release/` | Preparación de release para despliegue | `release/v1.0.0` |
+
+### Flujo según situación
+
+**Feature nueva (caso normal)**
+```bash
+git checkout main && git pull
+git checkout -b feat/nombre-corto
+# ... trabajar, commitear frecuente ...
+git push origin feat/nombre-corto
+# Abrir Pull Request → revisión → merge a main → borrar rama
+```
+
+**Bug no urgente**
+```bash
+git checkout -b fix/descripcion-breve
+# corregir, test, commit
+# PR a main igual que feat/
+```
+
+**Hotfix en producción**
+```bash
+# Cortar desde el tag que está en producción, no desde main
+git checkout v1.0.0
+git checkout -b hotfix/descripcion
+# corregir mínimo necesario
+# PR a main  →  merge
+# PR a release/v1.0 también si aplica  →  merge
+git tag v1.0.1
+```
+
+**Release (cuando llega el momento de desplegar)**
+```bash
+git checkout main && git pull
+git checkout -b release/v1.0.0
+# ajustes finales: versión, changelog, smoke test
+# PR a main  →  merge
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+# deploy siempre desde el tag, nunca desde main directamente
+```
+
+### Reglas de Pull Request
+
+- Todo merge a `main` va por PR — sin excepciones, incluso trabajando solo.
+- El PR debe describir qué cambia y cómo probarlo (comando o endpoint).
+- Al menos una revisión de un compañero antes de mergear en equipo.
+- Resolver conflictos en la rama feature, nunca en main.
+- Borrar la rama después del merge.
+
+### Commits
+
+Usar prefijos convencionales para que el historial sea legible:
+
+```
+feat:   nueva funcionalidad
+fix:    corrección de bug
+chore:  mantenimiento, deps, configs
+docs:   documentación
+test:   tests
+refactor: reestructura sin cambiar comportamiento
+```
+
+### Protección de main (configurar en GitHub)
+
+En Settings → Branches → Add rule sobre `main`:
+- ✅ Require pull request before merging
+- ✅ Require at least 1 approval
+- ✅ Dismiss stale reviews when new commits are pushed
+- ✅ Do not allow bypassing the above settings
+
+---
+
 ## Reglas de desarrollo
 
 ### Código
