@@ -97,7 +97,7 @@ jobs:
 
       - name: Instalar dependencias del worker
         run: |
-          pip3 install --break-system-packages --ignore-installed \
+          python3 -m pip install --break-system-packages --ignore-installed \
             -r docker/requirements.worker.txt
 
       - name: Correr tests del pipeline NDVI
