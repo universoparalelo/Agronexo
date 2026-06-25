@@ -183,6 +183,28 @@ POST /lotes (no auth)  401 — rechazado (esperado)
 
 ---
 
+#### Frontend base — Vite + React + Login + Dashboard
+**Fecha:** 2026-06-25
+**Rama:** `main` (commit siguiente)
+
+Se implementó el frontend base completo: scaffold Vite + React (JS), cliente HTTP axios con interceptores JWT, hook `useAuth`, pantalla de Login con manejo de errores, Dashboard con lista de lotes y placeholder del mapa, rutas protegidas con `PrivateRoute`, CSS plano funcional y servicio Docker con hot reload.
+
+**Decisiones tomadas:**
+- JavaScript puro (sin TypeScript) — alineado con el stack definido en CLAUDE.md.
+- Proxy Vite `/api → http://api:8000` resuelve CORS en dev sin configuración extra en el backend.
+- `localStorage` para tokens — suficiente para el contexto académico; en producción se evaluaría httpOnly cookies.
+- CSS plano con paleta verde oscuro (#1a3a2a) coherente con identidad agrícola. Sin Tailwind por ahora.
+- Botones "Nuevo lote" y "Ver análisis" deshabilitados — se habilitan cuando existan los endpoints de upload y análisis (Sprint 4).
+
+**Resultado verificado:**
+```
+docker compose up frontend   → Vite v6 ready in 192ms en puerto 5173
+GET http://frontend:5173/    → 200 HTML con React + Vite HMR
+Proxy /api → api:8000        → configurado en vite.config.js
+```
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -192,7 +214,7 @@ _Ir completando a medida que avanza el desarrollo._
 | Upload GeoTIFF → MinIO | _nombre_ | pendiente | — |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | pendiente | — |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
-| Frontend — mapa con React-Leaflet | _nombre_ | pendiente | — |
+| Frontend — mapa con React-Leaflet (Sprint 4) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
 
 ---
