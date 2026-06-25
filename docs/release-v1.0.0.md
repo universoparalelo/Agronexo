@@ -150,13 +150,45 @@ Verificación DB: deleted_at seteado, registro físico preservado ✓
 
 ---
 
+#### Módulo Auth (JWT, registro, login)
+**Fecha:** 2026-06-25
+**Rama:** `main` (commit siguiente)
+
+Se implementó el módulo de autenticación completo con JWT: modelo `Usuario`, schemas Pydantic con validación de email y contraseña, service con bcrypt (passlib), dependencia `get_current_user` y router con 5 endpoints. Los endpoints de lotes quedaron protegidos con JWT y filtran por `usuario_id`.
+
+**Decisiones tomadas:**
+- JWT stateless: `access_token` (30 min) + `refresh_token` (7 días). Logout solo limpia tokens en el cliente — blacklist en Redis queda para un sprint posterior si se requiere invalidación inmediata.
+- `ondelete="SET NULL"` en `lotes.usuario_id → usuarios.id` — si un usuario se elimina, sus lotes quedan huérfanos pero no se pierden.
+- `email-validator` agregado a `requirements.api.txt` — requerido por `EmailStr` de Pydantic v2.
+- Relación `Usuario.lotes` usa `foreign_keys` explícito para evitar ambigüedad con SQLAlchemy al resolver la FK circular entre módulos.
+
+**Error encontrado — NoForeignKeysError al iniciar la API**
+```
+sqlalchemy.exc.NoForeignKeysError: Could not determine join condition between
+parent/child tables on relationship Usuario.lotes
+```
+`Lote.usuario_id` no tenía `ForeignKey("usuarios.id")` declarado en el modelo SQLAlchemy (la FK existía solo en la migración). SQLAlchemy necesita la FK también en el ORM para resolver las relaciones. Se agregó el `ForeignKey` al modelo y se usó `foreign_keys=` en la relación de `Usuario`.
+
+**Resultado de los tests:**
+```
+POST /auth/register    201 — agronomo@test.com creado
+POST /auth/login       200 — tokens emitidos
+GET  /auth/me          200 — Juan Perez
+POST /auth/login       401 — password incorrecta (esperado)
+GET  /auth/me          401 — sin token (esperado)
+POST /auth/register    409 — email duplicado (esperado)
+POST /lotes (auth)     201 — lote creado con usuario_id
+POST /lotes (no auth)  401 — rechazado (esperado)
+```
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
 
 | Tarea | Responsable | Estado | Rama |
 |---|---|---|---|
-| Módulo Auth (JWT, registro, login) | _nombre_ | pendiente | — |
 | Upload GeoTIFF → MinIO | _nombre_ | pendiente | — |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | pendiente | — |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |

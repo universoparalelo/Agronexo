@@ -43,8 +43,10 @@ async def listar_lotes(db: AsyncSession, usuario_id: uuid.UUID | None = None) ->
     return list(result.scalars().all())
 
 
-async def obtener_lote(db: AsyncSession, lote_id: uuid.UUID) -> Lote | None:
+async def obtener_lote(db: AsyncSession, lote_id: uuid.UUID, usuario_id: uuid.UUID | None = None) -> Lote | None:
     stmt = select(Lote).where(Lote.id == lote_id, Lote.deleted_at.is_(None))
+    if usuario_id is not None:
+        stmt = stmt.where(Lote.usuario_id == usuario_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 

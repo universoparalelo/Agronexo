@@ -43,8 +43,9 @@ class Lote(Base):
     )
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    # nullable hasta que exista el módulo Auth
-    usuario_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -52,6 +53,7 @@ class Lote(Base):
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="lotes")
     vuelos: Mapped[list["Vuelo"]] = relationship("Vuelo", back_populates="lote")
 
 
