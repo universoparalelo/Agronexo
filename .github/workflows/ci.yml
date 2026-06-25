@@ -95,8 +95,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar dependencias del worker
+      - name: Instalar pip y dependencias del worker
         run: |
+          apt-get update -qq && apt-get install -y -qq python3-pip
           python3 -m pip install --break-system-packages --ignore-installed \
             -r docker/requirements.worker.txt
 
