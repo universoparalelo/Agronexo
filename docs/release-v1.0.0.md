@@ -219,6 +219,24 @@ _Ir completando a medida que avanza el desarrollo._
 
 ---
 
+#### Integración continua — GitHub Actions
+**Fecha:** 2026-06-25
+**Rama:** `main` (commit siguiente)
+
+Se configuró el pipeline CI en `.github/workflows/ci.yml` con 3 jobs paralelos que corren en cada push y PR a `main`.
+
+**Jobs implementados:**
+- `test-api`: levanta PostGIS 16 + Redis como services de Actions, corre las 3 migraciones Alembic y verifica `/health` y `/health/db`.
+- `test-gis`: usa la imagen `osgeo/gdal:ubuntu-small-3.9.0` (misma del worker), instala dependencias y corre `tests/test_ndvi_pipeline.py`.
+- `build-frontend`: Node 20, `npm install` + `npm run build`, verifica que `dist/index.html` existe.
+
+**Decisiones tomadas:**
+- PostGIS como container service (Opción A) — hit real a la DB, alineado con la regla de no mockear la base de datos.
+- `PYTHONPATH=$(pwd)` en el job GIS para que Python encuentre `workers/` y `app/` desde la raíz del repo en CI, sin modificar el script de tests que tiene el path `/app` hardcodeado para el contenedor Docker.
+- Cache de pip y npm activado — acelera las corridas sucesivas.
+
+---
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._

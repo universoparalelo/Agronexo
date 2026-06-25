@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: API — migraciones + health check ──────────────────────────────
+  test-api:
+    name: API — migraciones y health
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: agronexo_test
+          POSTGRES_USER: agronexo
+          POSTGRES_PASSWORD: agronexo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agronexo -d agronexo_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: agronexo_test
+      POSTGRES_USER: agronexo
+      POSTGRES_PASSWORD: agronexo
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      MINIO_ENDPOINT: localhost:9000
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BUCKET: agronexo
+      MINIO_USE_SSL: "false"
+      MINIO_PRESIGNED_URL_EXPIRY: "3600"
+      JWT_SECRET_KEY: ci-secret-key-only-for-testing-not-production
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "7"
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      ALLOWED_ORIGINS: "http://localhost:5173"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docker/requirements.api.txt
+
+      - name: Instalar dependencias API
+        run: pip install -r docker/requirements.api.txt
+
+      - name: Correr migraciones Alembic
+        run: alembic upgrade head
+
+      - name: Verificar que la API arranca y responde
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+          curl -f http://localhost:8000/api/v1/health
+          curl -f http://localhost:8000/api/v1/health/db
+          echo "✓ API health OK"
+
+  # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
+  test-gis:
+    name: Worker GIS — pipeline NDVI
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/osgeo/gdal:ubuntu-small-3.9.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias del worker
+        run: |
+          pip3 install --break-system-packages --ignore-installed \
+            -r docker/requirements.worker.txt
+
+      - name: Correr tests del pipeline NDVI
+        run: PYTHONPATH=$(pwd) python3 tests/test_ndvi_pipeline.py
+
+  # ── Job 3: Frontend — build Vite ─────────────────────────────────────────
+  build-frontend:
+    name: Frontend — build Vite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package.json
+
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm install
+
+      - name: Build de producción
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verificar que el build generó archivos
+        run: |
+          test -f frontend/dist/index.html
+          echo "✓ Build frontend OK"
