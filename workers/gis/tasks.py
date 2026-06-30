@@ -8,20 +8,22 @@ _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 
 def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None) -> None:
-    # Importaciones lazy: evitan cargar app.core.database (asyncpg) a nivel de módulo.
-    from sqlalchemy import create_engine, update
+    # SQL directo para evitar importar app.lotes.models → app.core.database → asyncpg,
+    # que no está instalado en el contenedor worker.
+    from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
 
     from app.core.config import settings
-    from app.lotes.models import Vuelo
 
     engine = create_engine(settings.database_url_sync)
     try:
         with Session(engine) as session:
             session.execute(
-                update(Vuelo)
-                .where(Vuelo.id == vuelo_id)
-                .values(estado=estado, error_detalle=error)
+                text(
+                    "UPDATE vuelos SET estado = CAST(:estado AS estadovueloenum), "
+                    "error_detalle = :error WHERE id = CAST(:vuelo_id AS uuid)"
+                ),
+                {"estado": estado, "error": error, "vuelo_id": vuelo_id},
             )
             session.commit()
     finally:
@@ -56,7 +58,13 @@ def _validar_geotiff_gis(data: bytes) -> dict:
         }
 
 
-@celery_app.task(bind=True, name="workers.gis.tasks.procesar_vuelo")
+@celery_app.task(
+    bind=True,
+    name="workers.gis.tasks.procesar_vuelo",
+    autoretry_for=(ConnectionError, OSError),
+    max_retries=3,
+    default_retry_delay=30,
+)
 def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi") -> dict:
     from app.core.storage import download_geotiff, upload_geotiff
     from workers.gis.pipeline import ejecutar_pipeline

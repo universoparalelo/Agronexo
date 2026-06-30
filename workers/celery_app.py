@@ -21,4 +21,7 @@ celery_app.conf.update(
     task_routes={
         "workers.gis.tasks.*": {"queue": "gis"},
     },
+    task_queues={"gis": {}},
+    task_default_queue="gis",
+    result_expires=3600,  # TTL resultados en Redis: 1 hora
 )
