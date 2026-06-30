@@ -237,7 +237,7 @@ Se configuró el pipeline CI en `.github/workflows/ci.yml` con 3 jobs paralelos 
 
 #### Ingesta de GeoTIFF — Upload, validación y encolado
 **Fecha:** 2026-06-30
-**Rama:** `main`
+**Rama:** `main` (commit `33cd77d`)
 
 Se implementó el módulo `app/ingesta/` completo: cliente MinIO (`app/core/storage.py`), validador de archivos en dos capas (API + Worker), servicio de orquestación, router con dos endpoints y task Celery `procesar_vuelo`.
 
