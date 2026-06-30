@@ -211,7 +211,7 @@ _Ir completando a medida que avanza el desarrollo._
 
 | Tarea | Responsable | Estado | Rama |
 |---|---|---|---|
-| Upload GeoTIFF → MinIO | _nombre_ | pendiente | — |
+| Upload GeoTIFF → MinIO | _nombre_ | completado | main |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | pendiente | — |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
 | Frontend — mapa con React-Leaflet (Sprint 4) | _nombre_ | pendiente | — |
@@ -235,6 +235,21 @@ Se configuró el pipeline CI en `.github/workflows/ci.yml` con 3 jobs paralelos 
 - `PYTHONPATH=$(pwd)` en el job GIS para que Python encuentre `workers/` y `app/` desde la raíz del repo en CI, sin modificar el script de tests que tiene el path `/app` hardcodeado para el contenedor Docker.
 - Cache de pip y npm activado — acelera las corridas sucesivas.
 
+#### Ingesta de GeoTIFF — Upload, validación y encolado
+**Fecha:** 2026-06-30
+**Rama:** `main`
+
+Se implementó el módulo `app/ingesta/` completo: cliente MinIO (`app/core/storage.py`), validador de archivos en dos capas (API + Worker), servicio de orquestación, router con dos endpoints y task Celery `procesar_vuelo`.
+
+**Decisiones tomadas:**
+- Validación en dos capas: extensión + magic bytes en la API (sin rasterio); CRS + bandas + dtype en el worker (tiene rasterio). Evita agregar GDAL como dependencia del contenedor API.
+- `task_id` y `error_detalle` agregados al modelo `Vuelo` (migración 0004). Permite que `GET /lotes/{id}/vuelos/{id}/estado` cruce el estado de la DB con el de Celery `AsyncResult` en tiempo real.
+- El worker actualiza `vuelo.estado` en DB via sync SQLAlchemy (`create_engine` + `Session`) — el único punto donde se hace esto fuera de la API async.
+- Se mantuvo la tarea legacy `procesar_analisis` para no romper los tests de CI existentes.
+
+**Error encontrado — `features.shapes()` rechaza float64**
+Documentado en CLAUDE.md y validado en el worker: si el dtype es `float64` o `int8`, el worker lanza `ValueError` con mensaje claro antes de intentar vectorizar.
+
 ---
 
 ## Problemas abiertos
@@ -257,7 +272,9 @@ _Registro de las decisiones importantes que no son obvias desde el código._
 | MinIO para archivos binarios | Sistema de archivos local | Escalabilidad y URLs firmadas temporarias |
 | PostGIS para vectores | GeoJSON en disco | Consultas espaciales, índices GiST, historial |
 | GeoTIFF sintético como fixture | Descargar imagen real de Sentinel-2 | Sin dependencia de red, tamaño mínimo, valores controlados |
-| _agregar acá_ | — | — |
+| Celery con `result_backend` en Redis | Solo broker sin backend | El polling de `/analisis/{id}/estado` necesita `AsyncResult` para leer el estado; sin `result_backend` siempre devuelve PENDING |
+| Cast a `float32` antes de `features.shapes()` | Pasar el array NDVI directamente (float64) | `rasterio.features.shapes()` rechaza `float64` e `int8` — confirmado en docs de Rasterio (Context7 2026-06-26) |
+| `rasterio.band(src, n)` en vectorización de archivos grandes | `src.read()` + `shapes()` | Evita cargar el array completo en memoria RAM antes de vectorizar; crítico para GeoTIFFs > 500 MB |
 
 ---
 

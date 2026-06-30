@@ -42,7 +42,7 @@ Comunicación con backend: exclusivamente REST API + GeoJSON.
 | SQLAlchemy + GeoAlchemy2 | ORM + geometrías PostGIS |
 | python-jose + bcrypt | JWT + hashing |
 | WeasyPrint | Reportes PDF desde HTML/CSS |
-| Redis | Broker Celery + caché de estado |
+| Redis | Broker Celery (db 0) + result_backend de tareas (db 1) — **ambos deben configurarse** para que el polling de estado funcione |
 | Celery | Cola de tareas asíncronas |
 
 Módulos FastAPI: `app/auth/`, `app/lotes/`, `app/ingesta/`, `app/diagnostico/`, `app/reportes/`
@@ -165,7 +165,8 @@ Extracción de bandas → matrices NumPy
 Cálculo de índice (NDVI, SAVI, GNDVI, etc.)
     ↓ scikit-image (Otsu)
 Umbralización → máscara de píxeles
-    ↓ rasterio.features.shapes()
+    ↓ cast a float32 / uint8 (shapes() rechaza float64 e int8)
+    ↓ rasterio.features.shapes()  — para archivos > 500 MB usar rasterio.band(src, n) en lugar de src.read() para evitar cargar el array completo en memoria
 Vectorización → polígonos
     ↓ GeoPandas + Shapely
 Filtrado por área mínima, simplificación Douglas-Peucker
@@ -344,7 +345,8 @@ En Settings → Branches → Add rule sobre `main`:
 - No mezclar lógica de procesamiento GIS dentro de los endpoints FastAPI. Siempre Celery.
 - Los cálculos de índices operan sobre arrays NumPy completos — nunca iterar pixel a pixel.
 - Manejar `nodata` y división por cero explícitamente en las operaciones de índices.
-- GeoTIFF grandes (> 500 MB): usar windowed reading de Rasterio.
+- GeoTIFF grandes (> 500 MB): usar windowed reading de Rasterio (`src.block_windows()`). En el paso de vectorización usar `rasterio.band(src, n)` en lugar de `src.read()` para no cargar el array completo en memoria.
+- Antes de llamar a `rasterio.features.shapes()`, castear el array a `float32`, `uint8`, `uint16`, `int16` o `int32` — la función rechaza `float64` e `int8` y lanza `TypeError` silencioso.
 - Geometrías: validar con Shapely antes de persistir en PostGIS.
 
 ### API
