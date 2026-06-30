@@ -46,6 +46,20 @@ def download_geotiff(key: str) -> bytes:
         response.release_conn()
 
 
+def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+    """Sube bytes arbitrarios a MinIO bajo la clave dada. Retorna la clave."""
+    client = _client()
+    _ensure_bucket(client)
+    client.put_object(
+        settings.minio_bucket,
+        key,
+        io.BytesIO(data),
+        length=len(data),
+        content_type=content_type,
+    )
+    return key
+
+
 def presigned_url(key: str) -> str:
     client = _client()
     return client.presigned_get_object(

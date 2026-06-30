@@ -38,7 +38,12 @@ async def crear_vuelo_desde_upload(
 
     task = celery_app.send_task(
         "workers.gis.tasks.procesar_vuelo",
-        kwargs={"vuelo_id": str(vuelo.id), "minio_key": key},
+        kwargs={
+            "vuelo_id": str(vuelo.id),
+            "minio_key": key,
+            "sensor": sensor.value,
+            "indice": "ndvi",
+        },
         queue="gis",
     )
 

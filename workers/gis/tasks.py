@@ -1,4 +1,5 @@
 import io
+import tempfile
 
 import rasterio
 from workers.celery_app import celery_app
@@ -56,8 +57,9 @@ def _validar_geotiff_gis(data: bytes) -> dict:
 
 
 @celery_app.task(bind=True, name="workers.gis.tasks.procesar_vuelo")
-def procesar_vuelo(self, vuelo_id: str, minio_key: str) -> dict:
-    from app.core.storage import download_geotiff
+def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi") -> dict:
+    from app.core.storage import download_geotiff, upload_geotiff
+    from workers.gis.pipeline import ejecutar_pipeline
 
     self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
 
@@ -67,23 +69,49 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str) -> dict:
         _actualizar_vuelo(vuelo_id, "error", f"Error al descargar el archivo: {exc}")
         raise
 
-    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Validando CRS y bandas"})
+    self.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
 
     try:
-        metadata = _validar_geotiff_gis(data)
+        _validar_geotiff_gis(data)
     except Exception as exc:
         mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
         _actualizar_vuelo(vuelo_id, "error", mensaje)
         raise ValueError(mensaje) from exc
 
     _actualizar_vuelo(vuelo_id, "procesando")
-    self.update_state(state="PROGRESS", meta={"progreso": 40, "mensaje": "Archivo validado. Iniciando cálculo de índices"})
+    self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
 
-    # TODO Sprint Worker GIS: llamar al pipeline NDVI/SAVI/GNDVI desde workers/gis/ndvi.py
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+            geojson_path = tmp.name
+
+        estadisticas = ejecutar_pipeline(
+            data=data,
+            sensor=sensor,
+            indice=indice,
+            geojson_destino=geojson_path,
+        )
+    except Exception as exc:
+        _actualizar_vuelo(vuelo_id, "error", f"Error en el pipeline GIS: {exc}")
+        raise
+
+    self.update_state(state="PROGRESS", meta={"progreso": 80, "mensaje": "Subiendo resultados"})
+
+    try:
+        from app.core.storage import upload_bytes
+        partes = minio_key.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
+        prefijo = "/".join(partes[:3])
+        with open(geojson_path, "rb") as f:
+            geojson_bytes = f.read()
+        upload_bytes(f"{prefijo}/zonas.geojson", geojson_bytes, content_type="application/geo+json")
+    except Exception as exc:
+        # Error no crítico — el análisis es válido aunque no se haya subido el GeoJSON
+        estadisticas["advertencia_upload"] = str(exc)
+
     self.update_state(state="PROGRESS", meta={"progreso": 100, "mensaje": "Procesamiento completado"})
     _actualizar_vuelo(vuelo_id, "completado")
 
-    return {"vuelo_id": vuelo_id, "metadata": metadata}
+    return {"vuelo_id": vuelo_id, "estadisticas": estadisticas}
 
 
 # Tarea legacy — se mantiene por compatibilidad con tests existentes
