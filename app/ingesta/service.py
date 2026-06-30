@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime
 
@@ -5,7 +6,7 @@ from celery.result import AsyncResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import upload_geotiff
+from app.core.storage import download_bytes, upload_geotiff
 from app.ingesta.schemas import EstadoVueloResponse
 from app.lotes.models import EstadoVueloEnum, SensorEnum, Vuelo
 from workers.celery_app import celery_app
@@ -52,6 +53,37 @@ async def crear_vuelo_desde_upload(
     await db.flush()
     await db.refresh(vuelo)
     return vuelo
+
+
+async def listar_vuelos(
+    db: AsyncSession,
+    lote_id: uuid.UUID,
+) -> list[Vuelo]:
+    stmt = select(Vuelo).where(Vuelo.lote_id == lote_id).order_by(Vuelo.created_at.desc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def obtener_resultado_geojson(
+    db: AsyncSession,
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+) -> dict | None:
+    stmt = select(Vuelo).where(Vuelo.id == vuelo_id, Vuelo.lote_id == lote_id)
+    result = await db.execute(stmt)
+    vuelo = result.scalar_one_or_none()
+    if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
+        return None
+    if vuelo.archivo_original is None:
+        return None
+    partes = vuelo.archivo_original.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
+    prefijo = "/".join(partes[:3])
+    geojson_key = f"{prefijo}/zonas.geojson"
+    try:
+        data = download_bytes(geojson_key)
+        return json.loads(data)
+    except Exception:
+        return None
 
 
 async def obtener_estado_vuelo(

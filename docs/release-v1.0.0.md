@@ -281,6 +281,34 @@ El worker corría desde el 24/06 y no conocía `procesar_vuelo` (agregada despu�
 
 ---
 
+#### Visualización del índice — Polling, barra de progreso y mapa Leaflet
+**Fecha:** 2026-06-30
+**Rama:** `feat/visualizacion-indice`
+
+Se implementó la visualización completa del resultado de análisis en el frontend: polling de estado en tiempo real, barra de progreso animada y mapa Leaflet interactivo con zonas coloreadas por clase NDVI.
+
+**Piezas implementadas:**
+
+Backend:
+- `GET /lotes/{lote_id}/vuelos` — endpoint nuevo que lista vuelos de un lote ordenados por fecha descendente.
+- `GET /lotes/{lote_id}/vuelos/{vuelo_id}/resultado` — endpoint nuevo que descarga `zonas.geojson` desde MinIO y lo retorna como JSON. Solo disponible si el vuelo está `completado`.
+- `download_bytes()` en `app/core/storage.py` — función genérica para descargar cualquier objeto de MinIO.
+
+Frontend:
+- `hooks/useVueloProgreso.js` — hook que hace polling al endpoint de estado cada 2 segundos hasta que el estado sea `completado` o `error`, luego carga el GeoJSON. Limpia el interval en el cleanup del `useEffect`.
+- `components/BarraProgreso.jsx` — muestra el porcentaje (0–100%) con transición CSS suave y el mensaje del paso actual del worker.
+- `components/MapaIndice.jsx` — mapa Leaflet (react-leaflet v4) con capa GeoJSON donde cada zona se colorea según su clase: crítica (rojo), deficiente (naranja), normal (amarillo), vigorosa (verde). Leyenda posicionada sobre el mapa. Tooltips con NDVI promedio y área en ha.
+- Dashboard actualizado: "Ver análisis" selecciona el lote; el panel derecho muestra `AnalisisPanel` que coordina polling + barra + mapa según el estado del vuelo más reciente.
+
+**Decisiones tomadas:**
+- CSS de Leaflet importado en `main.jsx` antes de `index.css` para evitar que los estilos locales lo sobreescriban.
+- `key={selectedLoteId}` en `AnalisisPanel` garantiza que el componente se remonta (y reinicia el polling) al cambiar de lote.
+- El endpoint `/resultado` retorna el GeoJSON directamente, no una URL firmada, para simplificar el consumo desde el frontend. Si el GeoJSON creciera mucho (> 10 MB), se revisaría a URL firmada.
+- Bounds del mapa calculados manualmente desde las coordenadas del GeoJSON para no depender de `getBounds()` de Leaflet.
+- Paleta de colores alineada con el pipeline: crítica `#c0392b`, deficiente `#e67e22`, normal `#f1c40f`, vigorosa `#27ae60`.
+
+---
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
