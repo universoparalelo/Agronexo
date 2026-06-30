@@ -264,6 +264,21 @@ Se implementó el pipeline GIS generalizado que soporta NDVI, NDRE, SAVI y ExG c
 - La tarea `procesar_vuelo` sube `zonas.geojson` a MinIO en `{usuario}/{lote}/{vuelo}/zonas.geojson`. Un error en ese paso no cancela el análisis (error no crítico).
 - `sensor` e `indice` se pasan como kwargs al encolar la tarea en Celery desde `ingesta/service.py`; el índice por defecto es `ndvi`.
 
+#### Worker asíncrono — Celery + cola Redis + progreso
+**Fecha:** 2026-06-30
+**Rama:** `main` (commit `8d5252b`)
+
+Se completó la configuración operacional de Celery y se verificó el ciclo completo end-to-end.
+
+**Decisiones tomadas:**
+- `task_queues={"gis": {}}` declara la cola explícitamente en lugar de dejar que Celery la cree on-demand, evitando race conditions si el worker arranca antes que la primera tarea.
+- `result_expires=3600` — los resultados de tareas expiran en Redis a la hora. Sin esto se acumulan indefinidamente.
+- `autoretry_for=(ConnectionError, OSError)` con `max_retries=3` y `default_retry_delay=30s` cubre caídas momentáneas de MinIO o red, sin reintentar errores de validación GIS (que son `ValueError`).
+- `_actualizar_vuelo` pasó de usar el ORM (`app.lotes.models`) a SQL directo con `text()` — el modelo arrastra `app.core.database` → `asyncpg`, que no está instalado en el contenedor worker.
+
+**Error encontrado — tarea no registrada en worker**
+El worker corría desde el 24/06 y no conocía `procesar_vuelo` (agregada después). Resuelto con `docker compose restart worker`. Documentado como paso obligatorio al agregar nuevas tareas Celery.
+
 ---
 
 ## Problemas abiertos
