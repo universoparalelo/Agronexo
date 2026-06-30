@@ -212,7 +212,7 @@ _Ir completando a medida que avanza el desarrollo._
 | Tarea | Responsable | Estado | Rama |
 |---|---|---|---|
 | Upload GeoTIFF → MinIO | _nombre_ | completado | main |
-| Conectar pipeline NDVI a tarea Celery | _nombre_ | pendiente | — |
+| Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
 | Frontend — mapa con React-Leaflet (Sprint 4) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
@@ -249,6 +249,20 @@ Se implementó el módulo `app/ingesta/` completo: cliente MinIO (`app/core/stor
 
 **Error encontrado — `features.shapes()` rechaza float64**
 Documentado en CLAUDE.md y validado en el worker: si el dtype es `float64` o `int8`, el worker lanza `ValueError` con mensaje claro antes de intentar vectorizar.
+
+#### Worker GIS — Índices, mapeo de bandas y reproyección CRS
+**Fecha:** 2026-06-30
+**Rama:** `main` (commit `a39ecce`)
+
+Se implementó el pipeline GIS generalizado que soporta NDVI, NDRE, SAVI y ExG con mapeo configurable de bandas por sensor y reproyección automática de CRS.
+
+**Decisiones tomadas:**
+- `band_mapping.py` centraliza los números de banda por sensor — Sentinel-2 y DJI Mavic 3 tienen las mismas bandas en distinto orden; esto evita números hardcodeados en el pipeline.
+- `indices.py` opera exclusivamente sobre arrays NumPy completos (sin iterar píxel a píxel). Toda función retorna `float32` y convierte nodata y denominador cero a `NaN` explícitamente.
+- `reproyeccion.py` reproyecta en memoria con `rasterio.warp`; si el CRS ya es EPSG:4326 devuelve los bytes originales sin tocarlos (zero-copy).
+- `pipeline.py` reutiliza `clasificar_ndvi` y `vectorizar_zonas` de `ndvi.py` para todos los índices — los umbrales cualitativos (crítica/deficiente/normal/vigorosa) aplican igual a NDRE y SAVI al ser índices ratio en [-1,1].
+- La tarea `procesar_vuelo` sube `zonas.geojson` a MinIO en `{usuario}/{lote}/{vuelo}/zonas.geojson`. Un error en ese paso no cancela el análisis (error no crítico).
+- `sensor` e `indice` se pasan como kwargs al encolar la tarea en Celery desde `ingesta/service.py`; el índice por defecto es `ndvi`.
 
 ---
 
