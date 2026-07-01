@@ -349,6 +349,10 @@ git log --oneline origin/main ^main
 
 Si hay commits en el remoto que no están en local, informarlos al usuario y preguntar si quiere traerlos antes de continuar (`git pull`). No asumir que el local está al día.
 
+## Commit y push al terminar
+
+Al completar cualquier tarea, recordar explícitamente al usuario que haga commit y push si todavía no se hizo. Incluir el comando exacto listo para copiar. El trabajo no está compartido hasta que esté en el remoto.
+
 ---
 
 ## Reglas de desarrollo
