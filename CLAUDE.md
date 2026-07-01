@@ -1,5 +1,50 @@
 # AgroNexo — Instrucciones para Claude
 
+## Estado actual del proyecto
+
+**Release activa:** v1.0.0 (en desarrollo) — seguimiento en `docs/release-v1.0.0.md`
+
+### Qué está implementado y funcionando
+
+| Área | Estado | Notas |
+|---|---|---|
+| Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
+| FastAPI + SQLAlchemy async + PostGIS | ✅ | |
+| Migraciones Alembic (0001 → 0006) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
+| CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
+| Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
+| Worker GIS: NDVI, NDRE, SAVI, ExG | ✅ | Vectoriza zonas, exporta GeoJSON a MinIO |
+| Worker actualiza geometry del lote | ✅ | Extrae bounding box del GeoTIFF tras reproyectar |
+| CI GitHub Actions (3 jobs) | ✅ | test-api, test-gis, build-frontend |
+| Frontend Login + Dashboard | ✅ | Lista de lotes, cards con cultivo y área |
+| Modal carga GeoTIFF (drag & drop) | ✅ | Llama a `/lotes/desde-geotiff` |
+| Polling de progreso (barra) | ✅ | Cada 2s contra `/vuelos/{id}/estado` |
+| Mapa Leaflet con zonas NDVI | ✅ | Coloreado por clase, tooltip con área y NDVI prom. |
+| Motor de diagnóstico (RFDR-01) | ❌ | Próximo a implementar |
+| Exportación Shapefile / PDF | ❌ | Pendiente |
+| Botón "Nuevo lote" (formulario solo) | ❌ | Deshabilitado — usar modal GeoTIFF |
+
+### Credenciales de desarrollo
+
+| Servicio | URL | Credenciales |
+|---|---|---|
+| Frontend | http://localhost:5173 | — |
+| API / Swagger | http://localhost:8000/api/docs | — |
+| MinIO Console | http://localhost:9001 | Ver `.env` |
+| PostgreSQL | localhost:5432 | Ver `.env` |
+| **Usuario por defecto** | — | `admin@agronexo.com` / `password123` |
+
+### Decisiones recientes no obvias desde el código
+
+- `geometry` en tabla `lotes` es **nullable** (migración 0005) — el worker la rellena con el bounding box del GeoTIFF después de procesar. Un lote recién creado puede tener `geometry = null`.
+- El contenedor API necesita `./workers` montado como volumen — sin eso no puede importar `workers.celery_app` y crashea al arrancar.
+- `POST /lotes/desde-geotiff` está en el router de ingesta (prefijo `/lotes`), no en el router de lotes.
+- El worker pasa `lote_id` como kwarg a la tarea Celery para poder actualizar la geometry después.
+- `rasterio.features.shapes()` rechaza `float64` — el array NDVI siempre se castea a `float32` antes de vectorizar.
+
+---
+
 ## Qué es este proyecto
 
 AgroNexo es una plataforma de agricultura de precisión que procesa imágenes satelitales y de drones (GeoTIFF multiespectrales) para calcular índices de vegetación (NDVI, GNDVI, SAVI, NDRE, EVI, MSAVI), detectar anomalías espaciales en cultivos y generar diagnósticos agronómicos con recomendaciones de prescripción diferenciada. El foco geográfico es el NEA argentino (Chaco, Formosa, Corrientes), con énfasis en soja, algodón, maíz y sorgo.
