@@ -6,16 +6,10 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import rasterio
-from rasterio.features import shapes
+from rasterio.features import geometry_mask, shapes
 from shapely.geometry import shape
 
-# Umbrales NDVI según CLAUDE.md y ERS AgroNexo
-CLASES = {
-    "critica":    (None, 0.20),
-    "deficiente": (0.20, 0.40),
-    "normal":     (0.40, 0.70),
-    "vigorosa":   (0.70, None),
-}
+from workers.gis.clasificacion import calcular_umbrales, clasificar_con_umbrales
 
 # Área mínima de un polígono para no considerarlo ruido (0.1 ha = 1000 m²)
 AREA_MINIMA_M2 = 1000
@@ -52,17 +46,15 @@ def calcular_ndvi(nir: np.ndarray, red: np.ndarray, nodata: float | None = None)
     return ndvi.astype(np.float32)
 
 
-def clasificar_ndvi(ndvi: np.ndarray) -> np.ndarray:
+def clasificar_ndvi(ndvi: np.ndarray, metodo: str = "fijo") -> np.ndarray:
     """
-    Asigna un código entero a cada píxel según su clase NDVI.
+    Asigna un código entero a cada píxel según su clase.
     0 = nodata/nan, 1 = critica, 2 = deficiente, 3 = normal, 4 = vigorosa
+
+    metodo: "fijo" (umbrales agronómicos estándar) | "otsu" | "percentil"
     """
-    clase = np.zeros(ndvi.shape, dtype=np.uint8)
-    clase[ndvi < 0.20]                        = 1  # critica
-    clase[(ndvi >= 0.20) & (ndvi < 0.40)]     = 2  # deficiente
-    clase[(ndvi >= 0.40) & (ndvi < 0.70)]     = 3  # normal
-    clase[ndvi >= 0.70]                        = 4  # vigorosa
-    return clase
+    umbrales = calcular_umbrales(ndvi, metodo)
+    return clasificar_con_umbrales(ndvi, umbrales)
 
 
 def _codigo_a_nombre(codigo: int) -> str:
@@ -77,9 +69,14 @@ def vectorizar_zonas(
     """
     Convierte la máscara de clases en polígonos GeoDataFrame.
     Filtra ruido por área mínima y simplifica con Douglas-Peucker.
+    Las estadísticas de índice se calculan por polígono individual, no por clase global.
     """
     transform = meta["transform"]
     crs = meta["crs"]
+    out_shape = ndvi.shape
+
+    # Tolerancia adaptativa: media pixel en unidades del CRS (grados si EPSG:4326)
+    tolerancia = abs(transform.a) * 0.5
 
     filas = []
     for codigo in range(1, 5):
@@ -93,12 +90,20 @@ def vectorizar_zonas(
             if not geom.is_valid:
                 geom = geom.buffer(0)
 
-            # Simplificar con Douglas-Peucker (tolerancia en unidades del CRS)
-            geom = geom.simplify(tolerance=0.000005, preserve_topology=True)
+            geom = geom.simplify(tolerance=tolerancia, preserve_topology=True)
 
-            # Calcular NDVI promedio dentro del polígono (aproximación por bounding box)
-            ndvi_zona = ndvi[clase == codigo]
-            ndvi_promedio = float(np.nanmean(ndvi_zona)) if ndvi_zona.size > 0 else 0.0
+            # Estadísticas reales del polígono individual (no de toda la clase)
+            try:
+                poly_mask = geometry_mask(
+                    [geom.__geo_interface__],
+                    out_shape=out_shape,
+                    transform=transform,
+                    invert=True,
+                )
+                px = ndvi[poly_mask]
+                ndvi_promedio = float(np.nanmean(px)) if px.size > 0 else 0.0
+            except Exception:
+                ndvi_promedio = 0.0
 
             filas.append({
                 "geometry": geom,
