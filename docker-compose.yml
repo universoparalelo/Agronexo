@@ -60,6 +60,7 @@ services:
       - ./app:/app/app
       - ./migrations:/app/migrations
       - ./tests:/app/tests
+      - ./workers:/app/workers
     depends_on:
       db:
         condition: service_healthy
