@@ -95,6 +95,28 @@ jobs:
     container:
       image: ghcr.io/osgeo/gdal:ubuntu-small-3.9.0
 
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: agronexo_test
+      POSTGRES_USER: agronexo
+      POSTGRES_PASSWORD: agronexo
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      MINIO_ENDPOINT: localhost:9000
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BUCKET: agronexo
+      MINIO_USE_SSL: "false"
+      MINIO_PRESIGNED_URL_EXPIRY: "3600"
+      JWT_SECRET_KEY: ci-secret-key-only-for-testing-not-production
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "7"
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      ALLOWED_ORIGINS: "http://localhost:5173"
+
     steps:
       - uses: actions/checkout@v4
 
