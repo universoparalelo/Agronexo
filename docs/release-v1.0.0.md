@@ -205,6 +205,37 @@ Proxy /api → api:8000        → configurado en vite.config.js
 
 ---
 
+#### Usuario por defecto para desarrollo — migración 0006
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se agregó la migración 0006 que inserta un usuario de desarrollo al correr `alembic upgrade head`. Usa `ON CONFLICT DO NOTHING` para que sea idempotente — si el usuario ya existe, no falla.
+
+**Credenciales del usuario por defecto:**
+- **Email:** `admin@agronexo.com`
+- **Contraseña:** `password123`
+
+No hay que crear usuario manualmente en un entorno de desarrollo fresco. Solo levantar el stack y correr las migraciones.
+
+**Decisiones tomadas:**
+- Hash bcrypt generado en la propia migración con passlib — no se guarda la contraseña en texto plano en ningún lado.
+- `ON CONFLICT (email) DO NOTHING` — la migración es segura de correr múltiples veces.
+
+---
+
+#### Carga de GeoTIFF desde el frontend — Modal y endpoint combinado
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se implementó el flujo completo de carga desde la UI. Botón "Cargar GeoTIFF" en el Dashboard abre un modal con formulario (nombre, cultivo, sensor, estadio opcional) y zona drag & drop. Llama a `POST /lotes/desde-geotiff` que crea el lote y encola el vuelo en un solo paso. Al confirmar, el modal se cierra, la lista se refresca y el lote queda seleccionado con la barra de progreso arrancando automáticamente.
+
+**Decisiones tomadas:**
+- Geometry del lote se crea como `NULL` (migración 0005) — el worker la actualiza con el bounding box del GeoTIFF tras reproyectar a EPSG:4326.
+- `lote_id` se pasa como kwarg a la tarea Celery para que el worker identifique qué lote actualizar.
+- La extracción de bounds falla silenciosamente en el worker para no bloquear el pipeline GIS.
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -213,8 +244,8 @@ _Ir completando a medida que avanza el desarrollo._
 |---|---|---|---|
 | Upload GeoTIFF → MinIO | _nombre_ | completado | main |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
+| Frontend — modal carga GeoTIFF | _nombre_ | completado | main |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
-| Frontend — mapa con React-Leaflet (Sprint 4) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
 
 ---
