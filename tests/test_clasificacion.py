@@ -104,27 +104,31 @@ def test_clasificar_ndvi_sin_argumento_usa_fijo():
 
 def _geotiff_cuatro_zonas() -> bytes:
     """
-    GeoTIFF 100x100 con 4 cuadrantes de NDVI controlado:
-      superior-izq: 0.10 (crítica)
-      superior-der: 0.30 (deficiente)
-      inferior-izq: 0.55 (normal)
-      inferior-der: 0.80 (vigorosa)
-    Los promedios por polígono deben ser distintos aunque sean de clases distintas,
-    y la corrección de stats-por-polígono garantiza que no se mezclan entre clases.
+    GeoTIFF 100x100 multibanda (dji_mavic3: 5 bandas, NIR=5, RED=3) con 4 cuadrantes:
+      superior-izq: NDVI≈0.10 (crítica)
+      superior-der: NDVI≈0.30 (deficiente)
+      inferior-izq: NDVI≈0.55 (normal)
+      inferior-der: NDVI≈0.80 (vigorosa)
+    Valores NIR/RED calculados para que NDVI = (NIR-RED)/(NIR+RED) sea el deseado.
     """
-    data = np.zeros((1, 100, 100), dtype=np.float32)
-    data[0, :50, :50] = 0.10
-    data[0, :50, 50:] = 0.30
-    data[0, 50:, :50] = 0.55
-    data[0, 50:, 50:] = 0.80
+    # NIR y RED tal que (NIR-RED)/(NIR+RED) da el NDVI objetivo
+    ndvi_targets = {(slice(None, 50), slice(None, 50)): (1.1, 0.9),    # 0.10
+                    (slice(None, 50), slice(50, None)): (1.3, 0.7),     # 0.30
+                    (slice(50, None), slice(None, 50)): (1.55, 0.45),   # 0.55
+                    (slice(50, None), slice(50, None)): (1.8, 0.2)}     # 0.80
+
+    bands = np.zeros((5, 100, 100), dtype=np.float32)
+    for (r, c), (nir, red) in ndvi_targets.items():
+        bands[4, r, c] = nir   # banda 5 = NIR (dji_mavic3)
+        bands[2, r, c] = red   # banda 3 = RED (dji_mavic3)
 
     transform = from_bounds(-60.7, -27.5, -60.6, -27.4, 100, 100)
     buf = io.BytesIO()
     with rasterio.open(
         buf, "w", driver="GTiff", height=100, width=100,
-        count=1, dtype="float32", crs=CRS.from_epsg(4326), transform=transform,
+        count=5, dtype="float32", crs=CRS.from_epsg(4326), transform=transform,
     ) as dst:
-        dst.write(data)
+        dst.write(bands)
     buf.seek(0)
     return buf.read()
 
@@ -142,7 +146,7 @@ def test_ndvi_promedio_por_poligono_es_correcto():
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         geojson_path = tmp.name
 
-    ejecutar_pipeline(data=data, sensor="sentinel2", indice="ndvi",
+    ejecutar_pipeline(data=data, sensor="dji_mavic3", indice="ndvi",
                       geojson_destino=geojson_path, metodo_umbral="fijo")
 
     with open(geojson_path) as f:
@@ -173,7 +177,7 @@ def test_pipeline_otsu_produce_poligonos_validos():
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         geojson_path = tmp.name
 
-    ejecutar_pipeline(data=data, sensor="sentinel2", indice="ndvi",
+    ejecutar_pipeline(data=data, sensor="dji_mavic3", indice="ndvi",
                       geojson_destino=geojson_path, metodo_umbral="otsu")
 
     with open(geojson_path) as f:
