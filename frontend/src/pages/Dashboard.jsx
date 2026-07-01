@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
+import BarraProgreso from '../components/BarraProgreso'
+import MapaIndice from '../components/MapaIndice'
 
 const CULTIVO_LABEL = {
   soja: 'Soja',
@@ -10,12 +13,67 @@ const CULTIVO_LABEL = {
   sorgo: 'Sorgo',
 }
 
+function AnalisisPanel({ loteId }) {
+  const [vuelos, setVuelos] = useState([])
+  const [loadingVuelos, setLoadingVuelos] = useState(true)
+
+  useEffect(() => {
+    setLoadingVuelos(true)
+    client
+      .get(`/lotes/${loteId}/vuelos`)
+      .then(({ data }) => setVuelos(data))
+      .catch(() => setVuelos([]))
+      .finally(() => setLoadingVuelos(false))
+  }, [loteId])
+
+  const vuelo = vuelos[0] ?? null
+  const { estado, geojson, errorMsg } = useVueloProgreso(
+    vuelo ? loteId : null,
+    vuelo?.vuelo_id ?? null,
+  )
+
+  if (loadingVuelos) return <p className="estado-msg">Cargando análisis...</p>
+
+  if (!vuelo) {
+    return (
+      <div className="empty-state">
+        <p>No hay vuelos procesados para este lote.</p>
+        <p className="empty-hint">Subí un GeoTIFF para iniciar el análisis de índices.</p>
+      </div>
+    )
+  }
+
+  const estadoActual = estado?.estado ?? vuelo.estado
+
+  if (estadoActual === 'completado' && geojson) {
+    return <MapaIndice geojson={geojson} />
+  }
+
+  if (estadoActual === 'error' || errorMsg) {
+    return (
+      <div className="analisis-error">
+        <p className="analisis-error-titulo">Error en el procesamiento</p>
+        <p>{errorMsg ?? estado?.error ?? 'Ocurrió un error al procesar el vuelo.'}</p>
+      </div>
+    )
+  }
+
+  return (
+    <BarraProgreso
+      progreso={estado?.progreso ?? 0}
+      mensaje={estado?.mensaje}
+      estado={estadoActual}
+    />
+  )
+}
+
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedLoteId, setSelectedLoteId] = useState(null)
 
   useEffect(() => {
     client
@@ -29,6 +87,8 @@ export default function Dashboard() {
     logout()
     navigate('/login')
   }
+
+  const loteSeleccionado = lotes.find((l) => l.id === selectedLoteId)
 
   return (
     <div className="dashboard">
@@ -66,7 +126,10 @@ export default function Dashboard() {
           {!loading && lotes.length > 0 && (
             <div className="lotes-grid">
               {lotes.map((lote) => (
-                <div key={lote.id} className="lote-card">
+                <div
+                  key={lote.id}
+                  className={`lote-card${selectedLoteId === lote.id ? ' lote-card--activo' : ''}`}
+                >
                   <div className="lote-card-header">
                     <h3>{lote.nombre}</h3>
                     <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
@@ -76,7 +139,10 @@ export default function Dashboard() {
                   <div className="lote-card-body">
                     {lote.area_ha && (
                       <p className="lote-stat">
-                        <strong>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })}</strong> ha
+                        <strong>
+                          {lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })}
+                        </strong>{' '}
+                        ha
                       </p>
                     )}
                     {lote.estadio_fenologico && (
@@ -84,7 +150,10 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div className="lote-card-footer">
-                    <button className="btn-secondary btn-sm" disabled>
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => setSelectedLoteId(lote.id)}
+                    >
                       Ver análisis
                     </button>
                   </div>
@@ -96,12 +165,29 @@ export default function Dashboard() {
 
         <section className="mapa-section">
           <div className="section-title-row">
-            <h2>Mapa</h2>
+            <h2>
+              {loteSeleccionado ? `Análisis — ${loteSeleccionado.nombre}` : 'Mapa'}
+            </h2>
+            {loteSeleccionado && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={() => setSelectedLoteId(null)}
+              >
+                Cerrar
+              </button>
+            )}
           </div>
-          <div className="mapa-placeholder">
-            <p>El mapa con React-Leaflet se integra en el Sprint 4</p>
-            <p className="empty-hint">aquí se mostrarán los lotes y los resultados de análisis NDVI</p>
-          </div>
+
+          {selectedLoteId ? (
+            <AnalisisPanel key={selectedLoteId} loteId={selectedLoteId} />
+          ) : (
+            <div className="mapa-placeholder">
+              <p>Seleccioná un lote para ver su análisis</p>
+              <p className="empty-hint">
+                NDVI, NDRE, SAVI y más índices de vegetación
+              </p>
+            </div>
+          )}
         </section>
       </main>
     </div>

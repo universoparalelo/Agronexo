@@ -6,6 +6,16 @@ from pydantic import BaseModel
 from app.lotes.models import EstadoVueloEnum, SensorEnum
 
 
+class VueloListItem(BaseModel):
+    vuelo_id: uuid.UUID
+    lote_id: uuid.UUID
+    sensor: SensorEnum
+    estado: EstadoVueloEnum
+    fecha_vuelo: datetime
+    task_id: str | None
+    created_at: datetime
+
+
 class VueloUploadResponse(BaseModel):
     vuelo_id: uuid.UUID
     lote_id: uuid.UUID
