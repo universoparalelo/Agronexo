@@ -39,7 +39,7 @@ class Lote(Base):
     cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
     estadio_fenologico: Mapped[str | None] = mapped_column(String(10), nullable=True)
     geometry: Mapped[object] = mapped_column(
-        Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=False
+        Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True
     )
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
 
