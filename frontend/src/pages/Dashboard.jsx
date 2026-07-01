@@ -5,6 +5,7 @@ import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
+import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 
 const CULTIVO_LABEL = {
   soja: 'Soja',
@@ -74,14 +75,24 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedLoteId, setSelectedLoteId] = useState(null)
+  const [showModal, setShowModal] = useState(false)
 
-  useEffect(() => {
+  function cargarLotes() {
+    setLoading(true)
     client
       .get('/lotes')
       .then(({ data }) => setLotes(data.items))
       .catch(() => setError('No se pudieron cargar los lotes.'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { cargarLotes() }, [])
+
+  function handleCargaExitosa(loteId) {
+    setShowModal(false)
+    cargarLotes()
+    setSelectedLoteId(loteId)
+  }
 
   function handleLogout() {
     logout()
@@ -92,6 +103,12 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
+      {showModal && (
+        <ModalCargaGeoTIFF
+          onSuccess={handleCargaExitosa}
+          onClose={() => setShowModal(false)}
+        />
+      )}
       <header className="dashboard-header">
         <div className="header-brand">
           <h1>AgroNexo</h1>
@@ -108,8 +125,8 @@ export default function Dashboard() {
         <section className="lotes-section">
           <div className="section-title-row">
             <h2>Mis lotes</h2>
-            <button className="btn-primary btn-sm" disabled>
-              + Nuevo lote
+            <button className="btn-primary btn-sm" onClick={() => setShowModal(true)}>
+              + Cargar GeoTIFF
             </button>
           </div>
 
