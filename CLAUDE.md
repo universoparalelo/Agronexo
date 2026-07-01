@@ -338,6 +338,19 @@ En Settings → Branches → Add rule sobre `main`:
 
 ---
 
+## Verificación de cambios remotos
+
+Antes de iniciar cualquier tarea, ejecutar:
+
+```bash
+git fetch origin
+git log --oneline origin/main ^main
+```
+
+Si hay commits en el remoto que no están en local, informarlos al usuario y preguntar si quiere traerlos antes de continuar (`git pull`). No asumir que el local está al día.
+
+---
+
 ## Reglas de desarrollo
 
 ### Código
