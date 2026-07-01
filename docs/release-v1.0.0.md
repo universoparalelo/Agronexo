@@ -340,13 +340,40 @@ Frontend:
 
 ---
 
+#### Tests del pipeline — cobertura completa en CI
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se completó la cobertura de tests del pipeline GIS y se incorporaron al CI. Antes, el job `test-gis` solo corría `test_ndvi_pipeline.py` y el job `test-api` no corría ningún test de Python. Ahora todos los tests existentes corren automáticamente en cada push.
+
+**Tests incorporados al CI:**
+- `test-api` job: agrega `tests/test_ingesta.py` (validación de extensión, magic bytes, archivo vacío)
+- `test-gis` job: agrega `tests/test_indices_worker.py` (índices, mapeo de bandas, reproyección, pipeline completo) y `tests/test_ingesta_worker.py` (validación GIS: CRS, dtype)
+- `test-gis` job: agrega los dos tests de configuración de `tests/test_celery_integracion.py` (`result_expires` y cola `gis`)
+
+**Test E2E verificado localmente:**
+`test_ciclo_completo_encolar_y_esperar` en `test_celery_integracion.py` pasó correctamente con el stack levantado:
+```
+✓ GeoTIFF subido → MinIO
+✓ Tarea encolada y completada en 2s
+✓ 1 polígono generado, NDVI prom=0.6
+✓ zonas.geojson en MinIO con 1 feature
+```
+
+**Decisiones tomadas:**
+- El test E2E completo (`test_ciclo_completo_encolar_y_esperar`) queda fuera del CI — requiere MinIO + worker corriendo, lo cual implica un cuarto job con imagen GDAL + MinIO service + worker en background. Complejidad no justificada antes de la demo del 7/jul.
+- Los dos tests de configuración Celery sí corren en CI porque solo verifican la configuración del objeto `celery_app`, sin necesitar servicios externos.
+
+---
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
 
 | # | Descripción | Impacto | Detectado |
 |---|---|---|---|
-| — | _completar cuando surja_ | — | — |
+| 1 | Test E2E (`test_ciclo_completo_encolar_y_esperar`) no corre en CI — necesita MinIO + worker | Bajo — pasa localmente, demostrable en la demo | 2026-07-01 |
+| 2 | No hay tests para endpoints HTTP (auth, lotes, ingesta) | Bajo — cubiertos implícitamente por el E2E; no están en el plan de R1 | 2026-07-01 |
 
 ---
 
