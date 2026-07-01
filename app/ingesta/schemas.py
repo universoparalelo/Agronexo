@@ -26,6 +26,16 @@ class VueloUploadResponse(BaseModel):
     mensaje: str = "GeoTIFF recibido. Validación y procesamiento iniciados."
 
 
+class LoteDesdeGeotiffResponse(BaseModel):
+    lote_id: uuid.UUID
+    vuelo_id: uuid.UUID
+    sensor: SensorEnum
+    estado: EstadoVueloEnum
+    task_id: str
+    created_at: datetime
+    mensaje: str = "GeoTIFF recibido. El lote y el análisis serán procesados en breve."
+
+
 class EstadoVueloResponse(BaseModel):
     vuelo_id: uuid.UUID
     estado: EstadoVueloEnum

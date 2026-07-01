@@ -1,15 +1,78 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from celery.result import AsyncResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.storage import download_bytes, upload_geotiff
-from app.ingesta.schemas import EstadoVueloResponse
-from app.lotes.models import EstadoVueloEnum, SensorEnum, Vuelo
+from app.ingesta.schemas import EstadoVueloResponse, LoteDesdeGeotiffResponse
+from app.lotes.models import CultivoEnum, EstadoVueloEnum, Lote, SensorEnum, Vuelo
 from workers.celery_app import celery_app
+
+
+async def crear_lote_y_vuelo_desde_geotiff(
+    db: AsyncSession,
+    usuario_id: uuid.UUID,
+    nombre: str,
+    cultivo: CultivoEnum,
+    sensor: SensorEnum,
+    file_data: bytes,
+    estadio_fenologico: str | None = None,
+) -> LoteDesdeGeotiffResponse:
+    lote = Lote(
+        nombre=nombre,
+        cultivo=cultivo,
+        estadio_fenologico=estadio_fenologico,
+        usuario_id=usuario_id,
+        geometry=None,
+    )
+    db.add(lote)
+    await db.flush()
+    await db.refresh(lote)
+
+    vuelo = Vuelo(
+        lote_id=lote.id,
+        sensor=sensor,
+        fecha_vuelo=datetime.now(timezone.utc),
+        estado=EstadoVueloEnum.pendiente,
+    )
+    db.add(vuelo)
+    await db.flush()
+    await db.refresh(vuelo)
+
+    key = upload_geotiff(
+        usuario_id=str(usuario_id),
+        lote_id=str(lote.id),
+        vuelo_id=str(vuelo.id),
+        data=file_data,
+    )
+
+    task = celery_app.send_task(
+        "workers.gis.tasks.procesar_vuelo",
+        kwargs={
+            "vuelo_id": str(vuelo.id),
+            "lote_id": str(lote.id),
+            "minio_key": key,
+            "sensor": sensor.value,
+            "indice": "ndvi",
+        },
+        queue="gis",
+    )
+
+    vuelo.archivo_original = key
+    vuelo.task_id = task.id
+    await db.flush()
+
+    return LoteDesdeGeotiffResponse(
+        lote_id=lote.id,
+        vuelo_id=vuelo.id,
+        sensor=vuelo.sensor,
+        estado=vuelo.estado,
+        task_id=task.id,
+        created_at=vuelo.created_at,
+    )
 
 
 async def crear_vuelo_desde_upload(

@@ -7,6 +7,27 @@ from workers.celery_app import celery_app
 _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 
+def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.core.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
+                    "WHERE id = CAST(:lote_id AS uuid)"
+                ),
+                {"wkt": wkt, "lote_id": lote_id},
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+
 def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None) -> None:
     # SQL directo para evitar importar app.lotes.models → app.core.database → asyncpg,
     # que no está instalado en el contenedor worker.
@@ -65,7 +86,7 @@ def _validar_geotiff_gis(data: bytes) -> dict:
     max_retries=3,
     default_retry_delay=30,
 )
-def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi") -> dict:
+def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi", lote_id: str | None = None) -> dict:
     from app.core.storage import download_geotiff, upload_geotiff
     from workers.gis.pipeline import ejecutar_pipeline
 
@@ -85,6 +106,19 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
         mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
         _actualizar_vuelo(vuelo_id, "error", mensaje)
         raise ValueError(mensaje) from exc
+
+    if lote_id:
+        try:
+            with rasterio.open(io.BytesIO(data)) as src:
+                from workers.gis.reproyeccion import reproyectar_a_4326
+                data_4326 = reproyectar_a_4326(data)
+            with rasterio.open(io.BytesIO(data_4326)) as src:
+                b = src.bounds
+                wkt = f"POLYGON(({b.left} {b.bottom},{b.right} {b.bottom},{b.right} {b.top},{b.left} {b.top},{b.left} {b.bottom}))"
+            _actualizar_lote_geometry(lote_id, wkt)
+            data = data_4326
+        except Exception:
+            pass  # no bloquear el pipeline si falla la extracción de bounds
 
     _actualizar_vuelo(vuelo_id, "procesando")
     self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})

@@ -8,12 +8,43 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.ingesta import service
-from app.ingesta.schemas import EstadoVueloResponse, VueloListItem, VueloUploadResponse
+from app.ingesta.schemas import EstadoVueloResponse, LoteDesdeGeotiffResponse, VueloListItem, VueloUploadResponse
 from app.ingesta.validator import validar_archivo_geotiff
-from app.lotes.models import SensorEnum
+from app.lotes.models import CultivoEnum, SensorEnum
 from app.lotes.service import obtener_lote
 
 router = APIRouter()
+
+
+@router.post(
+    "/desde-geotiff",
+    response_model=LoteDesdeGeotiffResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Crear lote y subir GeoTIFF en un solo paso",
+)
+async def crear_lote_desde_geotiff(
+    archivo: UploadFile = File(..., description="GeoTIFF multiespectral (.tif / .tiff)"),
+    nombre: str = Form(..., min_length=1, max_length=200),
+    cultivo: CultivoEnum = Form(...),
+    sensor: SensorEnum = Form(...),
+    estadio_fenologico: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    contenido = await archivo.read()
+    validar_archivo_geotiff(archivo, contenido)
+
+    resultado = await service.crear_lote_y_vuelo_desde_geotiff(
+        db=db,
+        usuario_id=uuid.UUID(str(current_user.id)),
+        nombre=nombre,
+        cultivo=cultivo,
+        sensor=sensor,
+        file_data=contenido,
+        estadio_fenologico=estadio_fenologico,
+    )
+    await db.commit()
+    return resultado
 
 
 @router.post(
