@@ -16,7 +16,7 @@
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
 | Worker GIS: NDVI, NDRE, SAVI, ExG | ✅ | Vectoriza zonas, exporta GeoJSON a MinIO |
 | Worker actualiza geometry del lote | ✅ | Extrae bounding box del GeoTIFF tras reproyectar |
-| CI GitHub Actions (3 jobs) | ✅ | test-api, test-gis, build-frontend |
+| CI GitHub Actions (3 jobs) | ✅ | test-api (migraciones + health + test_ingesta.py), test-gis (test_ndvi_pipeline + test_indices_worker + test_ingesta_worker + config Celery), build-frontend |
 | Frontend Login + Dashboard | ✅ | Lista de lotes, cards con cultivo y área |
 | Modal carga GeoTIFF (drag & drop) | ✅ | Llama a `/lotes/desde-geotiff` |
 | Polling de progreso (barra) | ✅ | Cada 2s contra `/vuelos/{id}/estado` |
@@ -42,6 +42,7 @@
 - `POST /lotes/desde-geotiff` está en el router de ingesta (prefijo `/lotes`), no en el router de lotes.
 - El worker pasa `lote_id` como kwarg a la tarea Celery para poder actualizar la geometry después.
 - `rasterio.features.shapes()` rechaza `float64` — el array NDVI siempre se castea a `float32` antes de vectorizar.
+- `test_celery_integracion.py` tiene tres tests: dos de configuración (corren en CI dentro del job `test-gis`) y uno de ciclo completo E2E que requiere MinIO + worker levantados — ese solo corre con `docker compose exec worker`.
 
 ---
 

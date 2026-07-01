@@ -85,6 +85,9 @@ jobs:
           curl -f http://localhost:8000/api/v1/health/db
           echo "✓ API health OK"
 
+      - name: Tests de validación de ingesta (API)
+        run: PYTHONPATH=$(pwd) python3 tests/test_ingesta.py
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI
@@ -101,8 +104,25 @@ jobs:
           python3 -m pip install --break-system-packages --ignore-installed \
             -r docker/requirements.worker.txt
 
-      - name: Correr tests del pipeline NDVI
+      - name: Tests pipeline NDVI
         run: PYTHONPATH=$(pwd) python3 tests/test_ndvi_pipeline.py
+
+      - name: Tests índices, mapeo de bandas y reproyección
+        run: PYTHONPATH=$(pwd) python3 tests/test_indices_worker.py
+
+      - name: Tests validación GIS (CRS, dtype)
+        run: PYTHONPATH=$(pwd) python3 tests/test_ingesta_worker.py
+
+      - name: Tests configuración Celery
+        run: |
+          PYTHONPATH=$(pwd) python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from tests.test_celery_integracion import test_resultado_expira_en_redis, test_cola_gis_declarada
+          test_resultado_expira_en_redis()
+          test_cola_gis_declarada()
+          print('✓ Configuración Celery OK')
+          "
 
   # ── Job 3: Frontend — build Vite ─────────────────────────────────────────
   build-frontend:
