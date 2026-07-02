@@ -114,7 +114,10 @@ def vectorizar_zonas(
             })
 
     if not filas:
-        return gpd.GeoDataFrame(columns=["geometry", "clase", "codigo", "ndvi_promedio", "area_ha"], crs=crs)
+        return gpd.GeoDataFrame(
+            columns=["geometry", "clase", "codigo", "ndvi_promedio", "area_ha", "zscore", "es_atipica"],
+            crs=crs,
+        )
 
     gdf = gpd.GeoDataFrame(filas, crs=crs)
 
@@ -125,6 +128,20 @@ def vectorizar_zonas(
     # Filtrar polígonos menores al área mínima
     gdf_utm_area = gdf_utm.geometry.area
     gdf = gdf[gdf_utm_area >= area_minima_m2].reset_index(drop=True)
+
+    # Zonas atípicas por z-score sobre ndvi_promedio de todos los polígonos del lote
+    promedios = gdf["ndvi_promedio"]
+    if len(gdf) >= 3:
+        media = promedios.mean()
+        std = promedios.std()
+        if std > 0:
+            gdf["zscore"] = ((promedios - media) / std).round(4)
+        else:
+            gdf["zscore"] = 0.0
+        gdf["es_atipica"] = gdf["zscore"].abs() > 1.5
+    else:
+        gdf["zscore"] = 0.0
+        gdf["es_atipica"] = False
 
     return gdf
 
