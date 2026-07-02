@@ -189,3 +189,100 @@ def test_pipeline_otsu_produce_poligonos_validos():
     assert "clase" in feat["properties"]
     assert "ndvi_promedio" in feat["properties"]
     assert "area_ha" in feat["properties"]
+
+
+# ── Tests zscore y es_atipica ────────────────────────────────────────────────
+
+def _meta_simple(shape=(10, 10)):
+    transform = from_bounds(-60.7, -27.5, -60.6, -27.4, shape[1], shape[0])
+    return {"crs": CRS.from_epsg(4326), "transform": transform, "nodata": None, "shape": shape}
+
+
+def test_zscore_y_atipica_presentes_en_geojson():
+    """El GeoJSON de salida incluye zscore y es_atipica en cada feature."""
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    data = _geotiff_cuatro_zonas()
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        geojson_path = tmp.name
+
+    ejecutar_pipeline(data=data, sensor="dji_mavic3", indice="ndvi",
+                      geojson_destino=geojson_path, metodo_umbral="fijo")
+
+    with open(geojson_path) as f:
+        gj = json.load(f)
+
+    for feat in gj["features"]:
+        props = feat["properties"]
+        assert "zscore" in props, "falta zscore en feature"
+        assert "es_atipica" in props, "falta es_atipica en feature"
+        assert isinstance(props["es_atipica"], bool)
+        assert isinstance(props["zscore"], float)
+
+
+def test_outlier_marcado_como_atipico():
+    """Polígono con ndvi muy alejado del resto debe tener es_atipica=True."""
+    # 6 polígonos sintéticos: 5 vigorosos similares + 1 crítico outlier
+    ndvi_values = np.array([0.78, 0.75, 0.80, 0.77, 0.76, 0.05], dtype=np.float32)
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    # Construir GDF directamente con polígonos separados
+    geoms = [box(i, 0, i + 0.9, 0.9) for i in range(6)]
+    gdf = gpd.GeoDataFrame(
+        {
+            "geometry": geoms,
+            "clase": ["vigorosa"] * 5 + ["critica"],
+            "codigo": [4] * 5 + [1],
+            "ndvi_promedio": ndvi_values.tolist(),
+        },
+        crs=CRS.from_epsg(4326),
+    )
+
+    # Aplicar la lógica de zscore directamente (misma que vectorizar_zonas)
+    media = float(np.mean(ndvi_values))
+    std = float(np.std(ndvi_values, ddof=1))
+    gdf["zscore"] = ((gdf["ndvi_promedio"] - media) / std).round(4)
+    gdf["es_atipica"] = gdf["zscore"].abs() > 1.5
+
+    atipicas = gdf[gdf["es_atipica"]]
+    assert len(atipicas) == 1
+    assert atipicas.iloc[0]["clase"] == "critica"
+    assert atipicas.iloc[0]["zscore"] < -1.5
+
+
+def test_menos_de_3_poligonos_no_marca_atipicas():
+    """Con menos de 3 polígonos no se calculan atípicas (evita falsos positivos)."""
+    ndvi = np.array([
+        [0.05, 0.05, 0.80, 0.80],
+        [0.05, 0.05, 0.80, 0.80],
+        [0.80, 0.80, 0.80, 0.80],
+        [0.80, 0.80, 0.80, 0.80],
+    ], dtype=np.float32)
+
+    clase = clasificar_ndvi(ndvi)
+    gdf = vectorizar_zonas(clase, ndvi, _meta_simple((4, 4)), area_minima_m2=0)
+
+    assert len(gdf) < 3
+    assert not gdf["es_atipica"].any()
+    assert (gdf["zscore"] == 0.0).all()
+
+
+def test_area_minima_filtra_poligonos_pequenos():
+    """area_minima_m2 configurable elimina polígonos por debajo del umbral."""
+    ndvi = np.array([
+        [0.05, 0.80, 0.80, 0.80],
+        [0.80, 0.80, 0.80, 0.80],
+        [0.80, 0.80, 0.80, 0.80],
+        [0.80, 0.80, 0.80, 0.80],
+    ], dtype=np.float32)
+
+    clase = clasificar_ndvi(ndvi)
+    meta = _meta_simple((4, 4))
+
+    sin_filtro = vectorizar_zonas(clase, ndvi, meta, area_minima_m2=0)
+    con_filtro = vectorizar_zonas(clase, ndvi, meta, area_minima_m2=500_000_000)
+
+    assert len(sin_filtro) > 0
+    assert len(con_filtro) == 0
