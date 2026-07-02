@@ -104,6 +104,7 @@ async def crear_vuelo_desde_upload(
         "workers.gis.tasks.procesar_vuelo",
         kwargs={
             "vuelo_id": str(vuelo.id),
+            "lote_id": str(lote_id),
             "minio_key": key,
             "sensor": sensor.value,
             "indice": "ndvi",
@@ -137,11 +138,16 @@ async def obtener_resultado_geojson(
     vuelo = result.scalar_one_or_none()
     if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
         return None
-    if vuelo.archivo_original is None:
+
+    # Usar geojson_key guardado por el worker; fallback a derivación legacy
+    geojson_key = vuelo.geojson_key
+    if geojson_key is None and vuelo.archivo_original:
+        partes = vuelo.archivo_original.split("/")
+        geojson_key = "/".join(partes[:3]) + "/zonas.geojson"
+
+    if geojson_key is None:
         return None
-    partes = vuelo.archivo_original.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
-    prefijo = "/".join(partes[:3])
-    geojson_key = f"{prefijo}/zonas.geojson"
+
     try:
         data = download_bytes(geojson_key)
         return json.loads(data)
