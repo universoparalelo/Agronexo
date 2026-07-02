@@ -3,6 +3,7 @@
 ## Estado actual del proyecto
 
 **Release activa:** v1.0.0 (en desarrollo) — seguimiento en `docs/release-v1.0.0.md`
+**Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
 
 ### Qué está implementado y funcionando
 
@@ -21,7 +22,13 @@
 | Modal carga GeoTIFF (drag & drop) | ✅ | Llama a `/lotes/desde-geotiff` |
 | Polling de progreso (barra) | ✅ | Cada 2s contra `/vuelos/{id}/estado` |
 | Mapa Leaflet con zonas NDVI | ✅ | Coloreado por clase, tooltip con área y NDVI prom. |
+| Umbralización dinámica (fijo/otsu/percentil) | ✅ | `workers/gis/clasificacion.py` |
+| Vectorización con connectivity=8 y área mínima | ✅ | `workers/gis/ndvi.py` |
+| Z-score por polígono (zonas atípicas) | ✅ | Campo `zscore` y `es_atipica` en GeoJSON |
+| Modal límites lote (GeoJSON + Leaflet preview) | ✅ | `frontend/src/components/ModalLimites.jsx` |
 | Motor de diagnóstico (RFDR-01) | ❌ | Próximo a implementar |
+| Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 5 en curso |
+| Testing integral y demo 7/jul | ❌ | Sprint 5 en curso |
 | Exportación Shapefile / PDF | ❌ | Pendiente |
 | Botón "Nuevo lote" (formulario solo) | ❌ | Deshabilitado — usar modal GeoTIFF |
 
