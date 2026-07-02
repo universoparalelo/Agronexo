@@ -6,6 +6,32 @@ on:
   pull_request:
     branches: [main]
 
+# Variables compartidas entre jobs. Los valores son seguros para CI:
+# no tienen acceso a producción y los servicios son efímeros.
+# JWT_SECRET_KEY usa GitHub Secret cuando está disponible; cae al valor
+# de prueba solo en forks o entornos sin el secret configurado.
+env:
+  POSTGRES_DB: agronexo_test
+  POSTGRES_USER: agronexo
+  POSTGRES_PASSWORD: agronexo
+  REDIS_HOST: localhost
+  REDIS_PORT: "6379"
+  CELERY_BROKER_URL: redis://localhost:6379/0
+  CELERY_RESULT_BACKEND: redis://localhost:6379/1
+  MINIO_ENDPOINT: localhost:9000
+  MINIO_ROOT_USER: minioadmin
+  MINIO_ROOT_PASSWORD: minioadmin
+  MINIO_BUCKET: agronexo
+  MINIO_USE_SSL: "false"
+  MINIO_PRESIGNED_URL_EXPIRY: "3600"
+  JWT_SECRET_KEY: ${{ secrets.CI_JWT_SECRET_KEY || 'ci-secret-key-only-for-testing-not-production' }}
+  JWT_ALGORITHM: HS256
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+  REFRESH_TOKEN_EXPIRE_DAYS: "7"
+  APP_ENV: testing
+  APP_DEBUG: "false"
+  ALLOWED_ORIGINS: "http://localhost:5173"
+
 jobs:
   # ── Job 1: API — migraciones + health check ──────────────────────────────
   test-api:
@@ -39,27 +65,7 @@ jobs:
 
     env:
       POSTGRES_HOST: localhost
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: agronexo_test
-      POSTGRES_USER: agronexo
-      POSTGRES_PASSWORD: agronexo
-      REDIS_HOST: localhost
-      REDIS_PORT: 6379
-      CELERY_BROKER_URL: redis://localhost:6379/0
-      CELERY_RESULT_BACKEND: redis://localhost:6379/1
-      MINIO_ENDPOINT: localhost:9000
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_BUCKET: agronexo
-      MINIO_USE_SSL: "false"
-      MINIO_PRESIGNED_URL_EXPIRY: "3600"
-      JWT_SECRET_KEY: ci-secret-key-only-for-testing-not-production
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
-      REFRESH_TOKEN_EXPIRE_DAYS: "7"
-      APP_ENV: testing
-      APP_DEBUG: "false"
-      ALLOWED_ORIGINS: "http://localhost:5173"
+      POSTGRES_PORT: "5432"
 
     steps:
       - uses: actions/checkout@v4
@@ -80,13 +86,13 @@ jobs:
       - name: Verificar que la API arranca y responde
         run: |
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 3
-          curl -f http://localhost:8000/api/v1/health
-          curl -f http://localhost:8000/api/v1/health/db
+          curl --retry 15 --retry-delay 1 --retry-connrefused \
+               -sf http://localhost:8000/api/v1/health > /dev/null
+          curl -sf http://localhost:8000/api/v1/health/db > /dev/null
           echo "✓ API health OK"
 
       - name: Tests de validación de ingesta (API)
-        run: PYTHONPATH=$(pwd) python3 tests/test_ingesta.py
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_ingesta.py -v
 
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
@@ -95,27 +101,11 @@ jobs:
     container:
       image: ghcr.io/osgeo/gdal:ubuntu-small-3.9.0
 
+    # El worker no se conecta a Postgres ni Redis en CI (tests unitarios),
+    # pero pydantic-settings requiere que las variables estén definidas.
     env:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: "5432"
-      POSTGRES_DB: agronexo_test
-      POSTGRES_USER: agronexo
-      POSTGRES_PASSWORD: agronexo
-      CELERY_BROKER_URL: redis://localhost:6379/0
-      CELERY_RESULT_BACKEND: redis://localhost:6379/1
-      MINIO_ENDPOINT: localhost:9000
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_BUCKET: agronexo
-      MINIO_USE_SSL: "false"
-      MINIO_PRESIGNED_URL_EXPIRY: "3600"
-      JWT_SECRET_KEY: ci-secret-key-only-for-testing-not-production
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
-      REFRESH_TOKEN_EXPIRE_DAYS: "7"
-      APP_ENV: testing
-      APP_DEBUG: "false"
-      ALLOWED_ORIGINS: "http://localhost:5173"
 
     steps:
       - uses: actions/checkout@v4
@@ -127,13 +117,13 @@ jobs:
             -r docker/requirements.worker.txt
 
       - name: Tests pipeline NDVI
-        run: PYTHONPATH=$(pwd) python3 tests/test_ndvi_pipeline.py
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_ndvi_pipeline.py -v
 
       - name: Tests índices, mapeo de bandas y reproyección
-        run: PYTHONPATH=$(pwd) python3 tests/test_indices_worker.py
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_indices_worker.py -v
 
       - name: Tests validación GIS (CRS, dtype)
-        run: PYTHONPATH=$(pwd) python3 tests/test_ingesta_worker.py
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_ingesta_worker.py -v
 
       - name: Tests clasificación dinámica y vectorización
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_clasificacion.py -v
