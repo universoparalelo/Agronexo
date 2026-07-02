@@ -65,6 +65,7 @@ def vectorizar_zonas(
     clase: np.ndarray,
     ndvi: np.ndarray,
     meta: dict,
+    area_minima_m2: int = AREA_MINIMA_M2,
 ) -> gpd.GeoDataFrame:
     """
     Convierte la máscara de clases en polígonos GeoDataFrame.
@@ -84,7 +85,7 @@ def vectorizar_zonas(
         if not mascara.any():
             continue
 
-        for geom_dict, _ in shapes(mascara, mask=mascara, transform=transform):
+        for geom_dict, _ in shapes(mascara, mask=mascara, connectivity=8, transform=transform):
             geom = shape(geom_dict)
 
             if not geom.is_valid:
@@ -123,7 +124,7 @@ def vectorizar_zonas(
 
     # Filtrar polígonos menores al área mínima
     gdf_utm_area = gdf_utm.geometry.area
-    gdf = gdf[gdf_utm_area >= AREA_MINIMA_M2].reset_index(drop=True)
+    gdf = gdf[gdf_utm_area >= area_minima_m2].reset_index(drop=True)
 
     return gdf
 

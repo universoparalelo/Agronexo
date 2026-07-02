@@ -86,7 +86,7 @@ def _validar_geotiff_gis(data: bytes) -> dict:
     max_retries=3,
     default_retry_delay=30,
 )
-def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi", lote_id: str | None = None, metodo_umbral: str = "fijo") -> dict:
+def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi", lote_id: str | None = None, metodo_umbral: str = "fijo", area_minima_m2: int = 1000) -> dict:
     from app.core.storage import download_geotiff, upload_geotiff
     from workers.gis.pipeline import ejecutar_pipeline
 
@@ -133,6 +133,7 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
             indice=indice,
             geojson_destino=geojson_path,
             metodo_umbral=metodo_umbral,
+            area_minima_m2=area_minima_m2,
         )
     except Exception as exc:
         _actualizar_vuelo(vuelo_id, "error", f"Error en el pipeline GIS: {exc}")
