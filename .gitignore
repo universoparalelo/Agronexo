@@ -37,3 +37,6 @@ Thumbs.db
 *.tiff
 *.geotiff
 tests/fixtures/*.tif
+
+# Agents
+.agents/
