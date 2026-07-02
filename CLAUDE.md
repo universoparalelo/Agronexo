@@ -258,11 +258,19 @@ Exportación: GeoJSON (API) / SHP.zip (maquinaria) / ISO-XML (ISOBUS)
 
 ## Seguimiento de release (`docs/release-vX.X.X.md`)
 
-Cada release tiene su archivo de seguimiento en `docs/`. El archivo activo es `docs/release-v1.0.0.md`.
+Cada release tiene su propio archivo de seguimiento en `docs/`. **Una release = un archivo.**
 
-**Actualizar el archivo cuando:**
+| Release | Archivo | Estado |
+|---|---|---|
+| v1.0.0 | `docs/release-v1.0.0.md` | En desarrollo |
+
+Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estructura de la release anterior. El archivo de la release anterior no se modifica una vez cerrada.
+
+**El archivo activo ahora es: `docs/release-v1.0.0.md`**
+
+**Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional:**
 - Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.
-- Surge un error relevante al resolver una tarea → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
+- Surge un error relevante → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
 - Se toma una decisión de arquitectura no obvia → agregarla a la tabla "Decisiones de arquitectura".
 - Aparece un problema abierto sin solución → agregarlo a "Problemas abiertos" y borrarlo cuando se resuelva.
 - Se cierra la release → completar la sección "Presentación" y marcar el checklist.
