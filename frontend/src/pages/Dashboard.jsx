@@ -7,6 +7,7 @@ import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalLimites from '../components/ModalLimites'
+import MiniMapaLote from '../components/MiniMapaLote'
 
 const CULTIVO_LABEL = {
   soja: 'Soja',
@@ -162,6 +163,7 @@ export default function Dashboard() {
                       {CULTIVO_LABEL[lote.cultivo] || lote.cultivo}
                     </span>
                   </div>
+                  <MiniMapaLote geometry={lote.geometry} />
                   <div className="lote-card-body">
                     {lote.area_ha && (
                       <p className="lote-stat">

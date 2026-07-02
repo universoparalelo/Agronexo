@@ -710,6 +710,29 @@ body {
   gap: 0.5rem;
 }
 
+/* ── Mini mapa en card de lote ── */
+.mini-mapa-lote {
+  margin: 0 -1rem 0.75rem;
+  overflow: hidden;
+}
+
+.mini-mapa-lote .leaflet-container {
+  border-radius: 0;
+}
+
+.mini-mapa-sin-limites {
+  margin: 0 -1rem 0.75rem;
+  height: 50px;
+  background: #f8faf8;
+  border-top: 1px dashed #d1fae5;
+  border-bottom: 1px dashed #d1fae5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #aaa;
+}
+
 /* ── Empty state ── */
 .empty-state {
   text-align: center;
