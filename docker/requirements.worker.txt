@@ -23,3 +23,6 @@ shapely==2.0.6
 
 # Procesamiento de imágenes
 scikit-image==0.24.0
+
+# Tests
+pytest==8.3.4

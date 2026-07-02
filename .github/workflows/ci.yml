@@ -113,6 +113,9 @@ jobs:
       - name: Tests validación GIS (CRS, dtype)
         run: PYTHONPATH=$(pwd) python3 tests/test_ingesta_worker.py
 
+      - name: Tests clasificación dinámica y vectorización
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_clasificacion.py -v
+
       - name: Tests configuración Celery
         run: |
           PYTHONPATH=$(pwd) python3 -c "
