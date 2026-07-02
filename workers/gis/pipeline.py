@@ -40,6 +40,8 @@ def ejecutar_pipeline(
     sensor: str,
     indice: str,
     geojson_destino: str,
+    metodo_umbral: str = "fijo",
+    area_minima_m2: int = 1000,
 ) -> dict:
     """
     Pipeline completo en memoria:
@@ -68,8 +70,8 @@ def ejecutar_pipeline(
         }
 
     valores = calcular_indice(indice, bandas, nodata)
-    clase = clasificar_ndvi(valores)   # mismos umbrales para todos los índices ratio
-    gdf = vectorizar_zonas(clase, valores, meta)
+    clase = clasificar_ndvi(valores, metodo=metodo_umbral)
+    gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2)
     ruta_salida = exportar_geojson(gdf, geojson_destino)
 
     total_px = int(np.sum(~np.isnan(valores)))

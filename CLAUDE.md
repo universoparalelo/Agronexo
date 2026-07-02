@@ -1,5 +1,58 @@
 # AgroNexo — Instrucciones para Claude
 
+## Estado actual del proyecto
+
+**Release activa:** v1.0.0 (en desarrollo) — seguimiento en `docs/release-v1.0.0.md`
+**Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
+
+### Qué está implementado y funcionando
+
+| Área | Estado | Notas |
+|---|---|---|
+| Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
+| FastAPI + SQLAlchemy async + PostGIS | ✅ | |
+| Migraciones Alembic (0001 → 0006) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
+| CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
+| Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
+| Worker GIS: NDVI, NDRE, SAVI, ExG | ✅ | Vectoriza zonas, exporta GeoJSON a MinIO |
+| Worker actualiza geometry del lote | ✅ | Extrae bounding box del GeoTIFF tras reproyectar |
+| CI GitHub Actions (3 jobs) | ✅ | test-api (migraciones + health + test_ingesta.py), test-gis (test_ndvi_pipeline + test_indices_worker + test_ingesta_worker + config Celery), build-frontend |
+| Frontend Login + Dashboard | ✅ | Lista de lotes, cards con cultivo y área |
+| Modal carga GeoTIFF (drag & drop) | ✅ | Llama a `/lotes/desde-geotiff` |
+| Polling de progreso (barra) | ✅ | Cada 2s contra `/vuelos/{id}/estado` |
+| Mapa Leaflet con zonas NDVI | ✅ | Coloreado por clase, tooltip con área y NDVI prom. |
+| Umbralización dinámica (fijo/otsu/percentil) | ✅ | `workers/gis/clasificacion.py` |
+| Vectorización con connectivity=8 y área mínima | ✅ | `workers/gis/ndvi.py` |
+| Z-score por polígono (zonas atípicas) | ✅ | Campo `zscore` y `es_atipica` en GeoJSON |
+| Modal límites lote (GeoJSON + Leaflet preview) | ✅ | `frontend/src/components/ModalLimites.jsx` |
+| Motor de diagnóstico (RFDR-01) | ❌ | Próximo a implementar |
+| Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 5 en curso |
+| Testing integral y demo 7/jul | ❌ | Sprint 5 en curso |
+| Exportación Shapefile / PDF | ❌ | Pendiente |
+| Botón "Nuevo lote" (formulario solo) | ❌ | Deshabilitado — usar modal GeoTIFF |
+
+### Credenciales de desarrollo
+
+| Servicio | URL | Credenciales |
+|---|---|---|
+| Frontend | http://localhost:5173 | — |
+| API / Swagger | http://localhost:8000/api/docs | — |
+| MinIO Console | http://localhost:9001 | Ver `.env` |
+| PostgreSQL | localhost:5432 | Ver `.env` |
+| **Usuario por defecto** | — | `admin@agronexo.com` / `password123` |
+
+### Decisiones recientes no obvias desde el código
+
+- `geometry` en tabla `lotes` es **nullable** (migración 0005) — el worker la rellena con el bounding box del GeoTIFF después de procesar. Un lote recién creado puede tener `geometry = null`.
+- El contenedor API necesita `./workers` montado como volumen — sin eso no puede importar `workers.celery_app` y crashea al arrancar.
+- `POST /lotes/desde-geotiff` está en el router de ingesta (prefijo `/lotes`), no en el router de lotes.
+- El worker pasa `lote_id` como kwarg a la tarea Celery para poder actualizar la geometry después.
+- `rasterio.features.shapes()` rechaza `float64` — el array NDVI siempre se castea a `float32` antes de vectorizar.
+- `test_celery_integracion.py` tiene tres tests: dos de configuración (corren en CI dentro del job `test-gis`) y uno de ciclo completo E2E que requiere MinIO + worker levantados — ese solo corre con `docker compose exec worker`.
+
+---
+
 ## Qué es este proyecto
 
 AgroNexo es una plataforma de agricultura de precisión que procesa imágenes satelitales y de drones (GeoTIFF multiespectrales) para calcular índices de vegetación (NDVI, GNDVI, SAVI, NDRE, EVI, MSAVI), detectar anomalías espaciales en cultivos y generar diagnósticos agronómicos con recomendaciones de prescripción diferenciada. El foco geográfico es el NEA argentino (Chaco, Formosa, Corrientes), con énfasis en soja, algodón, maíz y sorgo.
@@ -205,11 +258,19 @@ Exportación: GeoJSON (API) / SHP.zip (maquinaria) / ISO-XML (ISOBUS)
 
 ## Seguimiento de release (`docs/release-vX.X.X.md`)
 
-Cada release tiene su archivo de seguimiento en `docs/`. El archivo activo es `docs/release-v1.0.0.md`.
+Cada release tiene su propio archivo de seguimiento en `docs/`. **Una release = un archivo.**
 
-**Actualizar el archivo cuando:**
+| Release | Archivo | Estado |
+|---|---|---|
+| v1.0.0 | `docs/release-v1.0.0.md` | En desarrollo |
+
+Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estructura de la release anterior. El archivo de la release anterior no se modifica una vez cerrada.
+
+**El archivo activo ahora es: `docs/release-v1.0.0.md`**
+
+**Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional:**
 - Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.
-- Surge un error relevante al resolver una tarea → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
+- Surge un error relevante → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
 - Se toma una decisión de arquitectura no obvia → agregarla a la tabla "Decisiones de arquitectura".
 - Aparece un problema abierto sin solución → agregarlo a "Problemas abiertos" y borrarlo cuando se resuelva.
 - Se cierra la release → completar la sección "Presentación" y marcar el checklist.
@@ -335,6 +396,23 @@ En Settings → Branches → Add rule sobre `main`:
 - ✅ Require at least 1 approval
 - ✅ Dismiss stale reviews when new commits are pushed
 - ✅ Do not allow bypassing the above settings
+
+---
+
+## Verificación de cambios remotos
+
+Antes de iniciar cualquier tarea, ejecutar:
+
+```bash
+git fetch origin
+git log --oneline origin/main ^main
+```
+
+Si hay commits en el remoto que no están en local, informarlos al usuario y preguntar si quiere traerlos antes de continuar (`git pull`). No asumir que el local está al día.
+
+## Commit y push al terminar
+
+Al completar cualquier tarea, recordar explícitamente al usuario que haga commit y push si todavía no se hizo. Incluir el comando exacto listo para copiar. El trabajo no está compartido hasta que esté en el remoto.
 
 ---
 

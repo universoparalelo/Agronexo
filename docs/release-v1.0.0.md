@@ -205,6 +205,163 @@ Proxy /api → api:8000        → configurado en vite.config.js
 
 ---
 
+#### Usuario por defecto para desarrollo — migración 0006
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se agregó la migración 0006 que inserta un usuario de desarrollo al correr `alembic upgrade head`. Usa `ON CONFLICT DO NOTHING` para que sea idempotente — si el usuario ya existe, no falla.
+
+**Credenciales del usuario por defecto:**
+- **Email:** `admin@agronexo.com`
+- **Contraseña:** `password123`
+
+No hay que crear usuario manualmente en un entorno de desarrollo fresco. Solo levantar el stack y correr las migraciones.
+
+**Decisiones tomadas:**
+- Hash bcrypt generado en la propia migración con passlib — no se guarda la contraseña en texto plano en ningún lado.
+- `ON CONFLICT (email) DO NOTHING` — la migración es segura de correr múltiples veces.
+
+---
+
+#### Carga de GeoTIFF desde el frontend — Modal y endpoint combinado
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se implementó el flujo completo de carga desde la UI. Botón "Cargar GeoTIFF" en el Dashboard abre un modal con formulario (nombre, cultivo, sensor, estadio opcional) y zona drag & drop. Llama a `POST /lotes/desde-geotiff` que crea el lote y encola el vuelo en un solo paso. Al confirmar, el modal se cierra, la lista se refresca y el lote queda seleccionado con la barra de progreso arrancando automáticamente.
+
+**Decisiones tomadas:**
+- Geometry del lote se crea como `NULL` (migración 0005) — el worker la actualiza con el bounding box del GeoTIFF tras reproyectar a EPSG:4326.
+- `lote_id` se pasa como kwarg a la tarea Celery para que el worker identifique qué lote actualizar.
+- La extracción de bounds falla silenciosamente en el worker para no bloquear el pipeline GIS.
+
+---
+
+#### Rediseño Login y fixes CI — integración rama Denise
+**Fecha:** 2026-07-01  
+**Rama:** `main` (merge `76e2b23`)
+
+Se integraron los cambios de la rama de Denise: rediseño visual del Login (split-panel con imagen de fondo, tipografía mejorada), Login2 como variante, y correcciones al `ci.yml`.
+
+**Decisiones tomadas:**
+- `.github/workflows/ci.yml` reescrito con bloque `env:` raíz para eliminar duplicación de variables entre jobs.
+- `JWT_SECRET_KEY` usa `${{ secrets.CI_JWT_SECRET_KEY || 'ci-secret-key-only-for-testing-not-production' }}` — fallback seguro para forks sin el secret configurado.
+- `curl --retry 15 --retry-connrefused` reemplaza el `sleep 3` para esperar a que la API levante — más robusto en runners con carga variable.
+- `./frontend/public:/app/public` agregado como volumen en docker-compose.yml — las imágenes (`logo.png`, `fondo.jpeg`) no cargaban porque solo estaba montado `frontend/src`.
+
+---
+
+#### Umbralización dinámica + stats por polígono + tests
+**Fecha:** 2026-07-01  
+**Rama:** `main` (commits `63419a8` / `cab071c`)
+
+Se implementó umbralización dinámica con tres métodos intercambiables y estadísticas correctas por polígono individual.
+
+**Piezas implementadas:**
+- `workers/gis/clasificacion.py` (módulo nuevo): `calcular_umbrales(valores, metodo)` soporta `"fijo"` (agronómico: 0.20/0.40/0.70), `"otsu"` (threshold_multiotsu de scikit-image, 4 clases) y `"percentil"` (p25/p50/p75). Fallback a `"fijo"` si la imagen es uniforme o todos son NaN.
+- `vectorizar_zonas()`: stats por polígono individual con `geometry_mask()` de rasterio — antes usaba el promedio de toda la clase, lo cual era incorrecto.
+- Tolerancia de simplificación adaptativa: `abs(transform.a) * 0.5` en lugar de valor hardcodeado.
+- `connectivity=8` en `shapes()` — conecta píxeles diagonales de la misma clase (antes `connectivity=4` fragmentaba zonas en diagonal).
+- `area_minima_m2` configurable como parámetro de `vectorizar_zonas()` y `ejecutar_pipeline()`.
+- `tests/test_clasificacion.py` con 12 tests: umbrales, fallbacks, clasificación, stats por polígono y pipeline con Otsu.
+
+**Error encontrado — GeoTIFF sintético con sensor incorrecto**  
+Los tests del pipeline usaban `sensor="sentinel2"` (1 banda), pero las fixtures sintéticas tenían 5 bandas (DJI Mavic 3). Error: `ValueError: El archivo tiene 1 banda(s) pero NDVI requiere la banda NIR en posición 8`. Se corrigió el fixture a 5 bandas con `sensor="dji_mavic3"`.
+
+---
+
+#### Estadísticas por zona — z-score y detección de zonas atípicas
+**Fecha:** 2026-07-01  
+**Rama:** `main`
+
+Se agregó detección de polígonos atípicos por z-score sobre `ndvi_promedio` dentro de cada análisis.
+
+**Implementación:**
+- `vectorizar_zonas()`: calcula z-score de `ndvi_promedio` entre todos los polígonos del lote. Si `|zscore| > 1.5` → `es_atipica = True`.
+- Con < 3 polígonos no se calculan atípicas (evita falsos positivos en rasters pequeños).
+- Campos nuevos en el GeoJSON de salida: `zscore: float` y `es_atipica: bool`.
+- GeoDataFrame vacío también declara estas columnas para que el schema sea consistente.
+- Tests: verifican presencia de campos, que un outlier claro (NDVI=0.05 vs grupo en 0.77) recibe `es_atipica=True` y que lotes con < 3 polígonos no marcan atípicas.
+
+**Decisiones tomadas:**
+- Z-score se calcula con `std(ddof=1)` (muestral) — apropiado para n pequeño.
+- Si `std == 0` (todos los polígonos tienen el mismo NDVI) → zscore = 0 para todos.
+
+---
+
+#### Límites del lote — endpoint + UI con vista previa Leaflet
+**Fecha:** 2026-07-01  
+**Rama:** `main` (commit `72ee9ca`)
+
+Se implementó la carga de límites geográficos del lote con vista previa interactiva en el frontend.
+
+**Piezas implementadas:**
+- `PUT /lotes/{id}` ya existía con validación Shapely. No se necesitó cambio de backend.
+- `frontend/src/components/ModalLimites.jsx`: drag & drop de archivo `.geojson`, extrae Polygon de Feature/FeatureCollection, muestra preview en `MapContainer` (react-leaflet) con `FitBounds`, llama a `PUT /lotes/{id}` al confirmar.
+- Dashboard: botón "Límites" en cada card abre el modal. Al guardar exitosamente recarga la lista de lotes.
+- CSS: `.modal-box--limites`, `.limites-preview-map`, `.dropzone` variantes.
+
+**Decisiones tomadas:**
+- `extraerPoligono()` acepta Polygon directo, Feature con Polygon, o FeatureCollection — cubre los formatos que exportan QGIS y las apps GIS más comunes.
+- `boundsDesdePoligono()` calcula bounds manualmente desde coordenadas en lugar de usar `getBounds()` de Leaflet — disponible antes de que el mapa se monte.
+- `FitBounds` como componente interno que llama a `map.fitBounds()` desde `useMap()` — patrón react-leaflet para acceder al mapa después del mount.
+
+---
+
+#### Fixes CI — pytest faltante y rutas absolutas en worker
+**Fecha:** 2026-07-02  
+**Rama:** `main` (commit `e2ce605`)
+
+Se corrigieron dos errores que hacían fallar los jobs de CI.
+
+**Error 1 — `No module named pytest` en job test-api**  
+`pytest` no estaba en `docker/requirements.api.txt`. El job instala ese archivo y luego corre `python3 -m pytest tests/test_ingesta.py`. Fix: agregar `pytest==8.3.4` al archivo.
+
+**Error 2 — `sentinel_ndvi_test.tif: No such file or directory` en job test-gis**  
+`test_ndvi_pipeline.py` tenía `FIXTURE = "/app/tests/fixtures/..."` hardcodeado al contenedor Docker. En el runner de CI el checkout está en otro path. Además `crear_fixture()` solo se llamaba desde `__main__`, no cuando pytest invocaba los tests directamente.  
+Fix: rutas relativas con `Path(__file__).parent / "fixtures"` y función `setup_module()` para que pytest genere el fixture antes de correr los tests.
+
+---
+
+#### Vista previa low-res de cobertura en cards de lote
+**Fecha:** 2026-07-02  
+**Rama:** `main` (commit `08c5c76`)
+
+Se agregó un mapa estático miniatura dentro de cada card de lote mostrando el polígono límite.
+
+**Piezas implementadas:**
+- `frontend/src/components/MiniMapaLote.jsx`: recibe `lote.geometry` (ya viene en `GET /lotes`), renderiza un `MapContainer` de 110px no interactivo (sin drag, zoom, teclado ni attributionControl). Polígono en verde con relleno semitransparente.
+- Si `geometry` es `null` muestra un placeholder punteado gris con texto "Sin límites definidos".
+- Dashboard: `<MiniMapaLote geometry={lote.geometry} />` entre header y body de cada card.
+- Sin llamadas adicionales a la API — geometry ya viene en la lista de lotes.
+
+**Decisiones tomadas:**
+- Margen negativo lateral (`.mini-mapa-lote { margin: 0 -1rem }`) para que el mapa llegue al borde del card sin padding.
+- `dragging={false}`, `scrollWheelZoom={false}`, `touchZoom={false}` etc. — el mapa es decorativo, no interactivo.
+
+---
+
+#### Vincular análisis a vuelo/lote — columna geojson_key
+**Fecha:** 2026-07-02  
+**Rama:** `main` (commit `61a1046`)
+
+Se estableció el vínculo explícito entre el análisis GIS y el vuelo en la base de datos, y se corrigió un bug donde el worker no actualizaba `lote.geometry` en el flujo de upload a lote existente.
+
+**Problema raíz:**  
+El GeoJSON de resultados no tenía referencia directa en la BD. `obtener_resultado_geojson` derivaba la ruta desde `vuelo.archivo_original` mediante `split("/")[:3] + "/zonas.geojson"`, lo cual es frágil. Además, `crear_vuelo_desde_upload` no pasaba `lote_id` a la tarea Celery, así que el worker no podía actualizar `lote.geometry` con el bounding box del GeoTIFF.
+
+**Cambios:**
+- Migración `0007`: columna `geojson_key VARCHAR(500) NULLABLE` en `vuelos`.
+- `Vuelo` model: campo `geojson_key`.
+- `tasks.py`: al completar el upload del GeoJSON a MinIO, guarda la key en `vuelos.geojson_key` via `_actualizar_vuelo(..., geojson_key=...)`.
+- `ingesta/service.py`: `obtener_resultado_geojson` usa `vuelo.geojson_key` directamente; si es `None` (vuelos procesados antes de la migración) cae al método legacy de derivación.
+- `ingesta/service.py`: fix bug — `lote_id` ahora se pasa al task en `crear_vuelo_desde_upload`.
+
+**Decisiones tomadas:**
+- Fallback legacy preservado para vuelos anteriores a la migración 0007 — no se necesita backfill de datos, el fallback cubre la transición.
+- `geojson_key = None` si el upload al MinIO falla — el análisis en disco sigue siendo válido; el error queda en `estadisticas["advertencia_upload"]`.
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -213,6 +370,7 @@ _Ir completando a medida que avanza el desarrollo._
 |---|---|---|---|
 | Upload GeoTIFF → MinIO | _nombre_ | completado | main |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
+| Frontend — modal carga GeoTIFF | _nombre_ | completado | main |
 | Frontend — dashboard de resultados (mapa + tabla) | _nombre_ | completado | main |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
@@ -304,13 +462,68 @@ El worker corría desde el 24/06 y no conocía `procesar_vuelo` (agregada despu�
 
 ---
 
+#### Visualización del índice — Polling, barra de progreso y mapa Leaflet
+**Fecha:** 2026-06-30
+**Rama:** `feat/visualizacion-indice`
+
+Se implementó la visualización completa del resultado de análisis en el frontend: polling de estado en tiempo real, barra de progreso animada y mapa Leaflet interactivo con zonas coloreadas por clase NDVI.
+
+**Piezas implementadas:**
+
+Backend:
+- `GET /lotes/{lote_id}/vuelos` — endpoint nuevo que lista vuelos de un lote ordenados por fecha descendente.
+- `GET /lotes/{lote_id}/vuelos/{vuelo_id}/resultado` — endpoint nuevo que descarga `zonas.geojson` desde MinIO y lo retorna como JSON. Solo disponible si el vuelo está `completado`.
+- `download_bytes()` en `app/core/storage.py` — función genérica para descargar cualquier objeto de MinIO.
+
+Frontend:
+- `hooks/useVueloProgreso.js` — hook que hace polling al endpoint de estado cada 2 segundos hasta que el estado sea `completado` o `error`, luego carga el GeoJSON. Limpia el interval en el cleanup del `useEffect`.
+- `components/BarraProgreso.jsx` — muestra el porcentaje (0–100%) con transición CSS suave y el mensaje del paso actual del worker.
+- `components/MapaIndice.jsx` — mapa Leaflet (react-leaflet v4) con capa GeoJSON donde cada zona se colorea según su clase: crítica (rojo), deficiente (naranja), normal (amarillo), vigorosa (verde). Leyenda posicionada sobre el mapa. Tooltips con NDVI promedio y área en ha.
+- Dashboard actualizado: "Ver análisis" selecciona el lote; el panel derecho muestra `AnalisisPanel` que coordina polling + barra + mapa según el estado del vuelo más reciente.
+
+**Decisiones tomadas:**
+- CSS de Leaflet importado en `main.jsx` antes de `index.css` para evitar que los estilos locales lo sobreescriban.
+- `key={selectedLoteId}` en `AnalisisPanel` garantiza que el componente se remonta (y reinicia el polling) al cambiar de lote.
+- El endpoint `/resultado` retorna el GeoJSON directamente, no una URL firmada, para simplificar el consumo desde el frontend. Si el GeoJSON creciera mucho (> 10 MB), se revisaría a URL firmada.
+- Bounds del mapa calculados manualmente desde las coordenadas del GeoJSON para no depender de `getBounds()` de Leaflet.
+- Paleta de colores alineada con el pipeline: crítica `#c0392b`, deficiente `#e67e22`, normal `#f1c40f`, vigorosa `#27ae60`.
+
+---
+
+#### Tests del pipeline — cobertura completa en CI
+**Fecha:** 2026-07-01
+**Rama:** `main`
+
+Se completó la cobertura de tests del pipeline GIS y se incorporaron al CI. Antes, el job `test-gis` solo corría `test_ndvi_pipeline.py` y el job `test-api` no corría ningún test de Python. Ahora todos los tests existentes corren automáticamente en cada push.
+
+**Tests incorporados al CI:**
+- `test-api` job: agrega `tests/test_ingesta.py` (validación de extensión, magic bytes, archivo vacío)
+- `test-gis` job: agrega `tests/test_indices_worker.py` (índices, mapeo de bandas, reproyección, pipeline completo) y `tests/test_ingesta_worker.py` (validación GIS: CRS, dtype)
+- `test-gis` job: agrega los dos tests de configuración de `tests/test_celery_integracion.py` (`result_expires` y cola `gis`)
+
+**Test E2E verificado localmente:**
+`test_ciclo_completo_encolar_y_esperar` en `test_celery_integracion.py` pasó correctamente con el stack levantado:
+```
+✓ GeoTIFF subido → MinIO
+✓ Tarea encolada y completada en 2s
+✓ 1 polígono generado, NDVI prom=0.6
+✓ zonas.geojson en MinIO con 1 feature
+```
+
+**Decisiones tomadas:**
+- El test E2E completo (`test_ciclo_completo_encolar_y_esperar`) queda fuera del CI — requiere MinIO + worker corriendo, lo cual implica un cuarto job con imagen GDAL + MinIO service + worker en background. Complejidad no justificada antes de la demo del 7/jul.
+- Los dos tests de configuración Celery sí corren en CI porque solo verifican la configuración del objeto `celery_app`, sin necesitar servicios externos.
+
+---
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
 
 | # | Descripción | Impacto | Detectado |
 |---|---|---|---|
-| — | _completar cuando surja_ | — | — |
+| 1 | Test E2E (`test_ciclo_completo_encolar_y_esperar`) no corre en CI — necesita MinIO + worker | Bajo — pasa localmente, demostrable en la demo | 2026-07-01 |
+| 2 | No hay tests para endpoints HTTP (auth, lotes, ingesta) | Bajo — cubiertos implícitamente por el E2E; no están en el plan de R1 | 2026-07-01 |
 
 ---
 

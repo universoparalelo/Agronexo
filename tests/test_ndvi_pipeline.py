@@ -8,13 +8,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/app")
-
 from workers.gis.ndvi import calcular_ndvi, clasificar_ndvi, pipeline_ndvi
 import numpy as np
 
-FIXTURE = "/app/tests/fixtures/sentinel_ndvi_test.tif"
-SALIDA  = "/app/tests/fixtures/resultado_ndvi.geojson"
+_FIXTURES_DIR = Path(__file__).parent / "fixtures"
+FIXTURE = str(_FIXTURES_DIR / "sentinel_ndvi_test.tif")
+SALIDA  = str(_FIXTURES_DIR / "resultado_ndvi.geojson")
+
+
+def setup_module(module):
+    """Genera los GeoTIFF de fixtures antes de correr los tests con pytest."""
+    crear_fixture()
 
 
 def crear_fixture():

@@ -7,7 +7,28 @@ from workers.celery_app import celery_app
 _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 
-def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None) -> None:
+def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.core.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
+                    "WHERE id = CAST(:lote_id AS uuid)"
+                ),
+                {"wkt": wkt, "lote_id": lote_id},
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None, geojson_key: str | None = None) -> None:
     # SQL directo para evitar importar app.lotes.models → app.core.database → asyncpg,
     # que no está instalado en el contenedor worker.
     from sqlalchemy import create_engine, text
@@ -21,9 +42,10 @@ def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None) -> N
             session.execute(
                 text(
                     "UPDATE vuelos SET estado = CAST(:estado AS estadovueloenum), "
-                    "error_detalle = :error WHERE id = CAST(:vuelo_id AS uuid)"
+                    "error_detalle = :error, geojson_key = :geojson_key "
+                    "WHERE id = CAST(:vuelo_id AS uuid)"
                 ),
-                {"estado": estado, "error": error, "vuelo_id": vuelo_id},
+                {"estado": estado, "error": error, "geojson_key": geojson_key, "vuelo_id": vuelo_id},
             )
             session.commit()
     finally:
@@ -65,7 +87,7 @@ def _validar_geotiff_gis(data: bytes) -> dict:
     max_retries=3,
     default_retry_delay=30,
 )
-def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi") -> dict:
+def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi", lote_id: str | None = None, metodo_umbral: str = "fijo", area_minima_m2: int = 1000) -> dict:
     from app.core.storage import download_geotiff, upload_geotiff
     from workers.gis.pipeline import ejecutar_pipeline
 
@@ -86,6 +108,19 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
         _actualizar_vuelo(vuelo_id, "error", mensaje)
         raise ValueError(mensaje) from exc
 
+    if lote_id:
+        try:
+            with rasterio.open(io.BytesIO(data)) as src:
+                from workers.gis.reproyeccion import reproyectar_a_4326
+                data_4326 = reproyectar_a_4326(data)
+            with rasterio.open(io.BytesIO(data_4326)) as src:
+                b = src.bounds
+                wkt = f"POLYGON(({b.left} {b.bottom},{b.right} {b.bottom},{b.right} {b.top},{b.left} {b.top},{b.left} {b.bottom}))"
+            _actualizar_lote_geometry(lote_id, wkt)
+            data = data_4326
+        except Exception:
+            pass  # no bloquear el pipeline si falla la extracción de bounds
+
     _actualizar_vuelo(vuelo_id, "procesando")
     self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
 
@@ -98,6 +133,8 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
             sensor=sensor,
             indice=indice,
             geojson_destino=geojson_path,
+            metodo_umbral=metodo_umbral,
+            area_minima_m2=area_minima_m2,
         )
     except Exception as exc:
         _actualizar_vuelo(vuelo_id, "error", f"Error en el pipeline GIS: {exc}")
@@ -105,19 +142,22 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
 
     self.update_state(state="PROGRESS", meta={"progreso": 80, "mensaje": "Subiendo resultados"})
 
+    geojson_key_guardado: str | None = None
     try:
         from app.core.storage import upload_bytes
         partes = minio_key.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
         prefijo = "/".join(partes[:3])
+        geojson_key_guardado = f"{prefijo}/zonas.geojson"
         with open(geojson_path, "rb") as f:
             geojson_bytes = f.read()
-        upload_bytes(f"{prefijo}/zonas.geojson", geojson_bytes, content_type="application/geo+json")
+        upload_bytes(geojson_key_guardado, geojson_bytes, content_type="application/geo+json")
     except Exception as exc:
         # Error no crítico — el análisis es válido aunque no se haya subido el GeoJSON
         estadisticas["advertencia_upload"] = str(exc)
+        geojson_key_guardado = None
 
     self.update_state(state="PROGRESS", meta={"progreso": 100, "mensaje": "Procesamiento completado"})
-    _actualizar_vuelo(vuelo_id, "completado")
+    _actualizar_vuelo(vuelo_id, "completado", geojson_key=geojson_key_guardado)
 
     return {"vuelo_id": vuelo_id, "estadisticas": estadisticas}
 

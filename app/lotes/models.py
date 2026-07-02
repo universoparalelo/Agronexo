@@ -39,7 +39,7 @@ class Lote(Base):
     cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
     estadio_fenologico: Mapped[str | None] = mapped_column(String(10), nullable=True)
     geometry: Mapped[object] = mapped_column(
-        Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=False
+        Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True
     )
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -74,6 +74,7 @@ class Vuelo(Base):
     )
     task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_detalle: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    geojson_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     lote: Mapped["Lote"] = relationship("Lote", back_populates="vuelos")

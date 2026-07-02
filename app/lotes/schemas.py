@@ -75,7 +75,7 @@ class LoteResponse(BaseModel):
     nombre: str
     cultivo: CultivoEnum
     estadio_fenologico: str | None
-    geometry: dict
+    geometry: dict | None
     area_ha: float | None
     usuario_id: uuid.UUID | None
     created_at: datetime

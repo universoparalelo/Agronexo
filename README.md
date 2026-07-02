@@ -161,17 +161,22 @@ curl http://localhost:8000/api/v1/health
 # → {"status": "ok", "env": "development"}
 ```
 
+### 7. Iniciar sesión en el Frontend
+Ingresá a http://localhost:5173 con el usuario administrador por defecto:
+* **Usuario:** `admin@agronexo.com`
+* **Contraseña:** `password123`
+
 ---
 
 ## Servicios y puertos
 
 | Servicio | URL / Puerto | Descripción |
 |---|---|---|
-| **Frontend** | http://localhost:5173 | Aplicación React |
+| **Frontend** | http://localhost:5173 | Aplicación React (Usuario: `admin@agronexo.com` / Contraseña: `password123`) |
 | **API (FastAPI)** | http://localhost:8000 | Backend principal |
 | **Docs Swagger** | http://localhost:8000/api/docs | Documentación interactiva de la API |
 | **MinIO Console** | http://localhost:9001 | Explorador de archivos (credenciales del `.env`) |
-| **PostgreSQL** | `localhost:5432` | Base de datos |
+| **PostgreSQL** | `localhost:5432` | Base de datos (Database: `agronexo`, Usuario: `agronexo`, Password: el que pusiste en `.env`) |
 | **Redis** | `localhost:6379` | Broker de tareas |
 
 ---
