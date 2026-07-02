@@ -707,6 +707,7 @@ body {
 .lote-card-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* ── Empty state ── */
@@ -1351,4 +1352,20 @@ body {
   letter-spacing: -0.5px;
   line-height: 1.2;
   text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+/* ── Modal Límites ── */
+.modal-box--limites {
+  max-width: 620px;
+}
+
+.limites-hint {
+  font-size: 0.9rem;
+  color: #555;
+  margin: 0;
+}
+
+.limites-preview-map {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
 }

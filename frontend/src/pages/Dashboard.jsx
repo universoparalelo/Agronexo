@@ -6,6 +6,7 @@ import client from '../api/client'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
+import ModalLimites from '../components/ModalLimites'
 
 const CULTIVO_LABEL = {
   soja: 'Soja',
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [selectedLoteId, setSelectedLoteId] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [loteParaLimites, setLoteParaLimites] = useState(null)
 
   function cargarLotes() {
     setLoading(true)
@@ -107,6 +109,13 @@ export default function Dashboard() {
         <ModalCargaGeoTIFF
           onSuccess={handleCargaExitosa}
           onClose={() => setShowModal(false)}
+        />
+      )}
+      {loteParaLimites && (
+        <ModalLimites
+          lote={loteParaLimites}
+          onSuccess={() => { setLoteParaLimites(null); cargarLotes() }}
+          onClose={() => setLoteParaLimites(null)}
         />
       )}
       <header className="dashboard-header">
@@ -172,6 +181,12 @@ export default function Dashboard() {
                       onClick={() => setSelectedLoteId(lote.id)}
                     >
                       Ver análisis
+                    </button>
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => setLoteParaLimites(lote)}
+                    >
+                      Límites
                     </button>
                   </div>
                 </div>
