@@ -84,7 +84,10 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div className="lote-card-footer">
-                    <button className="btn-secondary btn-sm" disabled>
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => navigate(`/lotes/${lote.id}`)}
+                    >
                       Ver análisis
                     </button>
                   </div>
@@ -99,8 +102,8 @@ export default function Dashboard() {
             <h2>Mapa</h2>
           </div>
           <div className="mapa-placeholder">
-            <p>El mapa con React-Leaflet se integra en el Sprint 4</p>
-            <p className="empty-hint">aquí se mostrarán los lotes y los resultados de análisis NDVI</p>
+            <p>Seleccioná un lote para ver sus vuelos y análisis.</p>
+            <p className="empty-hint">Los resultados NDVI se muestran en la página de cada vuelo.</p>
           </div>
         </section>
       </main>

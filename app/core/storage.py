@@ -60,6 +60,17 @@ def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-s
     return key
 
 
+def download_object(key: str) -> bytes:
+    """Descarga un objeto arbitrario desde MinIO y retorna sus bytes."""
+    client = _client()
+    response = client.get_object(settings.minio_bucket, key)
+    try:
+        return response.read()
+    finally:
+        response.close()
+        response.release_conn()
+
+
 def presigned_url(key: str) -> str:
     client = _client()
     return client.presigned_get_object(

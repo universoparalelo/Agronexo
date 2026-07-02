@@ -1,3 +1,4 @@
+import json as _json
 import uuid
 from datetime import datetime
 
@@ -5,7 +6,7 @@ from celery.result import AsyncResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import upload_geotiff
+from app.core.storage import download_object, upload_geotiff
 from app.ingesta.schemas import EstadoVueloResponse
 from app.lotes.models import EstadoVueloEnum, SensorEnum, Vuelo
 from workers.celery_app import celery_app
@@ -82,3 +83,22 @@ async def obtener_estado_vuelo(
         mensaje=mensaje,
         error=vuelo.error_detalle,
     )
+
+
+async def obtener_zonas_vuelo(
+    db: AsyncSession,
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+) -> dict | None:
+    stmt = select(Vuelo).where(Vuelo.id == vuelo_id, Vuelo.lote_id == lote_id)
+    result = await db.execute(stmt)
+    vuelo = result.scalar_one_or_none()
+    if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
+        return None
+    key = f"{usuario_id}/{lote_id}/{vuelo_id}/zonas.geojson"
+    try:
+        data = download_object(key)
+        return _json.loads(data)
+    except Exception:
+        return None

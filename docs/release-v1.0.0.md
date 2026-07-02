@@ -213,8 +213,8 @@ _Ir completando a medida que avanza el desarrollo._
 |---|---|---|---|
 | Upload GeoTIFF → MinIO | _nombre_ | completado | main |
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
+| Frontend — dashboard de resultados (mapa + tabla) | _nombre_ | completado | main |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
-| Frontend — mapa con React-Leaflet (Sprint 4) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
 
 ---
@@ -263,6 +263,29 @@ Se implementó el pipeline GIS generalizado que soporta NDVI, NDRE, SAVI y ExG c
 - `pipeline.py` reutiliza `clasificar_ndvi` y `vectorizar_zonas` de `ndvi.py` para todos los índices — los umbrales cualitativos (crítica/deficiente/normal/vigorosa) aplican igual a NDRE y SAVI al ser índices ratio en [-1,1].
 - La tarea `procesar_vuelo` sube `zonas.geojson` a MinIO en `{usuario}/{lote}/{vuelo}/zonas.geojson`. Un error en ese paso no cancela el análisis (error no crítico).
 - `sensor` e `indice` se pasan como kwargs al encolar la tarea en Celery desde `ingesta/service.py`; el índice por defecto es `ndvi`.
+
+#### Frontend — Dashboard de resultados (Sprint 5)
+**Fecha:** 2026-07-02
+**Rama:** `main` (commit siguiente)
+
+Se implementó el dashboard de resultados completo: mapa interactivo de zonas clasificadas con React-Leaflet, tabla de estadísticas por zona y flujo de navegación completo entre lotes, vuelos y resultados.
+
+**Decisiones tomadas:**
+- GeoJSON servido a través de FastAPI (endpoint `GET /lotes/{id}/vuelos/{id}/zonas`) en lugar de URLs firmadas de MinIO — evita el problema de resolución de hostname `minio` desde el browser del usuario.
+- `download_object()` en `storage.py` como función genérica de descarga; `download_geotiff()` se mantiene por compatibilidad con el worker.
+- Colores de zonas: crítica (#ef4444), deficiente (#f97316), normal (#86efac), vigorosa (#16a34a). Alineados con la paleta de riesgo estándar en agronomía.
+- `FitBounds` como componente interno de React-Leaflet que usa `useMap()` + `useEffect` para ajustar el viewport automáticamente al GeoJSON cargado.
+- Polling de estado cada 3 segundos para vuelos en curso; se cancela automáticamente cuando todos los vuelos del lote están completados o en error.
+- CSS Leaflet importado en `main.jsx` — evita el problema de estilos faltantes en Vite.
+
+**Flujo de navegación implementado:**
+```
+/dashboard → listado de lotes, botón "Ver análisis"
+/lotes/:loteId → lista de vuelos con estado y barra de progreso
+/lotes/:loteId/vuelos/:vueloId → mapa de zonas + tabla de estadísticas
+```
+
+---
 
 #### Worker asíncrono — Celery + cola Redis + progreso
 **Fecha:** 2026-06-30

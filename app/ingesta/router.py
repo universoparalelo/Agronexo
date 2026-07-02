@@ -64,6 +64,30 @@ async def subir_vuelo(
 
 
 @router.get(
+    "/{lote_id}/vuelos/{vuelo_id}/zonas",
+    summary="GeoJSON de zonas clasificadas del análisis",
+)
+async def zonas_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+    zonas = await service.obtener_zonas_vuelo(
+        db, lote_id, vuelo_id, uuid.UUID(str(current_user.id))
+    )
+    if zonas is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Zonas no disponibles. El vuelo aún no fue procesado o el análisis falló.",
+        )
+    return zonas
+
+
+@router.get(
     "/{lote_id}/vuelos/{vuelo_id}/estado",
     response_model=EstadoVueloResponse,
     summary="Consultar estado del procesamiento de un vuelo",
