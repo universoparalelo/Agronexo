@@ -32,7 +32,7 @@ function AnalisisPanel({ loteId }) {
   const vuelo = vuelos[0] ?? null
   const { estado, geojson, errorMsg } = useVueloProgreso(
     vuelo ? loteId : null,
-    vuelo?.vuelo_id ?? null,
+    vuelo?.vuelo_id ?? vuelo?.id ?? null,
   )
 
   if (loadingVuelos) return <p className="estado-msg">Cargando análisis...</p>
