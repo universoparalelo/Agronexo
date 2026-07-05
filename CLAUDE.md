@@ -11,7 +11,7 @@
 |---|---|---|
 | Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
 | FastAPI + SQLAlchemy async + PostGIS | ✅ | |
-| Migraciones Alembic (0001 → 0006) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Migraciones Alembic (0001 → 0011) | ✅ | Correr `alembic upgrade head` al arrancar |
 | Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
 | CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
@@ -23,14 +23,17 @@
 | Polling de progreso (barra) | ✅ | Cada 2s contra `/vuelos/{id}/estado` |
 | Mapa Leaflet con zonas NDVI | ✅ | Coloreado por clase, tooltip con área y NDVI prom. |
 | Umbralización dinámica (fijo/otsu/percentil) | ✅ | `workers/gis/clasificacion.py` |
-| Vectorización con connectivity=8 y área mínima | ✅ | `workers/gis/ndvi.py` |
+| Vectorización con connectivity=8 y área mínima | ✅ | `workers/gis/zonas.py` (antes `ndvi.py` — renombrado, es genérico para los 4 índices) |
 | Z-score por polígono (zonas atípicas) | ✅ | Campo `zscore` y `es_atipica` en GeoJSON |
 | Modal límites lote (GeoJSON + Leaflet preview) | ✅ | `frontend/src/components/ModalLimites.jsx` |
+| Eliminar diagnóstico (soft delete) + reintentar análisis fallido | ✅ | Botones en tabla "Análisis Recientes"; `DELETE`/`POST .../reintentar` en `app/ingesta/router.py` |
+| Botón "Nuevo lote" (formulario + límite GeoJSON, sin GeoTIFF) | ✅ | `frontend/src/components/ModalNuevoLote.jsx` → `POST /lotes` |
+| Modal "Cargar Ortomosaico" con selector de lote existente | ✅ | `ModalCargaGeoTIFF.jsx` ahora sube vuelos a un lote ya creado vía `POST /lotes/{id}/vuelos`, no crea lote nuevo |
+| Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
 | Motor de diagnóstico (RFDR-01) | ❌ | Próximo a implementar |
 | Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 5 en curso |
 | Testing integral y demo 7/jul | ❌ | Sprint 5 en curso |
 | Exportación Shapefile / PDF | ❌ | Pendiente |
-| Botón "Nuevo lote" (formulario solo) | ❌ | Deshabilitado — usar modal GeoTIFF |
 
 ### Credenciales de desarrollo
 
@@ -46,7 +49,7 @@
 
 - `geometry` en tabla `lotes` es **nullable** (migración 0005) — el worker la rellena con el bounding box del GeoTIFF después de procesar. Un lote recién creado puede tener `geometry = null`.
 - El contenedor API necesita `./workers` montado como volumen — sin eso no puede importar `workers.celery_app` y crashea al arrancar.
-- `POST /lotes/desde-geotiff` está en el router de ingesta (prefijo `/lotes`), no en el router de lotes.
+- `POST /lotes/desde-geotiff` está en el router de ingesta (prefijo `/lotes`), no en el router de lotes. Sigue existiendo pero el frontend ya no lo usa como flujo principal: un "lote" se crea primero (sin GeoTIFF, con límite GeoJSON) vía `ModalNuevoLote.jsx` → `POST /lotes`, y luego cada "vuelo" se sube a un lote ya existente vía `ModalCargaGeoTIFF.jsx` → `POST /lotes/{id}/vuelos`.
 - El worker pasa `lote_id` como kwarg a la tarea Celery para poder actualizar la geometry después.
 - `rasterio.features.shapes()` rechaza `float64` — el array NDVI siempre se castea a `float32` antes de vectorizar.
 - `test_celery_integracion.py` tiene tres tests: dos de configuración (corren en CI dentro del job `test-gis`) y uno de ciclo completo E2E que requiere MinIO + worker levantados — ese solo corre con `docker compose exec worker`.
@@ -216,18 +219,24 @@ GeoTIFF (Sentinel-2 / DJI Mavic 3 Multispectral)
 Extracción de bandas → matrices NumPy
     ↓ NumPy
 Cálculo de índice (NDVI, SAVI, GNDVI, etc.)
+    ↓ scipy.ndimage.gaussian_filter (sigma=1px, NaN-safe) — `suavizar_indice()`
+Suavizado espacial → evita fragmentación "sal y pimienta" al clasificar gradientes continuos
     ↓ scikit-image (Otsu)
-Umbralización → máscara de píxeles
+Umbralización → máscara de píxeles (las estadísticas reportadas usan el valor SIN suavizar)
     ↓ cast a float32 / uint8 (shapes() rechaza float64 e int8)
     ↓ rasterio.features.shapes()  — para archivos > 500 MB usar rasterio.band(src, n) en lugar de src.read() para evitar cargar el array completo en memoria
 Vectorización → polígonos
     ↓ GeoPandas + Shapely
-Filtrado por área mínima, simplificación Douglas-Peucker
+gdf.explode() ANTES de filtrar por área — si no, un buffer(0) que fusiona fragmentos en un MultiPolygon deja pasar ruido cuya área total agregada supera el mínimo
+    ↓
+Filtrado por área mínima (por fragmento individual), simplificación Douglas-Peucker
     ↓
 Exportación: GeoJSON (API) / SHP.zip (maquinaria) / ISO-XML (ISOBUS)
 ```
 
 **Limitación técnica documentada:** DJI Mavic 3 Multispectral no tiene banda SWIR → NDWI convencional (NIR − SWIR) no es calculable. Usar NDWI de McFeeters (Verde − NIR) / (Verde + NIR) como proxy de agua superficial. NDRE como proxy de estrés hídrico foliar.
+
+**Ojo con el DJI Mavic 3 Multispectral real:** captura solo 4 bandas (Green, Red, RedEdge, NIR) — **no tiene banda Blue**. `workers/gis/band_mapping.py` refleja esto (`GREEN=1, RED=2, RE=3, NIR=4`, sin `BLUE`). Por eso el índice `ExG` (que necesita RGB) no está disponible para `sensor="dji_mavic3"` — es una limitación real del sensor, no un bug.
 
 ---
 

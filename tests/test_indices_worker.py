@@ -123,10 +123,10 @@ def test_mapeo_sentinel2():
 
 def test_mapeo_dji():
     from workers.gis.band_mapping import numero_banda
-    assert numero_banda("dji_mavic3", "NIR") == 5
-    assert numero_banda("dji_mavic3", "RED") == 3
-    assert numero_banda("dji_mavic3", "RE")  == 4
-    print("✓ Mapeo DJI Mavic 3: NIR=5, RED=3, RE=4")
+    assert numero_banda("dji_mavic3", "NIR") == 4
+    assert numero_banda("dji_mavic3", "RED") == 2
+    assert numero_banda("dji_mavic3", "RE")  == 3
+    print("✓ Mapeo DJI Mavic 3: NIR=4, RED=2, RE=3 (4 bandas, sin Blue)")
 
 
 def test_sensor_invalido():
@@ -178,8 +178,8 @@ def test_pipeline_ndvi_dji():
     import tempfile
     from workers.gis.pipeline import ejecutar_pipeline
 
-    # DJI Mavic3: 5 bandas — B=1, G=2, R=3, RE=4, NIR=5
-    data = _geotiff_multibanda(5, CRS.from_epsg(4326))
+    # DJI Mavic3 real: 4 bandas, sin Blue — G=1, R=2, RE=3, NIR=4
+    data = _geotiff_multibanda(4, CRS.from_epsg(4326))
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         stats = ejecutar_pipeline(data, sensor="dji_mavic3", indice="ndvi", geojson_destino=tmp.name)
 

@@ -362,6 +362,134 @@ El GeoJSON de resultados no tenía referencia directa en la BD. `obtener_resulta
 
 ---
 
+#### Eliminar/reintentar diagnóstico + desacoplar creación de lote de la carga de GeoTIFF
+**Fecha:** 2026-07-03
+**Rama:** `main`
+
+Se agregaron dos acciones sobre la tabla "Análisis Recientes" del dashboard (eliminar y reintentar un vuelo) y se redefinió el flujo de alta: un "lote" ahora se crea de forma independiente (con su límite GeoJSON, sin GeoTIFF), y cada "vuelo" se sube posteriormente a un lote ya existente.
+
+**Piezas implementadas:**
+- Migración `0008`: columna `deleted_at` en `vuelos` (soft delete, mismo patrón que `lotes`).
+- `app/ingesta/service.py`: `obtener_vuelo`, `eliminar_vuelo`, `reintentar_vuelo` (reencola el mismo `archivo_original` ya en MinIO, sin pedir un nuevo upload).
+- `app/ingesta/router.py`: `DELETE /{lote_id}/vuelos/{vuelo_id}` y `POST /{lote_id}/vuelos/{vuelo_id}/reintentar`.
+- Frontend: `ModalConfirmarEliminar.jsx` (confirmación genérica), botones 🗑️/↻ en la tabla, "Análisis Recientes" ahora filtra solo lotes con vuelo activo.
+- `ModalNuevoLote.jsx` (nuevo): formulario nombre/cultivo/estadio + límite GeoJSON (reusa el patrón de `ModalLimites.jsx`) → `POST /lotes`.
+- `ModalCargaGeoTIFF.jsx` (reescrito): ya no crea lote — pide seleccionar un lote existente + sensor + archivo → `POST /lotes/{id}/vuelos`.
+
+**Error encontrado — ruta duplicada `GET /{lote_id}/vuelos`**
+Al agregar el filtro `deleted_at IS NULL` en `app/ingesta/service.py`, un vuelo eliminado seguía apareciendo en el dashboard. Causa: `app/lotes/router.py` y `app/ingesta/router.py` registraban la misma ruta `GET /{lote_id}/vuelos` bajo el mismo prefijo; por orden de registro en `main.py`, ganaba la de `app/lotes/router.py`, que llamaba a un `service.listar_vuelos` distinto (sin el filtro). Se eliminó la ruta y el service duplicados de `app/lotes/` (`VueloResponse`, `listar_vuelos`) — sin consumidores propios, confirmado por búsqueda en `tests/`.
+
+**Decisiones tomadas:**
+- El botón "Reintentar" solo aparece si `vuelo.estado === 'error'` y reencola el mismo archivo (no permite cambiar sensor en el reintento — si el sensor elegido fue el problema, hay que subir un vuelo nuevo).
+- La tabla "Análisis Recientes" excluye lotes sin ningún vuelo activo (antes mostraba "Sin análisis" y la fila nunca desaparecía tras un delete).
+
+---
+
+#### Wizard de carga de ortomosaico (2 pasos) + inspección preliminar de bandas
+**Fecha:** 2026-07-05
+**Rama:** `main`
+
+Se reemplazó el modal simple de carga de GeoTIFF por un wizard de 2 pasos ("Carga" y "Análisis"), y se agregó un chequeo instantáneo de compatibilidad de bandas antes de subir el archivo.
+
+**Piezas implementadas:**
+- `ModalCargaGeoTIFF.jsx`: paso "Carga" (lote, sensor, dropzone) → paso "Análisis" (card de info del lote + selector múltiple de índices — solo visual, no afecta el procesamiento real, que sigue siendo NDVI vía Celery).
+- `app/ingesta/tiff_inspector.py` (nuevo): parser manual del header TIFF clásico (`SamplesPerPixel`, tag 277) sin depender de GDAL/rasterio — el contenedor API no tiene rasterio instalado a propósito (`validator.py` ya documentaba esto). Verificado contra `rasterio` en el worker con archivos reales de 4 y 5 bandas: coincide exacto.
+- `POST /lotes/inspeccionar-geotiff` (nuevo endpoint): recibe archivo + sensor, devuelve `{n_bandas, bandas_requeridas, compatible, mensaje}`. `bandas_requeridas` sale de `workers.gis.band_mapping.MAPEO_SENSORES` (máximo índice de banda no nulo para ese sensor).
+- Frontend dispara la inspección automáticamente al elegir archivo o cambiar sensor (`useEffect([archivo, sensor])`). Si `compatible === false`, la caja verde "Requerimientos Técnicos" se reemplaza por una caja roja con el mensaje de error — no bloquea el flujo, es informativo (la validación dura sigue estando en el worker).
+
+**Decisiones tomadas:**
+- Índices mostrados en el paso "Análisis" acotados a los 4 que el worker realmente calcula (`ndvi`, `ndre`, `savi`, `exg` — ver `band_mapping.py`), no una lista aspiracional.
+- El chequeo de bandas es "best-effort": si el parseo del header falla (BigTIFF, archivo corrupto, etc.) devuelve `n_bandas: None` y se trata como compatible por defecto — nunca bloquea la carga por un parseo fallido, ya que el worker vuelve a validar todo con rasterio de todas formas.
+
+---
+
+#### Corrección del perfil de bandas de `dji_mavic3` (era incorrecto, no un sensor faltante)
+**Fecha:** 2026-07-05
+**Rama:** `main`
+
+El chequeo de bandas agregado en la tarea anterior expuso una contradicción: el perfil `dji_mavic3` en `band_mapping.py` esperaba 5 bandas con Blue (`BLUE=1, GREEN=2, RED=3, RE=4, NIR=5`), pero el DJI Mavic 3 Multispectral real captura solo 4 bandas — **no tiene canal Blue** (confirmado con orthomosaicos reales: archivos `_MS_G`, `_MS_R`, `_MS_RE`, `_MS_NIR`, sin `_MS_B`). Esto es exactamente el archivo de 4 bandas (`Green, Red, RedEdge, NIR`) que veníamos fallando en tareas anteriores (ver entrada "Bug: geotiff no se analizó bien" — antes registrado como problema abierto #3, ya resuelto acá).
+
+**Cambio:** `band_mapping.py` — `dji_mavic3` pasa a `GREEN=1, RED=2, RE=3, NIR=4` (sin `BLUE`). No hacía falta un tercer sensor nuevo: el perfil existente estaba mal definido desde el principio (documentado erróneamente como "mismas bandas que Sentinel-2 en distinto orden").
+
+**Piezas actualizadas:**
+- `workers/gis/band_mapping.py`: mapeo corregido + comentario explicando por qué no tiene Blue.
+- `tests/test_indices_worker.py`: aserciones de `numero_banda("dji_mavic3", ...)` y fixture de `test_pipeline_ndvi_dji` (5→4 bandas).
+- `tests/test_clasificacion.py`: fixture `_geotiff_cuatro_zonas` (bandas 5→4, índices de NIR/RED recalculados).
+- `tests/test_celery_integracion.py`: fixture `_geotiff_dji_sintetico` (5→4 bandas).
+- Los 3 archivos de test corridos y pasando con el nuevo mapeo (incluido el E2E completo con worker+MinIO reales).
+
+**Verificación con archivo real:** el GeoTIFF de 4 bandas que fallaba con ambos sensores (ver tarea anterior) ahora procesa correctamente con `sensor=dji_mavic3`: 2 polígonos, NDVI promedio 0.6053 (min 0.1565, max 0.7616) — resultado coherente, no el ruido fragmentado que se obtenía cuando el sensor no calzaba con el contenido real de la imagen.
+
+**Efecto colateral esperado (correcto):** `ExG` requiere banda `BLUE` (`BANDAS_POR_INDICE["exg"] = ["GREEN","RED","BLUE"]`). Como `dji_mavic3` ya no tiene Blue, pedir ExG con ese sensor ahora falla con un `ValueError` claro — es el comportamiento correcto: un sensor sin banda azul real no puede calcular un índice que la necesita.
+
+---
+
+#### Fix: fragmentación "sal y pimienta" al clasificar índices con gradiente continuo
+**Fecha:** 2026-07-05
+**Rama:** `main`
+
+Un archivo con gradiente suave (mancha circular de vigor, sin saltos discretos de valor) se vectorizaba en 2 `MultiPolygon` de **100 y 140 fragmentos** cada uno en vez de 2 polígonos limpios. Reportado por el usuario al notar que un análisis dejó de verse "prolijo" como antes. Diagnóstico: no era una regresión de código — era un problema de fondo que afecta a **cualquier imagen real** (el vigor de un cultivo real siempre varía gradualmente, nunca en bloques discretos), así que había que arreglarlo en el pipeline, no aceptarlo como comportamiento esperado.
+
+**Causa raíz (dos partes):**
+1. Al clasificar un gradiente continuo con un umbral binario píxel a píxel, muchísimos píxeles vecinos caen a un lado u otro del umbral por redondeo — produce cientos de fragmentos diminutos justo en la zona de transición.
+2. El filtro de área mínima no los descartaba porque `rasterio.features.shapes()` sobre una máscara con esa topología produce un contorno autointersecado (inválido); el `geom.buffer(0)` usado para repararlo fusiona todos los fragmentos en **un solo registro** `MultiPolygon` — y el área mínima se comparaba contra el área TOTAL del grupo (que sí supera el mínimo), no contra cada fragmento individual.
+
+**Cambios:**
+- `workers/gis/zonas.py` (renombrado de `ndvi.py` el mismo día, ver tarea siguiente): nueva función `suavizar_indice()` — filtro Gaussiano (sigma=1 píxel) NaN-safe (normaliza por el peso de la máscara de validez, no mezcla nodata con píxeles vecinos).
+- `workers/gis/pipeline.py`: `ejecutar_pipeline` aplica `suavizar_indice()` al array **antes** de clasificar. Las estadísticas reportadas (`ndvi_promedio`, min/max) siguen calculándose sobre el valor SIN suavizar — el suavizado es solo una ayuda para la clasificación espacial.
+- `workers/gis/zonas.py::vectorizar_zonas`: se agregó `gdf.explode(index_parts=False)` **antes** del filtro de área mínima, separando cualquier `MultiPolygon` en polígonos individuales para que el área se mida por fragmento real, no por grupo agregado.
+
+**Verificación:**
+- Los 30 tests existentes (`test_clasificacion.py`, `test_indices_worker.py`) y el E2E (`test_celery_integracion.py`) siguen pasando sin cambios en sus valores esperados — el suavizado con sigma=1 no altera resultados en imágenes con bloques discretos (cuadrantes de prueba).
+- El archivo real con gradiente que daba 2 `MultiPolygon` de 100/140 fragmentos ahora da 2 `Polygon` limpios de una sola pieza.
+
+**Decisiones tomadas:**
+- `sigma=1.0` píxel como valor fijo inicial — no depende de la resolución real del GeoTIFF (heurística simple, igual que `área_mínima_m2=1000` y la tolerancia de simplificación ya existentes). Si en la práctica resulta insuficiente para ciertas resoluciones muy finas o gruesas, ajustar por sensor/resolución en una iteración futura.
+- El suavizado se aplica solo en `ejecutar_pipeline` (el pipeline de producción), no dentro de `clasificar_ndvi`/`vectorizar_zonas` — mantiene esas funciones puras y testeables sin efectos secundarios ocultos para quien las llame directamente.
+
+---
+
+#### Análisis de robustez de los 4 índices + rename `ndvi.py` → `zonas.py`
+**Fecha:** 2026-07-05
+**Rama:** `main`
+
+El usuario pidió analizar si NDVI, NDRE, SAVI y ExG pueden mostrarse en el mapa de la misma forma, y renombrar `ndvi.py` (nombre engañoso — el archivo es genérico para los 4 índices, no específico de NDVI).
+
+**Hallazgo:** NDVI, NDRE y SAVI son índices "razón" (diferencia sobre suma) — su rango es siempre ~[-1,1] sin importar la escala de las bandas de entrada (reflectancia 0-1 o DN crudo sin calibrar), así que el umbral fijo `[0.20, 0.40, 0.70]` (agronómico, pensado para NDVI) aplica razonablemente a los tres. **ExG (`2·GREEN-RED-BLUE`) no es una razón — es una resta lineal absoluta cuya escala depende directamente de las unidades crudas de la cámara.** Verificado con datos controlados: en reflectancia 0-1 la vegetación sana da ExG≈0.5 (subestimada por el umbral); con DN de 8-bit sin calibrar da ExG≈130, muy por encima del máximo (0.70) — **el umbral fijo clasificaría todo el lote como "vigorosa" sin relación con el vigor real.**
+
+**Cambios:**
+- `workers/gis/ndvi.py` → `workers/gis/zonas.py` (`git mv`, preserva historial). Actualizadas todas las referencias: `workers/gis/pipeline.py`, `tests/test_clasificacion.py`, `tests/test_ndvi_pipeline.py`, `CLAUDE.md`.
+- `workers/gis/pipeline.py`: nueva función `_metodo_umbral_efectivo(indice, metodo_umbral)` — si el índice es `exg` y no se pidió explícitamente un método adaptativo, fuerza `otsu` (calcula el corte según la distribución real de los datos, sea cual sea su escala) en vez de usar el umbral fijo. El método efectivamente usado se agrega a las estadísticas (`stats["metodo_umbral"]`) para transparencia.
+
+**Verificación:** con datos sintéticos de reflectancia (mitad vegetación ExG≈0.5, mitad suelo ExG≈0.02), el fix separa correctamente el lote 50/50 en dos clases distintas vía Otsu, en vez de depender de un umbral absoluto que no tiene sentido para esa escala.
+
+**Decisiones tomadas:**
+- No se tocaron las funciones legacy `calcular_ndvi`/`leer_bandas`/`pipeline_ndvi` dentro de `zonas.py` (duplican lógica de `indices.py`, solo las usa el test standalone `test_ndvi_pipeline.py`, no el pipeline de producción) — fuera de alcance de esta tarea, es un cleanup aparte.
+
+---
+
+#### Multi-índice real: NDRE/SAVI/ExG dejan de ser cosmética en el wizard
+**Fecha:** 2026-07-06
+**Rama:** `main`
+
+Hasta ahora el selector de índices del wizard de carga era **solo visual** — sin importar qué se tildara, el backend siempre calculaba NDVI nomás (hardcodeado en `crear_vuelo_desde_upload`). Esta tarea lo conecta de verdad: cada índice tildado se analiza en serio, y "Vista geoespacial" ahora tiene un selector para cambiar cuál ver.
+
+**Modelo de datos:** un vuelo puede tener MUCHOS índices analizados, cada uno con su propio ciclo de vida async (pendiente → procesando → completado/error) — igual que un vuelo, pero acotado a un índice puntual. NDVI sigue siendo especial: se calcula siempre al subir (retrocompatible, vive en `vuelos.estado/geojson_key`, sin cambios); los adicionales (NDRE/SAVI/ExG) viven en una tabla nueva.
+
+**Piezas implementadas:**
+- Migración `0011` + modelo `AnalisisIndice` (`app/lotes/models.py`): `vuelo_id` FK CASCADE, `indice` (enum nuevo `IndiceEnum`), `estado`, `task_id`, `geojson_key`, `error_detalle`, `metodo_umbral`. Unique `(vuelo_id, indice)`.
+- `workers/gis/tasks.py::analizar_indice` — tarea Celery nueva, reusa `ejecutar_pipeline` igual que `procesar_vuelo`, pero actualiza `analisis_indices` en vez de `vuelos`. GeoJSON se guarda como `zonas_{indice}.geojson` (NDVI sigue siendo `zonas.geojson`, sin prefijo, retrocompatible).
+- Endpoints nuevos en `app/ingesta/router.py`: `GET/POST /lotes/{id}/vuelos/{id}/indices`, `GET .../indices/{indice}/estado`, `GET .../indices/{indice}/resultado`. El `GET` de listado sintetiza siempre una entrada `ndvi` (`es_primario: true`) desde el propio vuelo, sin duplicar datos.
+- Frontend: `ModalCargaGeoTIFF.jsx` ahora dispara `analizarIndice()` para cada índice tildado (menos NDVI, que ya se calculó al subir). `useVueloProgreso` acepta un tercer parámetro `indice` y elige el endpoint correcto. `Dashboard.jsx`: "Vista geoespacial" pide `listarIndicesVuelo()` al seleccionar un vuelo y muestra un selector de pastillas (solo si hay más de un índice) para cambiar cuál ver — cada click cambia `selectedVuelo.indice` y el mapa vuelve a pollear ese índice puntual.
+
+**Verificación E2E (API real, no scripts internos):** subida de un vuelo con `dji_mavic3` + disparo de SAVI y NDRE en paralelo → los 3 (NDVI+SAVI+NDRE) terminan `completado` y cada `resultado` devuelve su GeoJSON propio. Confirmado además que pedir `ExG` sobre `dji_mavic3` (sin Blue) falla con el mensaje de error correcto vía el nuevo endpoint de estado (`analisis_indices.error_detalle`), sin romper el resto del vuelo.
+
+**Decisiones tomadas:**
+- Reencolar (no duplicar) si el usuario pide el mismo índice dos veces sobre el mismo vuelo — `crear_analisis_indice` reutiliza la fila existente por el unique `(vuelo_id, indice)` en vez de fallar.
+- El worker es un proceso de larga duración — cada vez que se agrega una tarea Celery nueva (`analizar_indice`) hay que reiniciarlo (`docker compose restart worker`) para que la registre; no hot-reload como la API.
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -415,7 +543,7 @@ Documentado en CLAUDE.md y validado en el worker: si el dtype es `float64` o `in
 Se implementó el pipeline GIS generalizado que soporta NDVI, NDRE, SAVI y ExG con mapeo configurable de bandas por sensor y reproyección automática de CRS.
 
 **Decisiones tomadas:**
-- `band_mapping.py` centraliza los números de banda por sensor — Sentinel-2 y DJI Mavic 3 tienen las mismas bandas en distinto orden; esto evita números hardcodeados en el pipeline.
+- `band_mapping.py` centraliza los números de banda por sensor — esto evita números hardcodeados en el pipeline. *(Corrección 2026-07-05: la premisa original de que "Sentinel-2 y DJI Mavic 3 tienen las mismas bandas en distinto orden" era incorrecta — el Mavic 3M real no tiene banda Blue. Ver tarea "Corrección del perfil de bandas de `dji_mavic3`" más abajo.)*
 - `indices.py` opera exclusivamente sobre arrays NumPy completos (sin iterar píxel a píxel). Toda función retorna `float32` y convierte nodata y denominador cero a `NaN` explícitamente.
 - `reproyeccion.py` reproyecta en memoria con `rasterio.warp`; si el CRS ya es EPSG:4326 devuelve los bytes originales sin tocarlos (zero-copy).
 - `pipeline.py` reutiliza `clasificar_ndvi` y `vectorizar_zonas` de `ndvi.py` para todos los índices — los umbrales cualitativos (crítica/deficiente/normal/vigorosa) aplican igual a NDRE y SAVI al ser índices ratio en [-1,1].

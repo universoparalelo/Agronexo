@@ -162,6 +162,126 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
     return {"vuelo_id": vuelo_id, "estadisticas": estadisticas}
 
 
+def _actualizar_analisis_indice(
+    analisis_id: str,
+    estado: str,
+    error: str | None = None,
+    geojson_key: str | None = None,
+    metodo_umbral: str | None = None,
+) -> None:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.core.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE analisis_indices SET estado = CAST(:estado AS estadovueloenum), "
+                    "error_detalle = :error, geojson_key = :geojson_key, "
+                    "metodo_umbral = COALESCE(:metodo_umbral, metodo_umbral) "
+                    "WHERE id = CAST(:analisis_id AS uuid)"
+                ),
+                {
+                    "estado": estado,
+                    "error": error,
+                    "geojson_key": geojson_key,
+                    "metodo_umbral": metodo_umbral,
+                    "analisis_id": analisis_id,
+                },
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(
+    bind=True,
+    name="workers.gis.tasks.analizar_indice",
+    autoretry_for=(ConnectionError, OSError),
+    max_retries=3,
+    default_retry_delay=30,
+)
+def analizar_indice(
+    self,
+    analisis_id: str,
+    minio_key: str,
+    sensor: str,
+    indice: str,
+    metodo_umbral: str = "fijo",
+    area_minima_m2: int = 1000,
+) -> dict:
+    """
+    Analiza UN índice adicional sobre un vuelo ya existente (NDRE, SAVI, ExG —
+    el primer índice, NDVI, se calcula siempre al subir vía procesar_vuelo).
+    Reusa exactamente la misma lógica de pipeline; solo cambia dónde se
+    guarda el resultado: fila propia en analisis_indices, no en vuelos.
+    """
+    from app.core.storage import download_geotiff, upload_bytes
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
+
+    try:
+        data = download_geotiff(minio_key)
+    except Exception as exc:
+        _actualizar_analisis_indice(analisis_id, "error", f"Error al descargar el archivo: {exc}")
+        raise
+
+    self.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
+
+    try:
+        _validar_geotiff_gis(data)
+    except Exception as exc:
+        mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
+        _actualizar_analisis_indice(analisis_id, "error", mensaje)
+        raise ValueError(mensaje) from exc
+
+    self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+            geojson_path = tmp.name
+
+        estadisticas = ejecutar_pipeline(
+            data=data,
+            sensor=sensor,
+            indice=indice,
+            geojson_destino=geojson_path,
+            metodo_umbral=metodo_umbral,
+            area_minima_m2=area_minima_m2,
+        )
+    except Exception as exc:
+        _actualizar_analisis_indice(analisis_id, "error", f"Error en el pipeline GIS: {exc}")
+        raise
+
+    self.update_state(state="PROGRESS", meta={"progreso": 80, "mensaje": "Subiendo resultados"})
+
+    geojson_key_guardado: str | None = None
+    try:
+        partes = minio_key.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
+        prefijo = "/".join(partes[:3])
+        geojson_key_guardado = f"{prefijo}/zonas_{indice}.geojson"
+        with open(geojson_path, "rb") as f:
+            geojson_bytes = f.read()
+        upload_bytes(geojson_key_guardado, geojson_bytes, content_type="application/geo+json")
+    except Exception as exc:
+        estadisticas["advertencia_upload"] = str(exc)
+        geojson_key_guardado = None
+
+    self.update_state(state="PROGRESS", meta={"progreso": 100, "mensaje": "Procesamiento completado"})
+    _actualizar_analisis_indice(
+        analisis_id,
+        "completado",
+        geojson_key=geojson_key_guardado,
+        metodo_umbral=estadisticas.get("metodo_umbral"),
+    )
+
+    return {"analisis_id": analisis_id, "estadisticas": estadisticas}
+
+
 # Tarea legacy — se mantiene por compatibilidad con tests existentes
 @celery_app.task(bind=True, name="workers.gis.tasks.procesar_analisis")
 def procesar_analisis(self, analisis_id: str) -> dict:

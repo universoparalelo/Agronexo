@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
+import { eliminarVuelo, listarIndicesVuelo, reintentarVuelo } from '../api/analisis'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
+import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
+import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 
 /* ──────── Icons ──────── */
 const IconDashboard = () => (
@@ -72,6 +75,34 @@ const IconMap = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
     <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+  </svg>
+)
+const IconTrash = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+  </svg>
+)
+const IconRetry = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="1 4 1 10 7 10"/>
+    <path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+  </svg>
+)
+const IconExpandir = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 3 21 3 21 9"/>
+    <polyline points="9 21 3 21 3 15"/>
+    <line x1="21" y1="3" x2="14" y2="10"/>
+    <line x1="3" y1="21" x2="10" y2="14"/>
+  </svg>
+)
+const IconContraer = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="4 14 10 14 10 20"/>
+    <polyline points="20 10 14 10 14 4"/>
+    <line x1="14" y1="10" x2="21" y2="3"/>
+    <line x1="3" y1="21" x2="10" y2="14"/>
   </svg>
 )
 
@@ -182,31 +213,21 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
 }
 
 /* ──────── Mapa de análisis (panel inferior) ──────── */
-function AnalisisMap({ loteId }) {
-  const [vuelos, setVuelos] = useState([])
-  const [loading, setLoading] = useState(true)
+const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', exg: 'ExG' }
 
-  useEffect(() => {
-    setLoading(true)
-    client.get(`/lotes/${loteId}/vuelos`)
-      .then(({ data }) => setVuelos(data))
-      .catch(() => setVuelos([]))
-      .finally(() => setLoading(false))
-  }, [loteId])
+function AnalisisMap({ loteId, vueloId, indice }) {
+  const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
 
-  const vuelo = vuelos[0] ?? null
-  const { estado, geojson, errorMsg } = useVueloProgreso(
-    vuelo ? loteId : null,
-    vuelo?.vuelo_id ?? vuelo?.id ?? null,
-  )
+  if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
-  if (loading) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
-  if (!vuelo)  return <p className="estado-msg" style={{ padding: '1rem' }}>Sin análisis para este lote.</p>
-
-  const estadoActual = estado?.estado ?? vuelo.estado
+  const estadoActual = estado.estado
   if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} />
   if (estadoActual === 'error' || errorMsg) {
-    return <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>Error en el procesamiento.</p>
+    return (
+      <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>
+        {errorMsg || estado?.error || 'Error en el procesamiento.'}
+      </p>
+    )
   }
   return (
     <div style={{ padding: '1rem' }}>
@@ -223,11 +244,26 @@ export default function Dashboard() {
   const [loteRows, setLoteRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
   const [loteParaLimites, setLoteParaLimites] = useState(null)
+  const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
+  const [reintentandoId, setReintentandoId] = useState(null)
+  const [tablaError, setTablaError] = useState('')
   const [activeSection, setActiveSection] = useState('dashboard')
-  const [selectedLoteId, setSelectedLoteId] = useState(null)
+  const [selectedVuelo, setSelectedVuelo] = useState(null)
+  const [indicesDisponibles, setIndicesDisponibles] = useState([])
+  const [mapaExpandido, setMapaExpandido] = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 4
+
+  useEffect(() => {
+    if (!mapaExpandido) return
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setMapaExpandido(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mapaExpandido])
 
   const cargarDatos = useCallback(async () => {
     setLoading(true)
@@ -250,27 +286,85 @@ export default function Dashboard() {
 
   useEffect(() => { cargarDatos() }, [cargarDatos])
 
-  function handleCargaExitosa(loteId) {
-    setShowModal(false)
-    cargarDatos()
-    setSelectedLoteId(loteId)
+  useEffect(() => {
+    if (!selectedVuelo) { setIndicesDisponibles([]); return }
+    let cancelado = false
+    listarIndicesVuelo(selectedVuelo.loteId, selectedVuelo.vueloId)
+      .then((data) => { if (!cancelado) setIndicesDisponibles(data) })
+      .catch(() => { if (!cancelado) setIndicesDisponibles([]) })
+    return () => { cancelado = true }
+  }, [selectedVuelo?.loteId, selectedVuelo?.vueloId])
+
+  function cambiarIndice(indice) {
+    setSelectedVuelo((prev) => prev && { ...prev, indice })
   }
 
-  const totalAnalisis = loteRows.reduce((acc, l) => acc + l.vuelos.length, 0)
-  const totalPages    = Math.max(1, Math.ceil(loteRows.length / PAGE_SIZE))
-  const pageRows      = loteRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const selectedLote  = loteRows.find(l => l.id === selectedLoteId)
+  function handleCargaExitosa(data) {
+    setShowModal(false)
+    cargarDatos()
+    setSelectedVuelo({ loteId: data.lote_id, vueloId: data.vuelo_id, indice: 'ndvi' })
+  }
+
+  function handleNuevoLoteExitoso() {
+    setShowModalNuevoLote(false)
+    cargarDatos()
+  }
+
+  async function handleEliminarAnalisis() {
+    const { loteId, vueloId } = analisisParaEliminar
+    await eliminarVuelo(loteId, vueloId)
+    setAnalisisParaEliminar(null)
+    if (selectedVuelo?.vueloId === vueloId) setSelectedVuelo(null)
+    cargarDatos()
+  }
+
+  async function handleReintentar(v) {
+    setTablaError('')
+    setReintentandoId(v.vueloId)
+    try {
+      await reintentarVuelo(v.lote.id, v.vueloId)
+      await cargarDatos()
+      setSelectedVuelo({ loteId: v.lote.id, vueloId: v.vueloId, indice: 'ndvi' })
+    } catch (err) {
+      setTablaError(err.response?.data?.detail || 'Error al reintentar el análisis.')
+    } finally {
+      setReintentandoId(null)
+    }
+  }
+
+  const vueloRows = loteRows
+    .flatMap(l => l.vuelos.map(v => ({ ...v, vueloId: v.vuelo_id ?? v.id, lote: l })))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const totalPages = Math.max(1, Math.ceil(vueloRows.length / PAGE_SIZE))
+  const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
 
   return (
     <div className="dashboard">
       {showModal && (
-        <ModalCargaGeoTIFF onSuccess={handleCargaExitosa} onClose={() => setShowModal(false)} />
+        <ModalCargaGeoTIFF
+          lotes={loteRows}
+          loteIdInicial={selectedVuelo?.loteId ?? null}
+          onSuccess={handleCargaExitosa}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+      {showModalNuevoLote && (
+        <ModalNuevoLote onSuccess={handleNuevoLoteExitoso} onClose={() => setShowModalNuevoLote(false)} />
       )}
       {loteParaLimites && (
         <ModalLimites
           lote={loteParaLimites}
           onSuccess={() => { setLoteParaLimites(null); cargarDatos() }}
           onClose={() => setLoteParaLimites(null)}
+        />
+      )}
+      {analisisParaEliminar && (
+        <ModalConfirmarEliminar
+          titulo="Eliminar diagnóstico"
+          mensaje={`¿Seguro que querés eliminar el vuelo de "${analisisParaEliminar.etiqueta}"? Esta acción no se puede deshacer.`}
+          onConfirmar={handleEliminarAnalisis}
+          onClose={() => setAnalisisParaEliminar(null)}
         />
       )}
 
@@ -324,8 +418,8 @@ export default function Dashboard() {
             />
             <KpiCard
               label="ANÁLISIS REALIZADOS"
-              value={totalAnalisis || '—'}
-              delta={totalAnalisis > 0 ? `+${totalAnalisis} procesados` : null}
+              value={vueloRows.length || '—'}
+              delta={vueloRows.length > 0 ? `+${vueloRows.length} procesados` : null}
               deltaType="up"
               icon={<IconDiagnostico />}
             />
@@ -359,65 +453,85 @@ export default function Dashboard() {
                   </div>
                   <button className="card-link">Ver todos <IconArrow /></button>
                 </div>
+                {tablaError && (
+                  <div className="error-message" style={{ margin: '0 1.1rem 0.75rem' }}>{tablaError}</div>
+                )}
                 <div className="card-body" style={{ padding: '0' }}>
                   {loading ? (
                     <p className="estado-msg" style={{ padding: '1rem 1.1rem' }}>Cargando...</p>
                   ) : loteRows.length === 0 ? (
                     <div className="empty-state">
                       <p>No hay lotes registrados.</p>
-                      <p className="empty-hint">Subí un GeoTIFF para comenzar el análisis.</p>
+                      <p className="empty-hint">Creá un lote para comenzar.</p>
+                    </div>
+                  ) : vueloRows.length === 0 ? (
+                    <div className="empty-state">
+                      <p>No hay vuelos cargados todavía.</p>
+                      <p className="empty-hint">Usá "Cargar Ortomosaico" para subir el primer vuelo de un lote.</p>
                     </div>
                   ) : (
                     <>
                       <table className="analisis-table">
                         <thead>
                           <tr>
-                            <th>LOTE / CULTIVO</th>
+                            <th>LOTE</th>
                             <th>FECHA</th>
-                            <th>ÍNDICE NDVI</th>
                             <th>ESTADO</th>
                             <th>ACCIÓN</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {pageRows.map(lote => {
-                            const vuelo = lote.vuelos[0]
-                            const badge = vuelo
-                              ? (ESTADO_BADGE[vuelo.estado] ?? { label: vuelo.estado, cls: 'badge-procesando' })
-                              : null
+                          {pageRows.map(v => {
+                            const badge = ESTADO_BADGE[v.estado] ?? { label: v.estado, cls: 'badge-procesando' }
                             return (
-                              <tr key={lote.id} className={selectedLoteId === lote.id ? 'tr--active' : ''}>
+                              <tr key={v.vueloId} className={selectedVuelo?.vueloId === v.vueloId ? 'tr--active' : ''}>
                                 <td>
-                                  <div className="td-lote-nombre">{lote.nombre}</div>
+                                  <div className="td-lote-nombre">{v.lote.nombre}</div>
                                   <div className="td-lote-info">
-                                    {CULTIVO_LABEL[lote.cultivo] ?? lote.cultivo}
-                                    {lote.area_ha ? ` · ${Math.round(lote.area_ha)} ha` : ''}
-                                    {' · Chaco'}
+                                    {CULTIVO_LABEL[v.lote.cultivo] ?? v.lote.cultivo}
+                                    {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>
-                                <td className="td-fecha">{vuelo ? fmtFecha(vuelo.created_at) : '—'}</td>
-                                <td className="td-ndvi">—</td>
+                                <td className="td-fecha">{fmtFecha(v.created_at)}</td>
                                 <td>
-                                  {badge
-                                    ? <span className={`table-badge ${badge.cls}`}>{badge.label}</span>
-                                    : <span className="table-badge badge-none">Sin análisis</span>
-                                  }
+                                  <span className={`table-badge ${badge.cls}`}>{badge.label}</span>
                                 </td>
                                 <td>
                                   <div className="td-acciones">
                                     <button
                                       className="tbl-btn"
                                       title="Ver análisis"
-                                      onClick={() => setSelectedLoteId(lote.id)}
+                                      onClick={() => setSelectedVuelo({ loteId: v.lote.id, vueloId: v.vueloId, indice: 'ndvi' })}
                                     >
                                       <IconZoom />
                                     </button>
                                     <button
                                       className="tbl-btn"
                                       title="Límites"
-                                      onClick={() => setLoteParaLimites(lote)}
+                                      onClick={() => setLoteParaLimites(v.lote)}
                                     >
                                       <IconMap />
+                                    </button>
+                                    {v.estado === 'error' && (
+                                      <button
+                                        className="tbl-btn tbl-btn--retry"
+                                        title="Reintentar análisis"
+                                        disabled={reintentandoId === v.vueloId}
+                                        onClick={() => handleReintentar(v)}
+                                      >
+                                        <IconRetry />
+                                      </button>
+                                    )}
+                                    <button
+                                      className="tbl-btn tbl-btn--danger"
+                                      title="Eliminar diagnóstico"
+                                      onClick={() => setAnalisisParaEliminar({
+                                        loteId: v.lote.id,
+                                        vueloId: v.vueloId,
+                                        etiqueta: `${v.lote.nombre} · ${fmtFecha(v.created_at)}`,
+                                      })}
+                                    >
+                                      <IconTrash />
                                     </button>
                                   </div>
                                 </td>
@@ -427,7 +541,7 @@ export default function Dashboard() {
                         </tbody>
                       </table>
                       <div className="table-footer">
-                        <span>Mostrando {pageRows.length} de {loteRows.length} lotes</span>
+                        <span>Mostrando {pageRows.length} de {vueloRows.length} vuelos</span>
                         <div className="pagination">
                           <button className="page-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹</button>
                           <span>Página {page} de {totalPages}</span>
@@ -440,32 +554,62 @@ export default function Dashboard() {
               </div>
 
               {/* Vista geoespacial */}
-              <div className="card card--mapa">
+              {mapaExpandido && <div className="mapa-expand-backdrop" onClick={() => setMapaExpandido(false)} />}
+              <div className={`card card--mapa${mapaExpandido ? ' card--mapa-expandido' : ''}`}>
                 <div className="card-header">
                   <div>
                     <h2 className="card-title">📍 Vista geoespacial</h2>
                     <p className="card-sub">
-                      {selectedLote
-                        ? `Análisis — ${selectedLote.nombre}`
+                      {selectedVuelo
+                        ? (selectedVueloRow
+                            ? `Análisis — ${selectedVueloRow.lote.nombre} · ${fmtFecha(selectedVueloRow.created_at)}`
+                            : 'Análisis en curso')
                         : 'Mapa de lotes registrados en la zona norte'}
                     </p>
                   </div>
-                  {selectedLote && (
-                    <button className="card-link" onClick={() => setSelectedLoteId(null)}>
-                      Cerrar ×
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                    {selectedVuelo && (
+                      <button
+                        className="card-link"
+                        onClick={() => setMapaExpandido((v) => !v)}
+                        title={mapaExpandido ? 'Contraer mapa' : 'Expandir mapa'}
+                      >
+                        {mapaExpandido ? <IconContraer /> : <IconExpandir />}
+                        {mapaExpandido ? 'Contraer' : 'Expandir'}
+                      </button>
+                    )}
+                    {selectedVuelo && (
+                      <button className="card-link" onClick={() => { setSelectedVuelo(null); setMapaExpandido(false) }}>
+                        Cerrar ×
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {selectedVuelo && indicesDisponibles.length > 1 && (
+                  <div className="indice-switcher">
+                    {indicesDisponibles.map((i) => (
+                      <button
+                        type="button"
+                        key={i.indice}
+                        className={`indice-switch-btn${selectedVuelo.indice === i.indice ? ' indice-switch-btn--active' : ''}${i.estado === 'error' ? ' indice-switch-btn--error' : ''}`}
+                        onClick={() => cambiarIndice(i.indice)}
+                        title={i.estado !== 'completado' ? `Estado: ${i.estado}` : ''}
+                      >
+                        {INDICE_LABEL[i.indice] ?? i.indice}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="card-mapa-body">
-                  {selectedLoteId
-                    ? <AnalisisMap key={selectedLoteId} loteId={selectedLoteId} />
+                  {selectedVuelo
+                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} />
                     : (
                       <div className="mapa-placeholder">
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c2c9b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
                           <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
                         </svg>
-                        <p>Seleccioná un lote para ver su análisis</p>
+                        <p>Seleccioná un vuelo para ver su análisis</p>
                         <p className="empty-hint">Hacé clic en 🔍 en la tabla de arriba</p>
                       </div>
                     )
@@ -482,7 +626,7 @@ export default function Dashboard() {
                   <h2 className="card-title">⚡ Acciones Rápidas</h2>
                 </div>
                 <div className="card-body acciones-list">
-                  <button className="accion-item accion-item--primary" onClick={() => setShowModal(true)}>
+                  <button className="accion-item accion-item--primary" onClick={() => setShowModalNuevoLote(true)}>
                     <div className="accion-icon">
                       <IconLotes />
                     </div>

@@ -27,11 +27,12 @@ MAPEO_SENSORES: dict[str, MapaBandas] = {
         NIR=8,   # B8 — NIR 842 nm
     ),
     "dji_mavic3": MapaBandas(
-        BLUE=1,
-        GREEN=2,
-        RED=3,
-        RE=4,    # Red Edge 730 nm
-        NIR=5,   # NIR 860 nm
+        # El DJI Mavic 3 Multispectral real captura 4 bandas — no tiene Blue
+        # (confirmado con orthomosaicos reales: _MS_G, _MS_R, _MS_RE, _MS_NIR).
+        GREEN=1,
+        RED=2,
+        RE=3,    # Red Edge 730 nm
+        NIR=4,   # NIR 860 nm
     ),
 }
 

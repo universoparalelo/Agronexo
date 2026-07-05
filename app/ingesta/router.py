@@ -8,12 +8,60 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.ingesta import service
-from app.ingesta.schemas import EstadoVueloResponse, LoteDesdeGeotiffResponse, VueloListItem, VueloUploadResponse
+from app.ingesta.schemas import (
+    EstadoVueloResponse,
+    IndiceAnalisisIniciarResponse,
+    IndiceAnalisisItem,
+    IndiceAnalisisRequest,
+    IndiceEstadoResponse,
+    InspeccionGeotiffResponse,
+    LoteDesdeGeotiffResponse,
+    VueloListItem,
+    VueloReintentoResponse,
+    VueloUploadResponse,
+)
+from app.ingesta.tiff_inspector import contar_bandas_geotiff
 from app.ingesta.validator import validar_archivo_geotiff
-from app.lotes.models import CultivoEnum, SensorEnum
+from app.lotes.models import CultivoEnum, EstadoVueloEnum, IndiceEnum, SensorEnum
 from app.lotes.service import obtener_lote
 
 router = APIRouter()
+
+
+@router.post(
+    "/inspeccionar-geotiff",
+    response_model=InspeccionGeotiffResponse,
+    summary="Chequeo preliminar: cantidad de bandas del archivo vs. sensor seleccionado",
+)
+async def inspeccionar_geotiff(
+    archivo: UploadFile = File(..., description="GeoTIFF a inspeccionar"),
+    sensor: SensorEnum = Form(..., description="Sensor seleccionado"),
+    current_user: Usuario = Depends(get_current_user),
+):
+    from workers.gis.band_mapping import MAPEO_SENSORES
+
+    contenido = await archivo.read()
+    validar_archivo_geotiff(archivo, contenido)
+
+    n_bandas = contar_bandas_geotiff(contenido)
+    mapeo = MAPEO_SENSORES[sensor.value]
+    bandas_requeridas = max(v for v in mapeo if v is not None)
+
+    compatible = n_bandas is None or n_bandas >= bandas_requeridas
+    mensaje = None
+    if not compatible:
+        mensaje = (
+            f"El archivo tiene {n_bandas} banda(s), pero el sensor '{sensor.value}' "
+            f"requiere al menos {bandas_requeridas} (NIR en posición {mapeo.NIR}). "
+            f"Verificá que elegiste el sensor correcto o que el archivo tenga todas las bandas necesarias."
+        )
+
+    return InspeccionGeotiffResponse(
+        n_bandas=n_bandas,
+        bandas_requeridas=bandas_requeridas,
+        compatible=compatible,
+        mensaje=mensaje,
+    )
 
 
 @router.post(
@@ -115,6 +163,8 @@ async def listar_vuelos_lote(
             sensor=v.sensor,
             estado=v.estado,
             fecha_vuelo=v.fecha_vuelo,
+            hora_inicio=v.hora_inicio,
+            hora_fin=v.hora_fin,
             task_id=v.task_id,
             created_at=v.created_at,
         )
@@ -163,3 +213,184 @@ async def estado_vuelo(
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
     return estado
+
+
+@router.delete(
+    "/{lote_id}/vuelos/{vuelo_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar (soft delete) un vuelo/análisis",
+)
+async def eliminar_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    await service.eliminar_vuelo(db, vuelo)
+    await db.commit()
+
+
+@router.post(
+    "/{lote_id}/vuelos/{vuelo_id}/reintentar",
+    response_model=VueloReintentoResponse,
+    summary="Reintentar el procesamiento de un vuelo que falló",
+)
+async def reintentar_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    if vuelo.estado != EstadoVueloEnum.error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden reintentar vuelos en estado 'error'.",
+        )
+    if not vuelo.archivo_original:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El vuelo no tiene un archivo original disponible para reprocesar.",
+        )
+
+    vuelo = await service.reintentar_vuelo(db, vuelo)
+    await db.commit()
+
+    return VueloReintentoResponse(
+        vuelo_id=vuelo.id,
+        lote_id=vuelo.lote_id,
+        sensor=vuelo.sensor,
+        estado=vuelo.estado,
+        task_id=vuelo.task_id,
+        created_at=vuelo.created_at,
+    )
+
+
+@router.get(
+    "/{lote_id}/vuelos/{vuelo_id}/indices",
+    response_model=list[IndiceAnalisisItem],
+    summary="Listar índices calculados (o en curso) para un vuelo",
+)
+async def listar_indices_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    return await service.listar_analisis_indices(db, vuelo)
+
+
+@router.post(
+    "/{lote_id}/vuelos/{vuelo_id}/indices",
+    response_model=IndiceAnalisisIniciarResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Analizar un índice adicional sobre un vuelo ya existente (NDRE, SAVI, ExG)",
+)
+async def analizar_indice_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    data: IndiceAnalisisRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    if data.indice == IndiceEnum.ndvi:
+        # NDVI ya se calculó automáticamente al subir el vuelo — no hay nada
+        # nuevo que encolar, devolvemos el estado real del vuelo.
+        return IndiceAnalisisIniciarResponse(
+            indice=IndiceEnum.ndvi,
+            estado=vuelo.estado,
+            task_id=vuelo.task_id,
+            mensaje="NDVI ya se calcula automáticamente al subir el vuelo.",
+        )
+
+    if not vuelo.archivo_original:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El vuelo no tiene un archivo original disponible para analizar.",
+        )
+
+    analisis = await service.crear_analisis_indice(db, vuelo, data.indice, data.metodo_umbral)
+    await db.commit()
+
+    return IndiceAnalisisIniciarResponse(
+        indice=analisis.indice,
+        estado=analisis.estado,
+        task_id=analisis.task_id,
+    )
+
+
+@router.get(
+    "/{lote_id}/vuelos/{vuelo_id}/indices/{indice}/estado",
+    response_model=IndiceEstadoResponse,
+    summary="Consultar estado del análisis de un índice adicional",
+)
+async def estado_indice_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    indice: IndiceEnum,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    estado = await service.obtener_estado_analisis_indice(db, vuelo_id, indice)
+    if not estado:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análisis no encontrado.")
+    return estado
+
+
+@router.get(
+    "/{lote_id}/vuelos/{vuelo_id}/indices/{indice}/resultado",
+    summary="Obtener GeoJSON del resultado de un índice adicional",
+)
+async def resultado_indice_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    indice: IndiceEnum,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    geojson = await service.obtener_resultado_geojson_indice(db, vuelo_id, indice)
+    if geojson is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resultado no disponible. El análisis debe estar en estado 'completado'.",
+        )
+    return geojson

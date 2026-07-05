@@ -22,17 +22,17 @@ from rasterio.transform import from_bounds
 # ── Fixture ──────────────────────────────────────────────────────────
 
 def _geotiff_dji_sintetico() -> bytes:
-    """GeoTIFF de 5 bandas simulando DJI Mavic 3 Multispectral."""
+    """GeoTIFF de 4 bandas simulando DJI Mavic 3 Multispectral real (sin Blue)."""
     buf = io.BytesIO()
     transform = from_bounds(-60.68, -27.48, -60.67, -27.47, 30, 30)
     with rasterio.open(
         buf, "w", driver="GTiff",
-        height=30, width=30, count=5, dtype="float32",
+        height=30, width=30, count=4, dtype="float32",
         crs=CRS.from_epsg(4326), transform=transform,
     ) as dst:
-        # Valores NDVI controlados: NIR (banda 5) > RED (banda 3) → vigor positivo
-        for i in range(1, 6):
-            valor = 0.6 if i == 5 else 0.15  # NIR alto, resto bajo
+        # Valores NDVI controlados: NIR (banda 4) > RED (banda 2) → vigor positivo
+        for i in range(1, 5):
+            valor = 0.6 if i == 4 else 0.15  # NIR alto, resto bajo
             dst.write(np.full((30, 30), valor, dtype="float32"), i)
     return buf.getvalue()
 

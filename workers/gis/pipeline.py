@@ -2,7 +2,7 @@
 Pipeline GIS generalizado: GeoTIFF → índice → clasificación → GeoJSON.
 
 Soporta NDVI, NDRE, SAVI y ExG con mapeo de bandas configurable por sensor.
-La lógica de vectorización y exportación reutiliza workers/gis/ndvi.py.
+La lógica de vectorización y exportación reutiliza workers/gis/zonas.py.
 """
 
 import io
@@ -12,13 +12,31 @@ import rasterio
 
 from workers.gis.band_mapping import BANDAS_POR_INDICE, numero_banda, validar_bandas_disponibles
 from workers.gis.indices import calcular_indice
-from workers.gis.ndvi import clasificar_ndvi, exportar_geojson, vectorizar_zonas
 from workers.gis.reproyeccion import reproyectar_a_4326
+from workers.gis.zonas import clasificar_ndvi, exportar_geojson, suavizar_indice, vectorizar_zonas
 
-# Umbrales de clasificación reutilizados del módulo NDVI.
-# ExG no tiene escala -1/1 como los índices ratio; se clasifica con los mismos
-# umbrales como aproximación razonable para separar zonas de vigor diferencial.
-# Para NDRE la escala también es [-1,1] y los umbrales aplican directamente.
+# Umbrales de clasificación reutilizados del módulo de zonificación.
+# NDVI, NDRE y SAVI son índices "razón" (diferencia sobre suma) — su rango
+# es siempre ~[-1,1] sin importar la escala de las bandas de entrada
+# (reflectancia 0-1 o DN crudo), así que el umbral fijo aplica directamente.
+# ExG (2*GREEN-RED-BLUE) NO es una razón — es una resta lineal absoluta cuya
+# escala depende de las unidades crudas de la cámara (reflectancia 0-1 da
+# valores ~[-2,2]; DN 8-bit sin calibrar da valores de cientos). El umbral
+# fijo pensado para NDVI no tiene sentido ahí — ver _metodo_umbral_efectivo().
+
+
+def _metodo_umbral_efectivo(indice: str, metodo_umbral: str) -> str:
+    """
+    ExG no es un índice normalizado (a diferencia de NDVI/NDRE/SAVI) — su rango
+    depende de la escala cruda de las bandas de entrada, así que el umbral
+    "fijo" [0.20, 0.40, 0.70] (pensado para índices razón en [-1,1]) puede
+    clasificar todo el lote en una sola clase sin relación con el vigor real.
+    Si el caller no pidió explícitamente un método adaptativo, forzamos "otsu"
+    para ExG, que calcula el corte según la distribución real de los datos.
+    """
+    if indice == "exg" and metodo_umbral == "fijo":
+        return "otsu"
+    return metodo_umbral
 
 
 def _leer_bandas_requeridas(
@@ -70,7 +88,12 @@ def ejecutar_pipeline(
         }
 
     valores = calcular_indice(indice, bandas, nodata)
-    clase = clasificar_ndvi(valores, metodo=metodo_umbral)
+    valores_suavizados = suavizar_indice(valores)
+    metodo_efectivo = _metodo_umbral_efectivo(indice, metodo_umbral)
+    clase = clasificar_ndvi(valores_suavizados, metodo=metodo_efectivo)
+    # Las estadísticas (ndvi_promedio, min/max/promedio del lote) usan el valor
+    # SIN suavizar — el suavizado es solo una ayuda para la clasificación
+    # espacial, no debe alterar el índice real reportado al usuario.
     gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2)
     ruta_salida = exportar_geojson(gdf, geojson_destino)
 
@@ -78,6 +101,7 @@ def ejecutar_pipeline(
     estadisticas: dict = {
         "indice": indice,
         "sensor": sensor,
+        "metodo_umbral": metodo_efectivo,
         "geojson": ruta_salida,
         "total_poligonos": len(gdf),
         f"{indice}_promedio_lote": round(float(np.nanmean(valores)), 4),

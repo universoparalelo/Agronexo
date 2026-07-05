@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from workers.gis.ndvi import calcular_ndvi, clasificar_ndvi, pipeline_ndvi
+from workers.gis.zonas import calcular_ndvi, clasificar_ndvi, pipeline_ndvi
 import numpy as np
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"

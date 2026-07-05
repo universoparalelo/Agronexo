@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from shapely.geometry import mapping, shape
 from shapely.geometry.polygon import Polygon
 
-from app.lotes.models import CultivoEnum, EstadoVueloEnum, SensorEnum
+from app.lotes.models import CultivoEnum
 
 
 # ── Geometry helpers ────────────────────────────────────────────────
@@ -36,8 +36,9 @@ class LoteCreate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=200, examples=["Lote Norte"])
     cultivo: CultivoEnum = Field(..., examples=["soja"])
     estadio_fenologico: str | None = Field(None, max_length=10, examples=["R3"])
-    geometry: dict = Field(
-        ...,
+    geometry: dict | None = Field(
+        None,
+        description="Opcional. Si no se provee, el lote queda sin límites — se puede cargar después.",
         examples=[{
             "type": "Polygon",
             "coordinates": [[
@@ -52,7 +53,9 @@ class LoteCreate(BaseModel):
 
     @field_validator("geometry")
     @classmethod
-    def geometry_valida(cls, v: Any) -> dict:
+    def geometry_valida(cls, v: Any) -> dict | None:
+        if v is None:
+            return v
         return _validar_polygon_geojson(v)
 
 
@@ -99,17 +102,5 @@ class LoteResponse(BaseModel):
 class LoteListResponse(BaseModel):
     total: int
     items: list[LoteResponse]
-
-
-# ── Vuelo schemas ────────────────────────────────────────────────────
-
-class VueloResponse(BaseModel):
-    id: uuid.UUID
-    lote_id: uuid.UUID
-    fecha_vuelo: datetime
-    sensor: SensorEnum
-    archivo_original: str | None
-    estado: EstadoVueloEnum
-    created_at: datetime
 
     model_config = {"from_attributes": True}

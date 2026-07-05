@@ -1,5 +1,19 @@
-import { useMemo } from 'react'
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet'
+import { useEffect, useMemo } from 'react'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+
+// El contenedor del mapa cambia de tamaño (botón "Expandir"/"Contraer") sin que
+// MapContainer se desmonte — Leaflet cachea el tamaño inicial y no lo actualiza
+// solo, así que los tiles quedan mal recortados hasta forzar invalidateSize().
+function InvalidarAlRedimensionar() {
+  const map = useMap()
+  useEffect(() => {
+    const contenedor = map.getContainer()
+    const ro = new ResizeObserver(() => map.invalidateSize())
+    ro.observe(contenedor)
+    return () => ro.disconnect()
+  }, [map])
+  return null
+}
 
 const COLORES_CLASE = {
   critica:    '#c0392b',
@@ -80,6 +94,7 @@ export default function MapaIndice({ geojson }) {
           style={styleFeature}
           onEachFeature={onEachFeature}
         />
+        <InvalidarAlRedimensionar />
       </MapContainer>
 
       <div className="mapa-leyenda">

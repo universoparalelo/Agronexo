@@ -13,7 +13,7 @@ from rasterio.crs import CRS
 from rasterio.transform import from_bounds
 
 from workers.gis.clasificacion import calcular_umbrales, clasificar_con_umbrales
-from workers.gis.ndvi import clasificar_ndvi, vectorizar_zonas
+from workers.gis.zonas import clasificar_ndvi, vectorizar_zonas
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -104,7 +104,8 @@ def test_clasificar_ndvi_sin_argumento_usa_fijo():
 
 def _geotiff_cuatro_zonas() -> bytes:
     """
-    GeoTIFF 100x100 multibanda (dji_mavic3: 5 bandas, NIR=5, RED=3) con 4 cuadrantes:
+    GeoTIFF 100x100 multibanda (dji_mavic3: 4 bandas reales, sin Blue, NIR=4, RED=2)
+    con 4 cuadrantes:
       superior-izq: NDVI≈0.10 (crítica)
       superior-der: NDVI≈0.30 (deficiente)
       inferior-izq: NDVI≈0.55 (normal)
@@ -117,16 +118,16 @@ def _geotiff_cuatro_zonas() -> bytes:
                     (slice(50, None), slice(None, 50)): (1.55, 0.45),   # 0.55
                     (slice(50, None), slice(50, None)): (1.8, 0.2)}     # 0.80
 
-    bands = np.zeros((5, 100, 100), dtype=np.float32)
+    bands = np.zeros((4, 100, 100), dtype=np.float32)
     for (r, c), (nir, red) in ndvi_targets.items():
-        bands[4, r, c] = nir   # banda 5 = NIR (dji_mavic3)
-        bands[2, r, c] = red   # banda 3 = RED (dji_mavic3)
+        bands[3, r, c] = nir   # banda 4 = NIR (dji_mavic3)
+        bands[1, r, c] = red   # banda 2 = RED (dji_mavic3)
 
     transform = from_bounds(-60.7, -27.5, -60.6, -27.4, 100, 100)
     buf = io.BytesIO()
     with rasterio.open(
         buf, "w", driver="GTiff", height=100, width=100,
-        count=5, dtype="float32", crs=CRS.from_epsg(4326), transform=transform,
+        count=4, dtype="float32", crs=CRS.from_epsg(4326), transform=transform,
     ) as dst:
         dst.write(bands)
     buf.seek(0)
@@ -138,7 +139,7 @@ def test_ndvi_promedio_por_poligono_es_correcto():
     Verifica que cada polígono tiene el ndvi_promedio de SUS píxeles,
     no el promedio global de su clase.
     """
-    from workers.gis.ndvi import exportar_geojson
+    from workers.gis.zonas import exportar_geojson
     from workers.gis.pipeline import ejecutar_pipeline
 
     data = _geotiff_cuatro_zonas()

@@ -46,6 +46,40 @@ def calcular_ndvi(nir: np.ndarray, red: np.ndarray, nodata: float | None = None)
     return ndvi.astype(np.float32)
 
 
+def suavizar_indice(valores: np.ndarray, sigma: float = 1.0) -> np.ndarray:
+    """
+    Suaviza el array de índice con un filtro Gaussiano antes de clasificar.
+
+    Sin esto, un índice con gradiente continuo (cualquier imagen real de un
+    cultivo — el vigor nunca cambia en saltos discretos) produce, al aplicar
+    un umbral binario píxel a píxel, cientos de fragmentos diminutos "sal y
+    pimienta" justo en la zona de transición: píxeles vecinos con valores
+    casi iguales caen de un lado u otro del umbral por redondeo. El filtro de
+    área mínima no lo evita porque `shapes()` + `buffer(0)` (usado para
+    reparar geometrías inválidas típicas de máscaras ruidosas) puede fusionar
+    esos fragmentos en un solo MultiPolygon cuya área total sí supera el
+    mínimo, aunque cada parte individual sea ruido.
+
+    Preserva NaN correctamente (nodata no se mezcla con píxeles válidos
+    vecinos): normaliza dividiendo por el peso Gaussiano de la máscara de
+    validez, no por un kernel uniforme.
+    """
+    from scipy.ndimage import gaussian_filter
+
+    mascara_valida = ~np.isnan(valores)
+    if not mascara_valida.any():
+        return valores
+
+    valores_rellenos = np.where(mascara_valida, valores, 0.0).astype(np.float32)
+    peso = gaussian_filter(mascara_valida.astype(np.float32), sigma=sigma)
+    suma = gaussian_filter(valores_rellenos, sigma=sigma)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        suavizado = np.where(peso > 1e-6, suma / peso, np.nan)
+
+    return suavizado.astype(np.float32)
+
+
 def clasificar_ndvi(ndvi: np.ndarray, metodo: str = "fijo") -> np.ndarray:
     """
     Asigna un código entero a cada píxel según su clase.
@@ -88,29 +122,18 @@ def vectorizar_zonas(
         for geom_dict, _ in shapes(mascara, mask=mascara, connectivity=8, transform=transform):
             geom = shape(geom_dict)
 
+            # buffer(0) repara geometrías inválidas — típico en máscaras ruidosas
+            # donde el contorno se autointersecta — pero puede devolver un
+            # MultiPolygon agrupando muchos fragmentos chicos en un solo registro.
             if not geom.is_valid:
                 geom = geom.buffer(0)
 
             geom = geom.simplify(tolerance=tolerancia, preserve_topology=True)
 
-            # Estadísticas reales del polígono individual (no de toda la clase)
-            try:
-                poly_mask = geometry_mask(
-                    [geom.__geo_interface__],
-                    out_shape=out_shape,
-                    transform=transform,
-                    invert=True,
-                )
-                px = ndvi[poly_mask]
-                ndvi_promedio = float(np.nanmean(px)) if px.size > 0 else 0.0
-            except Exception:
-                ndvi_promedio = 0.0
-
             filas.append({
                 "geometry": geom,
                 "clase": _codigo_a_nombre(codigo),
                 "codigo": codigo,
-                "ndvi_promedio": round(ndvi_promedio, 4),
             })
 
     if not filas:
@@ -120,6 +143,27 @@ def vectorizar_zonas(
         )
 
     gdf = gpd.GeoDataFrame(filas, crs=crs)
+
+    # Separar cualquier MultiPolygon en polígonos individuales ANTES de filtrar
+    # por área — si no, el área mínima se mide sobre el total del grupo y deja
+    # pasar fragmentos de ruido que individualmente no la cumplen.
+    gdf = gdf.explode(index_parts=False).reset_index(drop=True)
+
+    # Estadísticas reales por polígono individual ya separado
+    ndvi_promedios = []
+    for geom in gdf.geometry:
+        try:
+            poly_mask = geometry_mask(
+                [geom.__geo_interface__],
+                out_shape=out_shape,
+                transform=transform,
+                invert=True,
+            )
+            px = ndvi[poly_mask]
+            ndvi_promedios.append(float(np.nanmean(px)) if px.size > 0 else 0.0)
+        except Exception:
+            ndvi_promedios.append(0.0)
+    gdf["ndvi_promedio"] = [round(v, 4) for v in ndvi_promedios]
 
     # Calcular área en hectáreas (reproyectar a UTM para que sea en metros)
     gdf_utm = gdf.to_crs(epsg=32721)

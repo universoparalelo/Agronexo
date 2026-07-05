@@ -7,7 +7,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.lotes import service
-from app.lotes.schemas import LoteCreate, LoteListResponse, LoteResponse, LoteUpdate, VueloResponse
+from app.lotes.schemas import LoteCreate, LoteListResponse, LoteResponse, LoteUpdate
 
 router = APIRouter()
 
@@ -75,13 +75,3 @@ async def historial_lote(
 ):
     await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
     return {"lote_id": str(lote_id), "intervenciones": []}
-
-
-@router.get("/{lote_id}/vuelos", response_model=list[VueloResponse])
-async def listar_vuelos(
-    lote_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
-):
-    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
-    return await service.listar_vuelos(db, lote_id)
