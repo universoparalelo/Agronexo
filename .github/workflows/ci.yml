@@ -94,6 +94,15 @@ jobs:
       - name: Tests de validación de ingesta (API)
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_ingesta.py -v
 
+      - name: Tests Auth JWT
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_auth.py -v
+
+      - name: Tests CRUD Lotes y soft delete
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_lotes.py -v
+
+      - name: Tests estado y resultado de vuelos
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_vuelos_estado.py -v
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI

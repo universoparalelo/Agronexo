@@ -639,6 +639,7 @@ body {
 }
 
 .tbl-btn:hover { border-color: #27500a; color: #27500a; }
+.tbl-btn--danger:hover { border-color: #b91c1c; color: #b91c1c; }
 
 .table-badge {
   display: inline-flex;

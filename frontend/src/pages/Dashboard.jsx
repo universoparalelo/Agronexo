@@ -74,6 +74,17 @@ const IconMap = () => (
     <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
   </svg>
 )
+const IconTrash = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+    <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+  </svg>
+)
+const IconPlus = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
 
 /* ──────── Helpers ──────── */
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
@@ -227,6 +238,8 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState('dashboard')
   const [selectedLoteId, setSelectedLoteId] = useState(null)
   const [page, setPage] = useState(1)
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const PAGE_SIZE = 4
 
   const cargarDatos = useCallback(async () => {
@@ -256,6 +269,20 @@ export default function Dashboard() {
     setSelectedLoteId(loteId)
   }
 
+  async function handleEliminar(loteId) {
+    setDeleting(true)
+    try {
+      await client.delete(`/lotes/${loteId}`)
+      if (selectedLoteId === loteId) setSelectedLoteId(null)
+      setConfirmDeleteId(null)
+      cargarDatos()
+    } catch {
+      // error silencioso — el lote seguirá en la lista
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const totalAnalisis = loteRows.reduce((acc, l) => acc + l.vuelos.length, 0)
   const totalPages    = Math.max(1, Math.ceil(loteRows.length / PAGE_SIZE))
   const pageRows      = loteRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -274,6 +301,35 @@ export default function Dashboard() {
         />
       )}
 
+      {confirmDeleteId && (
+        <div className="modal-overlay">
+          <div className="modal-box" style={{ maxWidth: 380 }}>
+            <div className="modal-header">
+              <h2>Eliminar lote</h2>
+              <button className="modal-close" onClick={() => setConfirmDeleteId(null)}>×</button>
+            </div>
+            <div className="card-body" style={{ padding: '1.25rem 2rem 1.5rem' }}>
+              <p style={{ color: '#374151', marginBottom: '1.25rem' }}>
+                ¿Estás seguro? Esta acción no se puede deshacer. El lote y todos sus vuelos serán eliminados.
+              </p>
+              <div className="modal-actions">
+                <button className="btn-secondary" onClick={() => setConfirmDeleteId(null)}>
+                  Cancelar
+                </button>
+                <button
+                  className="btn-primary"
+                  style={{ background: '#b91c1c' }}
+                  disabled={deleting}
+                  onClick={() => handleEliminar(confirmDeleteId)}
+                >
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SidebarNav activeSection={activeSection} onSection={setActiveSection} user={user} />
 
       <div className="dashboard-body">
@@ -285,6 +341,9 @@ export default function Dashboard() {
             <span className="breadcrumb-active">Resumen</span>
           </nav>
           <div className="topbar-actions">
+            <button className="btn-primary btn-sm" onClick={() => setShowModal(true)}>
+              <IconPlus /> Nuevo análisis
+            </button>
             <button className="topbar-icon-btn" title="Notificaciones">
               <IconBell />
             </button>
@@ -418,6 +477,13 @@ export default function Dashboard() {
                                       onClick={() => setLoteParaLimites(lote)}
                                     >
                                       <IconMap />
+                                    </button>
+                                    <button
+                                      className="tbl-btn tbl-btn--danger"
+                                      title="Eliminar lote"
+                                      onClick={() => setConfirmDeleteId(lote.id)}
+                                    >
+                                      <IconTrash />
                                     </button>
                                   </div>
                                 </td>

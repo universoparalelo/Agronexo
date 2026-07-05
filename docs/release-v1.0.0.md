@@ -516,6 +516,28 @@ Se completó la cobertura de tests del pipeline GIS y se incorporaron al CI. Ant
 
 ---
 
+---
+
+#### Tests de integración HTTP — Auth JWT, CRUD lotes, estado y resultado de vuelos
+**Fecha:** 2026-07-04  
+**Rama:** `main`
+
+Se implementaron 44 tests de integración HTTP que cubren las brechas detectadas en el plan de testing. Todos los tests usan `starlette.testclient.TestClient` (modo sincrónico, compatible con FastAPI async) y golpean la DB real (PostGIS).
+
+**Archivos creados:**
+- `tests/test_auth.py` (15 tests): register nuevo/duplicado/inválido, login ok/password incorrecta/email inexistente, GET /me con token válido/sin token/token inválido/firma incorrecta, POST /refresh con refresh_token/access_token/token inválido, POST /logout.
+- `tests/test_lotes.py` (16 tests): crear lote, listar, obtener por ID, actualizar, CRUD sin auth → 401, cultivo inválido/geometry inválida → 422, soft delete → 204, lote borrado → 404 en GET y no aparece en lista, aislamiento por usuario (lote de otro usuario → 404).
+- `tests/test_vuelos_estado.py` (13 tests): `/estado` con vuelo pendiente/completado/error, vuelo inexistente → 404, sin auth → 401; `/resultado` para vuelos no completados → 404, vuelo inexistente → 404, sin auth → 401; listar vuelos, lote inexistente → 404. Vuelos insertados directamente en BD con psycopg2 para evitar dependencia de MinIO.
+- CI actualizado: `test-api` job agrega tres `run` steps (uno por archivo).
+
+**Decisiones tomadas:**
+- `TestClient` se abre con `_tc.__enter__()` en `setup_module` y se cierra con `_tc.__exit__()` en `teardown_module` — mantiene el mismo event loop de anyio en todo el módulo. Cada request de TestClient sin esta técnica crea un nuevo event loop, lo cual causa "Future attached to a different loop" en asyncpg.
+- `engine.sync_engine.dispose(close=False)` al inicio de cada `setup_module` — limpia el pool de asyncpg sin necesitar un event loop, permitiendo que los tests de varios módulos corran juntos en un mismo proceso (`python3 -m pytest tests/*.py`).
+- Vuelos en `test_vuelos_estado.py` insertados con psycopg2 (`CAST(:id AS uuid)` en lugar de `:id::uuid` — la sintaxis `::` colisiona con el parser de parámetros de psycopg2).
+- 48 tests API + 37 tests GIS = **85 tests en total**, todos pasando.
+
+**Problema resuelto — Problema abierto #2 cerrado**
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
@@ -523,7 +545,6 @@ _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
 | # | Descripción | Impacto | Detectado |
 |---|---|---|---|
 | 1 | Test E2E (`test_ciclo_completo_encolar_y_esperar`) no corre en CI — necesita MinIO + worker | Bajo — pasa localmente, demostrable en la demo | 2026-07-01 |
-| 2 | No hay tests para endpoints HTTP (auth, lotes, ingesta) | Bajo — cubiertos implícitamente por el E2E; no están en el plan de R1 | 2026-07-01 |
 
 ---
 
