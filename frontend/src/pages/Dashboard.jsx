@@ -10,16 +10,9 @@ import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
+import SidebarNav from '../components/SidebarNav'
 
 /* ──────── Icons ──────── */
-const IconDashboard = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="3" y="3" width="7" height="7" rx="1.5"/>
-    <rect x="14" y="3" width="7" height="7" rx="1.5"/>
-    <rect x="3" y="14" width="7" height="7" rx="1.5"/>
-    <rect x="14" y="14" width="7" height="7" rx="1.5"/>
-  </svg>
-)
 const IconLotes = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
@@ -127,76 +120,6 @@ function fmtFechaHoy() {
   })
 }
 
-/* ──────── Sidebar ──────── */
-function SidebarNav({ activeSection, onSection, user }) {
-  const sections = [
-    {
-      label: 'PRINCIPAL',
-      items: [
-        { id: 'dashboard',   icon: <IconDashboard />, label: 'Dashboard' },
-        { id: 'lotes',       icon: <IconLotes />,     label: 'Lotes' },
-        { id: 'cargar',      icon: <IconCargar />,    label: 'Cargar Ortomosaico' },
-      ],
-    },
-    {
-      label: 'RESULTADOS',
-      items: [
-        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', badge: 2 },
-        { id: 'informes',    icon: <IconInformes />,    label: 'Informes' },
-      ],
-    },
-    {
-      label: 'SISTEMA',
-      items: [
-        { id: 'config', icon: <IconConfig />, label: 'Configuración' },
-      ],
-    },
-  ]
-
-  const initials = user?.nombre
-    ? user.nombre.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : 'U'
-
-  return (
-    <aside className="sidebar-nav">
-      <div className="sidebar-logo-wrap">
-        <div className="sidebar-logo-mark" />
-        <div>
-          <span className="sidebar-logo-text">AgroNexo</span>
-          <span className="sidebar-beta">BETA</span>
-        </div>
-      </div>
-
-      <nav className="sidebar-menu">
-        {sections.map(({ label, items }) => (
-          <div key={label} className="sidebar-section">
-            <span className="sidebar-section-label">{label}</span>
-            {items.map(({ id, icon, label: itemLabel, badge }) => (
-              <button
-                key={id}
-                className={`sidebar-link${activeSection === id ? ' sidebar-link--active' : ''}`}
-                onClick={() => onSection(id)}
-                title={itemLabel}
-              >
-                <span className="sidebar-link-icon">{icon}</span>
-                <span className="sidebar-link-label">{itemLabel}</span>
-                {badge && <span className="sidebar-badge">{badge}</span>}
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
-
-      <div className="sidebar-user">
-        <div className="sidebar-user-avatar">{initials}</div>
-        <div className="sidebar-user-info">
-          <span className="sidebar-user-name">{user?.nombre ?? 'Usuario'}</span>
-          <span className="sidebar-user-role">Productor Agri</span>
-        </div>
-      </div>
-    </aside>
-  )
-}
 
 /* ──────── KPI Card ──────── */
 function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
@@ -249,7 +172,6 @@ export default function Dashboard() {
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
   const [reintentandoId, setReintentandoId] = useState(null)
   const [tablaError, setTablaError] = useState('')
-  const [activeSection, setActiveSection] = useState('dashboard')
   const [selectedVuelo, setSelectedVuelo] = useState(null)
   const [indicesDisponibles, setIndicesDisponibles] = useState([])
   const [mapaExpandido, setMapaExpandido] = useState(false)
@@ -368,7 +290,7 @@ export default function Dashboard() {
         />
       )}
 
-      <SidebarNav activeSection={activeSection} onSection={setActiveSection} user={user} />
+      <SidebarNav user={user} onCargarOrtomosaico={() => setShowModal(true)} />
 
       <div className="dashboard-body">
         {/* Topbar */}

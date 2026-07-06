@@ -490,6 +490,26 @@ Hasta ahora el selector de índices del wizard de carga era **solo visual** — 
 
 ---
 
+#### Pantalla "Lotes" + navegación real del sidebar + botón expandir mapa
+**Fecha:** 2026-07-06
+**Rama:** `main`
+
+El sidebar tenía 3 items de "PRINCIPAL" que no llevaban a ningún lado (solo cambiaban un estado local sin efecto visible) y "Diagnósticos" mostraba un badge "2" que no correspondía a nada real. Se conecta la navegación de verdad y se agrega la pantalla de lotes que faltaba.
+
+**Cambios:**
+- `frontend/src/components/SidebarNav.jsx` (nuevo, extraído de `Dashboard.jsx` donde estaba duplicado sin reutilizarse): "Dashboard" y "Lotes" navegan de verdad vía `react-router` (`useNavigate`/`useLocation` para resaltar el activo por `pathname`); "Cargar Ortomosaico" dispara un callback (`onCargarOrtomosaico`) que cada página resuelve abriendo su propio `ModalCargaGeoTIFF`; "Diagnósticos"/"Informes"/"Configuración" quedan deshabilitados con tag "Próximamente" — se sacó el badge "2" que no reflejaba nada real.
+- `frontend/src/pages/Lotes.jsx` (nueva) + ruta `/lotes` en `App.jsx`: grilla de cards con nombre, cultivo, área, cantidad de vuelos y fecha — cada card tiene botón "Ver detalle" (`/lotes/{id}`, reusa `DetalleLote.jsx` ya existente) y "Eliminar" (soft delete, reusa `ModalConfirmarEliminar.jsx`). El endpoint `DELETE /lotes/{id}` ya existía en el backend (`app/lotes/router.py`) — no hizo falta tocar nada ahí.
+- `frontend/src/api/lotes.js` (nuevo): `listarLotes()`, `eliminarLote()`.
+- `Dashboard.jsx`: removida la definición local (duplicada) de `SidebarNav` y el estado `activeSection` que ya no se usa.
+
+**Verificación E2E (API real):** crear lote → aparece en `GET /lotes` → `DELETE /lotes/{id}` → 204 → ya no aparece en el listado (soft delete confirmado).
+
+**Decisiones tomadas:**
+- No se replicaron campos que no existen en el modelo de datos (el mockup de referencia tenía "ID de Reporte", "ubicación" como texto) — la card muestra solo datos reales (`nombre`, `cultivo`, `area_ha`, cantidad de vuelos, `created_at`).
+- `SidebarNav` quedó como componente compartido en vez de duplicarse en cada página nueva — cualquier página futura que necesite el sidebar completo lo importa y le pasa `onCargarOrtomosaico`.
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
