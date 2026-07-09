@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
 
 _EXTENSIONES_VALIDAS = {".tif", ".tiff"}
-_TAMANO_MAXIMO_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
+_TAMANO_MAXIMO_BYTES = 3 * 1024 * 1024 * 1024  # 3 GB (límite temporal hasta implementar streaming)
 # Magic bytes TIFF: little-endian (II) o big-endian (MM)
 _TIFF_MAGIC = (b"II", b"MM")
 
@@ -31,7 +31,7 @@ def validar_archivo_geotiff(archivo: UploadFile, contenido: bytes) -> None:
     if len(contenido) > _TAMANO_MAXIMO_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="El archivo supera el tamaño máximo permitido de 2 GB.",
+            detail="El archivo supera el tamaño máximo permitido de 3 GB.",
         )
     if len(contenido) < 4 or contenido[:2] not in _TIFF_MAGIC:
         raise HTTPException(
