@@ -1,8 +1,12 @@
 import io
+import logging
 import tempfile
+import time
 
 import rasterio
 from workers.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
@@ -93,11 +97,13 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
 
     self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
 
+    t_descarga = time.perf_counter()
     try:
         data = download_geotiff(minio_key)
     except Exception as exc:
         _actualizar_vuelo(vuelo_id, "error", f"Error al descargar el archivo: {exc}")
         raise
+    logger.info("[task] descarga MinIO (%.1f MB): %.2fs", len(data) / 1_048_576, time.perf_counter() - t_descarga)
 
     self.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
 
@@ -150,7 +156,9 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
         geojson_key_guardado = f"{prefijo}/zonas.geojson"
         with open(geojson_path, "rb") as f:
             geojson_bytes = f.read()
+        t_upload = time.perf_counter()
         upload_bytes(geojson_key_guardado, geojson_bytes, content_type="application/geo+json")
+        logger.info("[task] upload geojson (%.1f KB): %.2fs", len(geojson_bytes) / 1024, time.perf_counter() - t_upload)
     except Exception as exc:
         # Error no crítico — el análisis es válido aunque no se haya subido el GeoJSON
         estadisticas["advertencia_upload"] = str(exc)

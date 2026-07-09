@@ -6,9 +6,13 @@ La lógica de vectorización y exportación reutiliza workers/gis/zonas.py.
 """
 
 import io
+import logging
+import time
 
 import numpy as np
 import rasterio
+
+logger = logging.getLogger(__name__)
 
 from workers.gis.band_mapping import BANDAS_POR_INDICE, numero_banda, validar_bandas_disponibles
 from workers.gis.indices import calcular_indice
@@ -73,9 +77,13 @@ def ejecutar_pipeline(
     indice          : "ndvi" | "ndre" | "savi" | "exg"
     geojson_destino : ruta local donde se escribe el GeoJSON de salida
     """
+    t0 = time.perf_counter()
+
     # Reproyectar a EPSG:4326 si el CRS original es distinto
     data = reproyectar_a_4326(data)
+    logger.info("[pipeline] reproyeccion: %.2fs", time.perf_counter() - t0)
 
+    t1 = time.perf_counter()
     with rasterio.open(io.BytesIO(data)) as src:
         validar_bandas_disponibles(sensor, indice, src.count)
 
@@ -86,16 +94,34 @@ def ejecutar_pipeline(
             "nodata": nodata,
             "shape": (src.height, src.width),
         }
+    logger.info("[pipeline] lectura de bandas (%dx%d): %.2fs", meta["shape"][1], meta["shape"][0], time.perf_counter() - t1)
 
+    t2 = time.perf_counter()
     valores = calcular_indice(indice, bandas, nodata)
+    logger.info("[pipeline] calculo %s: %.2fs", indice.upper(), time.perf_counter() - t2)
+
+    t3 = time.perf_counter()
     valores_suavizados = suavizar_indice(valores)
+    logger.info("[pipeline] suavizado gaussiano: %.2fs", time.perf_counter() - t3)
+
     metodo_efectivo = _metodo_umbral_efectivo(indice, metodo_umbral)
+
+    t4 = time.perf_counter()
     clase = clasificar_ndvi(valores_suavizados, metodo=metodo_efectivo)
+    logger.info("[pipeline] clasificacion (%s): %.2fs", metodo_efectivo, time.perf_counter() - t4)
+
+    t5 = time.perf_counter()
     # Las estadísticas (ndvi_promedio, min/max/promedio del lote) usan el valor
     # SIN suavizar — el suavizado es solo una ayuda para la clasificación
     # espacial, no debe alterar el índice real reportado al usuario.
     gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2)
+    logger.info("[pipeline] vectorizacion (%d poligonos): %.2fs", len(gdf), time.perf_counter() - t5)
+
+    t6 = time.perf_counter()
     ruta_salida = exportar_geojson(gdf, geojson_destino)
+    logger.info("[pipeline] exportacion geojson: %.2fs", time.perf_counter() - t6)
+
+    logger.info("[pipeline] TOTAL: %.2fs", time.perf_counter() - t0)
 
     total_px = int(np.sum(~np.isnan(valores)))
     estadisticas: dict = {
