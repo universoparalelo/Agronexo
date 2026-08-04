@@ -6,7 +6,7 @@ from celery.result import AsyncResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.storage import download_bytes, upload_geotiff
+from app.core.storage import download_bytes
 from app.ingesta.schemas import EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse
 from app.lotes.models import AnalisisIndice, CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, SensorEnum, Vuelo
 from workers.celery_app import celery_app
@@ -18,7 +18,8 @@ async def crear_lote_y_vuelo_desde_geotiff(
     nombre: str,
     cultivo: CultivoEnum,
     sensor: SensorEnum,
-    file_data: bytes,
+    file_stream,
+    file_size: int = -1,
     estadio_fenologico: str | None = None,
 ) -> LoteDesdeGeotiffResponse:
     lote = Lote(
@@ -42,11 +43,13 @@ async def crear_lote_y_vuelo_desde_geotiff(
     await db.flush()
     await db.refresh(vuelo)
 
-    key = upload_geotiff(
+    from app.core.storage import upload_geotiff_stream
+    key = upload_geotiff_stream(
         usuario_id=str(usuario_id),
         lote_id=str(lote.id),
         vuelo_id=str(vuelo.id),
-        data=file_data,
+        stream=file_stream,
+        length=file_size,
     )
 
     task = celery_app.send_task(
@@ -81,7 +84,8 @@ async def crear_vuelo_desde_upload(
     usuario_id: uuid.UUID,
     sensor: SensorEnum,
     fecha_vuelo: datetime,
-    file_data: bytes,
+    file_stream,
+    file_size: int = -1,
 ) -> Vuelo:
     vuelo = Vuelo(
         lote_id=lote_id,
@@ -93,11 +97,13 @@ async def crear_vuelo_desde_upload(
     await db.flush()
     await db.refresh(vuelo)
 
-    key = upload_geotiff(
+    from app.core.storage import upload_geotiff_stream
+    key = upload_geotiff_stream(
         usuario_id=str(usuario_id),
         lote_id=str(lote_id),
         vuelo_id=str(vuelo.id),
-        data=file_data,
+        stream=file_stream,
+        length=file_size,
     )
 
     task = celery_app.send_task(

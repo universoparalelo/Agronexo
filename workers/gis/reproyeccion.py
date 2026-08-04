@@ -8,7 +8,6 @@ salida (GeoJSON) estén siempre en coordenadas geográficas estándar.
 
 import io
 
-import numpy as np
 import rasterio
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, calculate_default_transform, reproject
@@ -43,8 +42,54 @@ def reproyectar_a_4326(data: bytes) -> bytes:
             height=height,
         )
 
-        buf = io.BytesIO()
-        with rasterio.open(buf, "w", **perfil) as dst:
+        # MemoryFile usa VSIMEM (filesystem virtual de GDAL) — más eficiente
+        # que BytesIO para archivos grandes porque evita copias del buffer Python.
+        with rasterio.MemoryFile() as memfile:
+            with memfile.open(**perfil) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=CRS_SALIDA,
+                        resampling=Resampling.bilinear,
+                    )
+            return memfile.read()
+
+
+def reproyectar_a_4326_archivo(src_path: str, dst_path: str) -> str:
+    """
+    Versión con I/O de archivo para GeoTIFFs grandes (> 500 MB).
+
+    Lee y escribe en disco en lugar de RAM — GDAL hace el reproject tileado
+    internamente sin cargar el raster completo en memoria. Retorna src_path si
+    el CRS ya es EPSG:4326 (sin escritura), o dst_path si hubo que reproyectar.
+    """
+    with rasterio.open(src_path) as src:
+        if not necesita_reproyeccion(src):
+            return src_path
+
+        transform, width, height = calculate_default_transform(
+            src.crs, CRS_SALIDA, src.width, src.height, *src.bounds
+        )
+        perfil = src.profile.copy()
+        perfil.update(
+            crs=CRS_SALIDA,
+            transform=transform,
+            width=width,
+            height=height,
+            # Asegurar formato GTiff con compresión LZW para que el archivo
+            # resultante en disco no sea mucho mayor que el original
+            driver="GTiff",
+            compress="lzw",
+            tiled=True,
+            blockxsize=512,
+            blockysize=512,
+        )
+
+        with rasterio.open(dst_path, "w", **perfil) as dst:
             for i in range(1, src.count + 1):
                 reproject(
                     source=rasterio.band(src, i),
@@ -56,4 +101,4 @@ def reproyectar_a_4326(data: bytes) -> bytes:
                     resampling=Resampling.bilinear,
                 )
 
-        return buf.getvalue()
+    return dst_path

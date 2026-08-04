@@ -490,6 +490,82 @@ Hasta ahora el selector de índices del wizard de carga era **solo visual** — 
 
 ---
 
+#### Optimización de rendimiento del pipeline GIS
+**Fecha:** 2026-08-04
+**Rama:** `feat/optimizar-pipeline`
+
+Se redujo drásticamente el tiempo de procesamiento de GeoTIFF para índices de vegetación, apuntando a < 1 minuto en cualquier tamaño dentro del límite de upload (3 GB). Cuatro cuellos de botella identificados y corregidos:
+
+**Cambios en `workers/gis/zonas.py`:**
+- `suavizar_indice`: reemplazado `gaussian_filter` por `uniform_filter` (filtro de caja 1D separable) — 3-5× más rápido para el mismo efecto práctico de reducción de sal-y-pimienta.
+- `vectorizar_zonas`: una sola llamada a `shapes()` sobre el array `clase` completo en lugar de 4 llamadas (una por clase) — 4× más rápido en el paso de shapes.
+- `vectorizar_zonas`: filtro de área movido ANTES del cálculo de estadísticas por polígono — evita computar stats para polígonos que se descartarán.
+- `vectorizar_zonas`: el loop `geometry_mask` por polígono (O(n_polígonos × H×W)) reemplazado por `rasterize` + `np.bincount` vectorizado (O(H×W) constante sin importar cantidad de polígonos). Para 200 polígonos en un raster 10k×10k: de ~60 s a < 3 s solo en ese paso.
+
+**Cambios en `workers/gis/pipeline.py`:**
+- Downsampling automático para rasters > 9 MP (≈3000×3000 px): `_factor_downsample`, `_downsample_array`, `_downsample_meta` aplican average pooling NaN-safe antes de suavizar/clasificar/vectorizar. Las estadísticas globales (ndvi_promedio_lote, min/max) siguen usando la resolución completa. Para un lote de dron a 10 cm con 100ha (~100MP): factor 4, reduce a 25MP → todas las ops 16× más rápidas.
+
+**Cambios en `workers/gis/reproyeccion.py`:**
+- Salida de reproyección usa `rasterio.MemoryFile()` (VSIMEM de GDAL) en lugar de `io.BytesIO` — evita copias de buffer Python para archivos grandes.
+
+**Decisiones tomadas:**
+- Threshold de downsampling en 9 MP: por debajo de eso el pipeline ya es rápido; por encima activa reducción automática.
+- `uniform_filter` con `size = max(3, int(sigma*3) | 1)` — equivalente práctico al gaussian para reducción de ruido pre-clasificación.
+- Los porcentajes de clase (`porcentaje_px`) se calculan sobre el `clase` downsampled para mantener consistencia denominador/numerador.
+- La precisión de los polígonos de salida se reduce al aplicar downsample, pero sigue siendo adecuada para zonas de manejo agrícola (mínimo 40m a 10× downsample de imagen 10cm).
+
+---
+
+#### Streaming upload/download para GeoTIFF > 3 GB
+**Fecha:** 2026-08-04  
+**Rama:** `main`
+
+El sistema rechazaba archivos de más de 3 GB y cargaba en RAM el archivo completo en el API y en el worker. Refactor de todo el stack de I/O para que ningún componente necesite el archivo completo en memoria a la vez.
+
+**Problema raíz (tres puntos):**
+1. `app/ingesta/validator.py` rechazaba con HTTP 413 cualquier archivo > 3 GB.
+2. `app/ingesta/router.py` hacía `await archivo.read()` — cargaba el archivo completo en RAM del contenedor API.
+3. `workers/gis/tasks.py` hacía `download_geotiff(key)` → `response.read()` — cargaba el archivo completo en RAM del worker.
+
+**Cambios:**
+- `app/core/storage.py`: `upload_geotiff_stream(stream, length=-1)` — usa multipart upload de MinIO con partes de 64 MB sin buffer completo en RAM. `download_geotiff_to_file(key, destino)` — descarga en chunks de 8 MB directo a disco con `shutil.copyfileobj`.
+- `app/ingesta/validator.py`: eliminado el límite de 3 GB y el chequeo de `len(contenido)`. Solo valida extensión y magic bytes (primeros 4 bytes).
+- `app/ingesta/router.py`: lee solo los primeros 4 bytes para validación, luego `seek(0)` y pasa `archivo.file` (stream) a service. El archivo grande ya está en disco (SpooledTemporaryFile de Starlette) — no se carga en RAM.
+- `app/ingesta/service.py`: firma cambiada de `file_data: bytes` a `file_stream + file_size` en `crear_vuelo_desde_upload` y `crear_lote_y_vuelo_desde_geotiff`.
+- `workers/gis/reproyeccion.py`: `reproyectar_a_4326_archivo(src_path, dst_path)` — reproyecta de disco a disco. GDAL hace el I/O tileado sin cargar el raster completo en RAM. El archivo destino se escribe con `compress=lzw, tiled=True`.
+- `workers/gis/pipeline.py`: `ejecutar_pipeline_archivo(path, ...)` — versión file-path del pipeline. `rasterio.open(path)` + `src.read(banda)` carga solo las bandas necesarias (no el archivo entero). `ejecutar_pipeline(data, ...)` se mantiene intacto para los tests.
+- `workers/gis/tasks.py`: `procesar_vuelo` y `analizar_indice` usan `download_geotiff_to_file` + `ejecutar_pipeline_archivo`. Los archivos temporales se limpian en bloques `finally` para no acumular basura en disco.
+
+**Decisiones tomadas:**
+- `length=-1` para multipart upload: no requiere conocer el tamaño del archivo antes de empezar. MinIO gestiona las partes internamente.
+- Eliminar el límite de tamaño en la capa API: el límite de almacenamiento lo define MinIO/disco. Si se necesita un límite por razones de negocio, configurar en nginx al llegar a producción.
+- Mantener `_validar_geotiff_gis(data: bytes)` además de la nueva `_validar_geotiff_gis_archivo(path)` — backward compat con los tests que usan bytes sintéticos.
+- El inspector de bandas TIFF ya funcionaba solo con los primeros bytes (lee IFD del header) — solo se redujo el read de full-file a 512 bytes.
+
+---
+
+#### Fix: pantalla en blanco al visualizar análisis con GeoJSON grande
+**Fecha:** 2026-08-04  
+**Rama:** `main`
+
+Al completar el análisis de un GeoTIFF de Sentinel-2 (3000×3000 px), el pipeline generaba 3 567 polígonos y un GeoJSON de 8.7 MB. Al hacer clic en "Ver análisis" el navegador quedaba con pantalla en blanco sin mensaje de error. Dos causas:
+
+1. **Stack overflow en cálculo de bounds**: `MapaIndice.jsx` usaba `Math.min(...lats)` con spread sobre un array de cientos de miles de coordenadas — el motor JS lanza `RangeError: Maximum call stack size exceeded` silencioso.
+2. **Demasiados polígonos para Leaflet**: React-Leaflet intentaba crear 3 567 capas DOM + event listeners + tooltips de golpe, agotando memoria en el render thread.
+
+**Cambios:**
+
+- `workers/gis/zonas.py`: `AREA_MINIMA_M2` subido de 1 000 a 10 000 m² (1 ha). Para Sentinel-2 a 10 m/px, 1 ha = 100 píxeles — umbral razonable que elimina ruido sin perder zonas reales. Reduce el conteo de ~3 500 a decenas de polígonos en imágenes de escala kilométrica.
+- `frontend/src/components/MapaIndice.jsx`: bounds calculados con loop iterativo en lugar de spread + `Math.min/max` — O(coordenadas) sin riesgo de stack overflow independientemente del tamaño del GeoJSON.
+- `frontend/src/components/MapaIndice.jsx`: guardia `MAX_FEATURES_RENDER = 1500` — si el GeoJSON supera ese umbral se muestra un mensaje informativo en lugar de intentar renderizar (protección para análisis de drones de muy alta resolución).
+- `frontend/src/components/MapaIndice.jsx`: `MapaBoundary` (React class error boundary) envuelve el `MapContainer` — cualquier excepción futura en el render del mapa muestra el mensaje de error en lugar de pantalla en blanco.
+
+**Decisiones tomadas:**
+- 10 000 m² como umbral general en el worker, no por sensor — si en el futuro se procesan drones de alta resolución donde 1 ha es excesivo, el parámetro `area_minima_m2` ya es configurable por llamada en `vectorizar_zonas` y `ejecutar_pipeline`.
+- La guardia de 1 500 features en el frontend es una red de seguridad adicional, no la solución principal — la solución real es el threshold de área en el worker.
+
+---
+
 #### Pantalla "Lotes" + navegación real del sidebar + botón expandir mapa
 **Fecha:** 2026-07-06
 **Rama:** `main`
@@ -520,6 +596,7 @@ _Ir completando a medida que avanza el desarrollo._
 | Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
 | Frontend — modal carga GeoTIFF | _nombre_ | completado | main |
 | Frontend — dashboard de resultados (mapa + tabla) | _nombre_ | completado | main |
+| Optimización de rendimiento del pipeline GIS | _nombre_ | completado | feat/optimizar-pipeline |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
 

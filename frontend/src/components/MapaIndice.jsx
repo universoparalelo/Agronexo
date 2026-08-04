@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { Component, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 
 // El contenedor del mapa cambia de tamaño (botón "Expandir"/"Contraer") sin que
@@ -54,57 +54,106 @@ function onEachFeature(feature, layer) {
   )
 }
 
+// Límite de seguridad: más de 1 500 polígonos causa lentitud extrema o crash en
+// navegadores de gama baja. Mostramos advertencia en lugar de intentar renderizar.
+const MAX_FEATURES_RENDER = 1500
+
+// Error boundary de clase — única forma de capturar errores de render en React.
+class MapaBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(err) {
+    return { error: err?.message ?? 'Error desconocido' }
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: '1.5rem', color: '#b91c1c', fontSize: '0.85rem' }}>
+          <strong>No se pudo renderizar el mapa.</strong>
+          <br />
+          {this.state.error}
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function MapaIndice({ geojson }) {
+  const nFeatures = geojson?.features?.length ?? 0
+
   const bounds = useMemo(() => {
-    if (!geojson?.features?.length) return null
-    const allCoords = geojson.features.flatMap((f) => {
+    if (!nFeatures) return null
+    // Iterar con loop en lugar de spread+Math.min/max — el spread falla con stack
+    // overflow cuando hay miles de polígonos con decenas de coordenadas cada uno.
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
+    for (const f of geojson.features) {
       const type = f.geometry?.type
       const raw = f.geometry?.coordinates
-      if (!raw) return []
-      if (type === 'Polygon') return raw.flat(1)
-      if (type === 'MultiPolygon') return raw.flat(2)
-      return []
-    })
-    if (!allCoords.length) return null
-    const lngs = allCoords.map((c) => c[0])
-    const lats = allCoords.map((c) => c[1])
-    return [
-      [Math.min(...lats), Math.min(...lngs)],
-      [Math.max(...lats), Math.max(...lngs)],
-    ]
-  }, [geojson])
+      if (!raw) continue
+      const rings = type === 'Polygon' ? raw : type === 'MultiPolygon' ? raw.flat(1) : []
+      for (const ring of rings) {
+        for (const [lng, lat] of ring) {
+          if (lat < minLat) minLat = lat
+          if (lat > maxLat) maxLat = lat
+          if (lng < minLng) minLng = lng
+          if (lng > maxLng) maxLng = lng
+        }
+      }
+    }
+    if (minLat === Infinity) return null
+    return [[minLat, minLng], [maxLat, maxLng]]
+  }, [geojson, nFeatures])
 
   if (!geojson) return null
 
-  return (
-    <div className="mapa-indice-wrap">
-      <MapContainer
-        bounds={bounds ?? [[-34, -64], [-22, -53]]}
-        boundsOptions={{ padding: [20, 20] }}
-        style={{ height: '100%', width: '100%' }}
-        scrollWheelZoom
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        />
-        <GeoJSON
-          key={geojson.features?.length}
-          data={geojson}
-          style={styleFeature}
-          onEachFeature={onEachFeature}
-        />
-        <InvalidarAlRedimensionar />
-      </MapContainer>
-
-      <div className="mapa-leyenda">
-        {Object.entries(COLORES_CLASE).map(([clase, color]) => (
-          <div key={clase} className="leyenda-item">
-            <span className="leyenda-color" style={{ background: color }} />
-            <span className="leyenda-label">{ETIQUETAS_CLASE[clase]}</span>
-          </div>
-        ))}
+  if (nFeatures > MAX_FEATURES_RENDER) {
+    return (
+      <div style={{ padding: '1.5rem', fontSize: '0.85rem', color: '#6b7280' }}>
+        <strong style={{ color: '#b45309' }}>Resultado demasiado grande para visualizar</strong>
+        <br />
+        El análisis generó <strong>{nFeatures}</strong> polígonos. El mapa solo puede mostrar
+        hasta {MAX_FEATURES_RENDER.toLocaleString()}.
+        <br /><br />
+        Intentá aumentar el umbral de área mínima al cargar el próximo vuelo, o usá la exportación
+        Shapefile para visualizar en QGIS.
       </div>
-    </div>
+    )
+  }
+
+  return (
+    <MapaBoundary>
+      <div className="mapa-indice-wrap">
+        <MapContainer
+          bounds={bounds ?? [[-34, -64], [-22, -53]]}
+          boundsOptions={{ padding: [20, 20] }}
+          style={{ height: '100%', width: '100%' }}
+          scrollWheelZoom
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          />
+          <GeoJSON
+            key={nFeatures}
+            data={geojson}
+            style={styleFeature}
+            onEachFeature={onEachFeature}
+          />
+          <InvalidarAlRedimensionar />
+        </MapContainer>
+
+        <div className="mapa-leyenda">
+          {Object.entries(COLORES_CLASE).map(([clase, color]) => (
+            <div key={clase} className="leyenda-item">
+              <span className="leyenda-color" style={{ background: color }} />
+              <span className="leyenda-label">{ETIQUETAS_CLASE[clase]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </MapaBoundary>
   )
 }

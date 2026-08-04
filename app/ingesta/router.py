@@ -40,10 +40,13 @@ async def inspeccionar_geotiff(
 ):
     from workers.gis.band_mapping import MAPEO_SENSORES
 
-    contenido = await archivo.read()
-    validar_archivo_geotiff(archivo, contenido)
+    # Leer solo los primeros 512 bytes: suficiente para magic bytes + IFD del TIFF.
+    # El inspector es best-effort — si el IFD no está en los primeros 512 bytes
+    # (archivos muy grandes con IFD al final), devuelve None y se continúa igual.
+    cabecera = await archivo.read(512)
+    validar_archivo_geotiff(archivo, cabecera[:4])
 
-    n_bandas = contar_bandas_geotiff(contenido)
+    n_bandas = contar_bandas_geotiff(cabecera)
     mapeo = MAPEO_SENSORES[sensor.value]
     bandas_requeridas = max(v for v in mapeo if v is not None)
 
@@ -79,8 +82,13 @@ async def crear_lote_desde_geotiff(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    contenido = await archivo.read()
-    validar_archivo_geotiff(archivo, contenido)
+    primeros_bytes = await archivo.read(4)
+    validar_archivo_geotiff(archivo, primeros_bytes)
+    await archivo.seek(0)
+
+    # Tamaño conocido si el cliente lo envió en el header del campo multipart.
+    # -1 = desconocido → MinIO usa multipart con partes de 64 MB.
+    file_size = getattr(archivo, "size", None) or -1
 
     resultado = await service.crear_lote_y_vuelo_desde_geotiff(
         db=db,
@@ -88,7 +96,8 @@ async def crear_lote_desde_geotiff(
         nombre=nombre,
         cultivo=cultivo,
         sensor=sensor,
-        file_data=contenido,
+        file_stream=archivo.file,
+        file_size=file_size,
         estadio_fenologico=estadio_fenologico,
     )
     await db.commit()
@@ -116,8 +125,11 @@ async def subir_vuelo(
     if not lote:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
 
-    contenido = await archivo.read()
-    validar_archivo_geotiff(archivo, contenido)
+    primeros_bytes = await archivo.read(4)
+    validar_archivo_geotiff(archivo, primeros_bytes)
+    await archivo.seek(0)
+
+    file_size = getattr(archivo, "size", None) or -1
 
     if fecha_vuelo is None:
         fecha_vuelo = datetime.now(timezone.utc)
@@ -128,7 +140,8 @@ async def subir_vuelo(
         usuario_id=uuid.UUID(str(current_user.id)),
         sensor=sensor,
         fecha_vuelo=fecha_vuelo,
-        file_data=contenido,
+        file_stream=archivo.file,
+        file_size=file_size,
     )
     await db.commit()
 
