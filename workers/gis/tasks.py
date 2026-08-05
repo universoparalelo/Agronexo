@@ -1,8 +1,10 @@
 import io
+import json
 import logging
 import tempfile
 import time
 
+import numpy as np
 import rasterio
 from workers.celery_app import celery_app
 
@@ -56,6 +58,66 @@ def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None, geoj
         engine.dispose()
 
 
+def _optimizar_si_necesario(src_path: str) -> str:
+    """
+    Si el GeoTIFF no tiene compresión + tileado, lo reescribe con DEFLATE
+    y tiles de 512×512 antes de procesarlo.
+
+    Archivos de dron exportados sin compresión (strip-based layout) obligan a
+    GDAL a leer el archivo completo para acceder a cualquier banda. Convertirlo
+    al formato tileado hace que GDAL solo lea los bloques necesarios para la
+    ventana pedida, reduciendo el tiempo de I/O de minutos a segundos.
+
+    Retorna src_path si el archivo ya está en formato óptimo (sin I/O extra).
+    Si necesita optimización, borra el original y retorna la ruta del nuevo archivo.
+    """
+    import os
+
+    with rasterio.open(src_path) as src:
+        ya_comprimido = src.profile.get("compress") is not None
+        ya_tileado = src.profile.get("tiled", False)
+        if ya_comprimido and ya_tileado:
+            return src_path
+        perfil = src.profile.copy()
+
+    # predictor=3 para datos float (float32/float64); predictor=2 para enteros.
+    # Usar predictor=2 con float32 corrompe los datos al leerlos de vuelta.
+    dtype = perfil.get("dtype", "float32")
+    predictor = 3 if str(dtype).startswith("float") else 2
+    perfil.update(
+        compress="deflate",
+        predictor=predictor,
+        tiled=True,
+        blockxsize=512,
+        blockysize=512,
+        # datos ya cercanos a 4 GiB sin comprimir pueden no reducirse lo
+        # suficiente con DEFLATE — sin esto, GDAL falla al cruzar el límite
+        # de TIFF clásico igual que en reproyeccion.py.
+        bigtiff="IF_SAFER",
+    )
+    dst_path = src_path + ".opt.tif"
+    size_orig_mb = os.path.getsize(src_path) / 1_048_576
+    t0 = time.perf_counter()
+    logger.info("[task] optimizando GeoTIFF (%.0f MB, strip-based sin compresión)…", size_orig_mb)
+
+    try:
+        with rasterio.open(src_path) as src, rasterio.open(dst_path, "w", **perfil) as dst:
+            for _, window in dst.block_windows(1):
+                dst.write(src.read(window=window), window=window)
+    except Exception:
+        if os.path.exists(dst_path):
+            os.unlink(dst_path)
+        raise
+
+    size_opt_mb = os.path.getsize(dst_path) / 1_048_576
+    logger.info(
+        "[task] optimización completada: %.0f MB → %.0f MB en %.2fs",
+        size_orig_mb, size_opt_mb, time.perf_counter() - t0,
+    )
+    os.unlink(src_path)
+    return dst_path
+
+
 def _validar_geotiff_gis(data: bytes) -> dict:
     """Valida CRS, bandas y dtype desde bytes. Usado por tests y analizar_indice."""
     with rasterio.open(io.BytesIO(data)) as src:
@@ -75,6 +137,32 @@ def _validar_geotiff_gis_desde_src(src) -> dict:
             "El GeoTIFF no tiene sistema de referencia de coordenadas (CRS) definido. "
             "Reproyectá el archivo a EPSG:4326 o UTM antes de subir."
         )
+    # Detectar CRS tipo EngineeringCRS sin código EPSG recuperable: PROJ no
+    # puede transformarlo a geográfico y `_resolver_crs` (reproyeccion.py)
+    # tampoco puede reconstruirlo. Cuando SÍ trae un código EPSG embebido,
+    # dejamos pasar — `reproyectar_a_4326_archivo` lo resuelve más adelante
+    # en el pipeline (ver _resolver_crs). Rechazar acá incondicionalmente
+    # bloquearía archivos que el pipeline sabe procesar igual.
+    try:
+        # rasterio.crs.CRS no tiene to_json_dict() (eso es de pyproj.CRS) —
+        # _projjson() es el equivalente real disponible en esta clase.
+        d = json.loads(src.crs._projjson())
+        if d.get("type") == "EngineeringCRS":
+            crs_id = d.get("id", {})
+            if crs_id.get("authority") != "EPSG":
+                raise ValueError(
+                    "El CRS del archivo es de tipo 'EngineeringCRS' sin código EPSG "
+                    "reconstruible — el software que lo exportó generó metadatos de "
+                    "proyección incompletos y no hay forma de recuperar el sistema de "
+                    "referencia original.\n"
+                    "Solución: abrí el archivo en QGIS y exportalo con CRS EPSG:4326, "
+                    "o usá GDAL desde la terminal:\n"
+                    "  gdalwarp -t_srs EPSG:4326 archivo.tif archivo_corregido.tif"
+                )
+    except ValueError:
+        raise
+    except Exception:
+        pass
     if src.count < 1:
         raise ValueError(
             f"El archivo tiene {src.count} banda(s). Se requiere al menos 1 banda válida."
@@ -84,6 +172,20 @@ def _validar_geotiff_gis_desde_src(src) -> dict:
         raise ValueError(
             f"Tipo de dato '{dtype}' no soportado por el pipeline de vectorización. "
             f"Usar float32, uint8, uint16, int16 o int32."
+        )
+    # Muestra de 128×128 px para detectar imágenes vacías sin leer el archivo completo.
+    nodata = src.nodata
+    muestra = src.read(1, out_shape=(1, min(128, src.height), min(128, src.width))).astype(np.float64)
+    if nodata is not None and not (isinstance(nodata, float) and np.isnan(nodata)):
+        px_validos = int(np.sum(muestra != nodata))
+    else:
+        px_validos = int(np.sum(~np.isnan(muestra)))
+    if px_validos == 0:
+        raise ValueError(
+            "La imagen no tiene píxeles con datos válidos — el archivo está vacío. "
+            "Probable causa: error de exportación en DJI Terra / Pix4D / Agisoft. "
+            "Solución: abrí el archivo en QGIS para verificar que tenga datos y "
+            "volvé a exportar el ortomosaico desde tu software."
         )
     return {
         "bandas": src.count,
@@ -134,6 +236,13 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
         _actualizar_vuelo(vuelo_id, "error", mensaje)
         os.unlink(tiff_path)
         raise ValueError(mensaje) from exc
+
+    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Optimizando formato del archivo"})
+    try:
+        tiff_path = _optimizar_si_necesario(tiff_path)
+    except Exception as exc:
+        # No es crítico — el pipeline puede funcionar igual, solo más lento
+        logger.warning("[task] optimización GeoTIFF fallida, continuando con archivo original: %s", exc)
 
     if lote_id:
         try:
@@ -283,6 +392,12 @@ def analizar_indice(
         _actualizar_analisis_indice(analisis_id, "error", mensaje)
         os.unlink(tiff_path)
         raise ValueError(mensaje) from exc
+
+    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Optimizando formato del archivo"})
+    try:
+        tiff_path = _optimizar_si_necesario(tiff_path)
+    except Exception as exc:
+        logger.warning("[task] optimización GeoTIFF fallida, continuando con archivo original: %s", exc)
 
     self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
 

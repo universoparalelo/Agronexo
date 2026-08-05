@@ -544,6 +544,27 @@ El sistema rechazaba archivos de más de 3 GB y cargaba en RAM el archivo comple
 
 ---
 
+#### Optimización automática de GeoTIFF en el worker (pre-compresión)
+**Fecha:** 2026-08-04  
+**Rama:** `main`
+
+Archivos de dron exportados sin compresión y con layout strip-based (como "Recorte 1.tif" de 916 MB) tardaban varios minutos porque GDAL tiene que leer el archivo completo desde el inicio para acceder a cualquier banda. Con el formato tileado, GDAL accede directamente al bloque de 512×512 px que necesita, sin pasar por el resto del archivo.
+
+**Cambio:** `workers/gis/tasks.py` — función `_optimizar_si_necesario(src_path)` llamada automáticamente en `procesar_vuelo` y `analizar_indice`, entre la validación y el inicio del pipeline. La función:
+1. Lee solo el perfil del archivo (rápido — no carga datos).
+2. Si ya tiene compresión Y tileado: retorna `src_path` sin tocar nada.
+3. Si falta cualquiera de los dos: reescribe con DEFLATE + predictor=2 + tiles 512×512, usando lectura por ventanas (nunca carga una banda completa en RAM), borra el original y retorna la ruta del nuevo archivo.
+
+Si la optimización falla (e.g. disco lleno), se loguea un warning y el pipeline continúa con el archivo original (degradación graceful, no error fatal).
+
+**Decisiones tomadas:**
+- DEFLATE en lugar de LZW: mejor ratio para datos de índices espectrales (float32 con muchos NaN).
+- `predictor=2` (diferenciación horizontal): compatible con todos los tipos de dato (float32, uint8, uint16). `predictor=3` (float) tiene mejor compresión pero soporte variable entre versiones de GDAL.
+- Window-based copy con `dst.block_windows(1)`: jamás se carga más de un tile (512×512 px × n_bandas) en RAM, independientemente del tamaño del archivo.
+- La función no fuerza la compresión sobre archivos ya optimizados → Sentinel-2 COGs que ya vienen comprimidos+tileados no pagan ningún costo extra.
+
+---
+
 #### Fix: pantalla en blanco al visualizar análisis con GeoJSON grande
 **Fecha:** 2026-08-04  
 **Rama:** `main`
@@ -563,6 +584,36 @@ Al completar el análisis de un GeoTIFF de Sentinel-2 (3000×3000 px), el pipeli
 **Decisiones tomadas:**
 - 10 000 m² como umbral general en el worker, no por sensor — si en el futuro se procesan drones de alta resolución donde 1 ha es excesivo, el parámetro `area_minima_m2` ya es configurable por llamada en `vectorizar_zonas` y `ejecutar_pipeline`.
 - La guardia de 1 500 features en el frontend es una red de seguridad adicional, no la solución principal — la solución real es el threshold de área en el worker.
+
+---
+
+#### Fix: GeoTIFF de dron no se veía en el mapa (CRS EngineeringCRS mal resuelto + límite 4 GiB de TIFF)
+**Fecha:** 2026-08-04
+**Rama:** `main`
+
+Tres archivos reales subidos por el usuario ("ORTOMOSAICO.tif" de Pix4D, 2.7 GB, y dos "Recorte de la prueba N.tif") no se visualizaban. Se probó cada uno directamente contra el worker (`docker compose exec worker`, copiando los archivos con `docker cp`) para separar problema de datos vs. de código:
+
+- **"Recorte de la prueba 1.tif"**: las 4 bandas están 100% vacías (`STATISTICS_VALID_PERCENT=0`, todo NaN) — no es un bug, es un archivo de exportación corrupto/vacío. La validación de imagen vacía agregada hoy en `_validar_geotiff_gis_desde_src` (muestra 128×128) lo detecta y rechaza correctamente.
+- **"Recorte de la prueba 2.tif"**: tiene datos válidos (50%), CRS EPSG:4326 correcto — sin problema de código, solo se beneficia de la optimización de compresión/tileado agregada hoy.
+- **"ORTOMOSAICO.tif"**: expuso dos bugs reales de código, además de un tercero de alineación de validación:
+
+**Bug 1 — método inexistente:** `_resolver_crs()` y la detección de `EngineeringCRS` en `tasks.py` llamaban `crs.to_json_dict()`. Ese método existe en `pyproj.CRS` pero **no en `rasterio.crs.CRS`** (la clase real de `src.crs`) — lanzaba `AttributeError`, silenciado por un `except Exception: pass`, así que la detección nunca se activaba y el pipeline moría más adelante con el error crudo de PROJ (`Cannot find coordinate operations from ... to EPSG:4326`).
+
+**Bug 2 — `reproject()` ignora `src_crs` con fuente tipo `Band`:** aun resolviendo bien el CRS, `rasterio.warp.reproject(source=rasterio.band(src, i), ...)` relee el CRS directamente de los metadatos del dataset en disco/memoria, **ignorando el parámetro `src_crs` explícito**. Confirmado reproduciendo el fallo con el archivo real. Solución: corregir el CRS embebido antes de reproyectar — `rasterio.open(path, "r+")` + `dst.crs = src_crs` para archivos en disco; para el flujo en memoria (bytes), como `MemoryFile` no admite reasignar `.crs` en modo `r+`, se reescribe una copia en un nuevo `MemoryFile` con el CRS ya corregido.
+
+**Bug 3 — límite de 4 GiB de TIFF clásico:** al reproyectar, el bounding box rotado de "ORTOMOSAICO.tif" se expande al alinearse a ejes (18878×41050 → 22442×39216 px), y el archivo de salida se acerca/supera 4 GiB. Sin `BIGTIFF`, GDAL falla a mitad de escritura (`error occurred while writing a dirty block`). Se agregó `bigtiff="IF_SAFER"` al perfil de salida en `reproyectar_a_4326_archivo` y en `_optimizar_si_necesario`.
+
+**Ajuste de alineación:** la validación de `EngineeringCRS` en `_validar_geotiff_gis_desde_src` rechazaba con error duro *cualquier* `EngineeringCRS`, pero corre **antes** de la reproyección en el pipeline (`procesar_vuelo`/`analizar_indice`) — con el Bug 1 corregido, esa validación bloqueaba archivos que `reproyectar_a_4326_archivo` ya sabe resolver. Ahora solo rechaza cuando el CRS no trae un código EPSG reconstruible (mismo criterio que `_resolver_crs`).
+
+**Cambios:**
+- `workers/gis/reproyeccion.py`: `_resolver_crs()` usa `json.loads(crs._projjson())` en vez de `crs.to_json_dict()`. `reproyectar_a_4326_archivo()` corrige el CRS in-place (`r+`) antes de reproyectar y agrega `bigtiff="IF_SAFER"`. `reproyectar_a_4326()` (bytes) reescribe una copia corregida en `MemoryFile` cuando hace falta.
+- `workers/gis/tasks.py`: mismo fix de `_projjson()` en la detección de `EngineeringCRS`; el rechazo ahora solo aplica cuando no hay código EPSG recuperable; `_optimizar_si_necesario()` agrega `bigtiff="IF_SAFER"`.
+
+**Verificación:** reproyección end-to-end del archivo real de 2.7 GB completada en ~972 s con CRS final EPSG:4326 y bounds válidos. Los 37 tests de la suite GIS (`test_indices_worker`, `test_clasificacion`, `test_ndvi_pipeline`, `test_celery_integracion`) pasan sin cambios.
+
+**Decisiones tomadas:**
+- No se intentó "arreglar" los archivos vacíos/corruptos del usuario — la validación de imagen vacía ya los detecta correctamente, el problema es de origen (exportación).
+- Se mantiene `bigtiff="IF_SAFER"` (no `"YES"` forzado) para no penalizar con overhead de BigTIFF a archivos pequeños que nunca se acercan al límite.
 
 ---
 
