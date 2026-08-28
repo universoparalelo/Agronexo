@@ -36,9 +36,11 @@ async def health_db():
 
 
 from app.auth.router import router as auth_router
+from app.diagnostico.router import router as diagnostico_router
 from app.ingesta.router import router as ingesta_router
 from app.lotes.router import router as lotes_router
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(lotes_router, prefix="/api/v1/lotes", tags=["lotes"])
 app.include_router(ingesta_router, prefix="/api/v1/lotes", tags=["ingesta"])
+app.include_router(diagnostico_router, prefix="/api/v1/lotes", tags=["diagnostico"])

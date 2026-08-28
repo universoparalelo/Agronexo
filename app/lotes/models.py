@@ -34,6 +34,7 @@ class IndiceEnum(str, enum.Enum):
     ndre = "ndre"
     savi = "savi"
     exg = "exg"
+    gndvi = "gndvi"
 
 
 class Lote(Base):
@@ -44,7 +45,7 @@ class Lote(Base):
     )
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
-    estadio_fenologico: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    estadio_fenologico: Mapped[str | None] = mapped_column(String(30), nullable=True)
     geometry: Mapped[object] = mapped_column(
         Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True
     )

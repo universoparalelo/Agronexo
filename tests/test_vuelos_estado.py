@@ -183,13 +183,14 @@ def test_listar_vuelos_de_lote():
     vuelos = r.json()
     assert isinstance(vuelos, list)
     assert len(vuelos) >= 1
-    # El endpoint del router de lotes devuelve VueloResponse con campo "id"
-    ids = [v["id"] for v in vuelos]
+    # El endpoint devuelve VueloListItem (app/ingesta/schemas.py), que nombra
+    # el campo "vuelo_id" (mismo criterio que VueloUploadResponse) — no "id".
+    ids = [v["vuelo_id"] for v in vuelos]
     assert vuelo_id in ids
     for v in vuelos:
         assert "estado" in v
         assert "sensor" in v
-        assert "id" in v
+        assert "vuelo_id" in v
     print(f"✓ GET /lotes/{{id}}/vuelos → {len(vuelos)} vuelo(s)")
 
 

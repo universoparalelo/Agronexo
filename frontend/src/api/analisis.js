@@ -30,8 +30,16 @@ export const listarIndicesVuelo = (loteId, vueloId) =>
 export const analizarIndice = (loteId, vueloId, indice, metodoUmbral = 'fijo') =>
   client.post(`/lotes/${loteId}/vuelos/${vueloId}/indices`, { indice, metodo_umbral: metodoUmbral }).then(r => r.data)
 
+// Calcula varios índices adicionales en una sola corrida del worker (descarga
+// y lectura de bandas compartida) en lugar de un POST /indices por índice.
+export const analizarIndicesBatch = (loteId, vueloId, indices, metodoUmbral = 'fijo') =>
+  client.post(`/lotes/${loteId}/vuelos/${vueloId}/indices/batch`, { indices, metodo_umbral: metodoUmbral }).then(r => r.data)
+
 export const obtenerEstadoIndice = (loteId, vueloId, indice) =>
   client.get(`/lotes/${loteId}/vuelos/${vueloId}/indices/${indice}/estado`).then(r => r.data)
 
 export const obtenerResultadoIndice = (loteId, vueloId, indice) =>
   client.get(`/lotes/${loteId}/vuelos/${vueloId}/indices/${indice}/resultado`).then(r => r.data)
+
+export const obtenerDiagnostico = (loteId, vueloId) =>
+  client.get(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico`).then(r => r.data)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import client from '../api/client'
-import { analizarIndice, inspeccionarGeotiff } from '../api/analisis'
+import { analizarIndicesBatch, inspeccionarGeotiff } from '../api/analisis'
 
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
@@ -159,11 +159,18 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       // NDVI ya se calcula automáticamente al subir — el resto de los índices
-      // tildados se analizan aparte, uno por uno, sobre el vuelo recién creado.
+      // tildados se piden juntos en una sola corrida (analizarIndicesBatch),
+      // que descarga el GeoTIFF y lee cada banda una sola vez en vez de
+      // repetirlo por índice.
       const indicesAdicionales = indices.filter((i) => i !== 'ndvi')
-      await Promise.allSettled(
-        indicesAdicionales.map((i) => analizarIndice(loteId, data.vuelo_id, i))
-      )
+      if (indicesAdicionales.length > 0) {
+        try {
+          await analizarIndicesBatch(loteId, data.vuelo_id, indicesAdicionales)
+        } catch {
+          // no bloquear la creación del vuelo si falla encolar los índices —
+          // el usuario puede reintentarlos después desde el switcher
+        }
+      }
       onSuccess(data)
     } catch (err) {
       const msg = err.response?.data?.detail

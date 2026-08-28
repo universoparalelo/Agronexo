@@ -57,11 +57,22 @@ def calcular_exg(green: np.ndarray, red: np.ndarray, blue: np.ndarray, nodata: f
     return resultado.astype(np.float32)
 
 
+def calcular_gndvi(nir: np.ndarray, green: np.ndarray, nodata: float | None = None) -> np.ndarray:
+    """GNDVI = (NIR - GREEN) / (NIR + GREEN)
+    Más sensible que el NDVI a variaciones de clorofila en cultivos de alta
+    biomasa donde el NDVI ya está saturado (> 0.85).
+    """
+    resultado = _division_segura(nir - green, nir + green)
+    resultado[_mascara_nodata(nodata, nir, green)] = np.nan
+    return resultado.astype(np.float32)
+
+
 CALCULADORES = {
-    "ndvi": calcular_ndvi,
-    "ndre": calcular_ndre,
-    "savi": calcular_savi,
-    "exg":  calcular_exg,
+    "ndvi":  calcular_ndvi,
+    "ndre":  calcular_ndre,
+    "savi":  calcular_savi,
+    "exg":   calcular_exg,
+    "gndvi": calcular_gndvi,
 }
 
 
@@ -78,4 +89,6 @@ def calcular_indice(indice: str, bandas: dict[str, np.ndarray], nodata: float | 
         return calcular_savi(bandas["NIR"], bandas["RED"], nodata)
     if indice == "exg":
         return calcular_exg(bandas["GREEN"], bandas["RED"], bandas["BLUE"], nodata)
+    if indice == "gndvi":
+        return calcular_gndvi(bandas["NIR"], bandas["GREEN"], nodata)
     raise ValueError(f"Índice '{indice}' no soportado. Válidos: {list(CALCULADORES)}")

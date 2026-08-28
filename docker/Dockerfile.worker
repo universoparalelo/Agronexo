@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libpq-dev \
     gcc \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Certificado raíz de Avast (SSL/TLS scanning) — sin esto, pip no puede
+# verificar HTTPS a pypi.org en máquinas con Avast interceptando TLS.
+COPY docker/certs/avast-root.crt /usr/local/share/ca-certificates/avast-root.crt
+RUN update-ca-certificates
 
 COPY docker/requirements.worker.txt .
 RUN pip3 install --no-cache-dir --break-system-packages --ignore-installed -r requirements.worker.txt

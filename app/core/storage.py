@@ -115,6 +115,26 @@ def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-s
     return key
 
 
+def object_exists(key: str) -> bool:
+    """Verifica si un objeto existe en MinIO sin descargarlo (HEAD request)."""
+    from minio.error import S3Error
+
+    client = _client()
+    try:
+        client.stat_object(settings.minio_bucket, key)
+        return True
+    except S3Error:
+        return False
+
+
+def upload_file(key: str, local_path: str, content_type: str = "application/octet-stream") -> str:
+    """Sube un archivo local a MinIO por streaming (fput_object) — no lo carga en RAM."""
+    client = _client()
+    _ensure_bucket(client)
+    client.fput_object(settings.minio_bucket, key, local_path, content_type=content_type)
+    return key
+
+
 def presigned_url(key: str) -> str:
     client = _client()
     return client.presigned_get_object(

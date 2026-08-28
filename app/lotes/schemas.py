@@ -35,7 +35,7 @@ def _validar_polygon_geojson(v: Any) -> dict:
 class LoteCreate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=200, examples=["Lote Norte"])
     cultivo: CultivoEnum = Field(..., examples=["soja"])
-    estadio_fenologico: str | None = Field(None, max_length=10, examples=["R3"])
+    estadio_fenologico: str | None = Field(None, max_length=30, examples=["R3"])
     geometry: dict | None = Field(
         None,
         description="Opcional. Si no se provee, el lote queda sin límites — se puede cargar después.",
@@ -62,7 +62,7 @@ class LoteCreate(BaseModel):
 class LoteUpdate(BaseModel):
     nombre: str | None = Field(None, min_length=1, max_length=200)
     cultivo: CultivoEnum | None = None
-    estadio_fenologico: str | None = Field(None, max_length=10)
+    estadio_fenologico: str | None = Field(None, max_length=30)
     geometry: dict | None = None
 
     @field_validator("geometry")

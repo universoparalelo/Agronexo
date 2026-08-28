@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from celery.result import AsyncResult
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.storage import download_bytes
 from app.ingesta.schemas import EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse
@@ -200,7 +201,7 @@ async def obtener_resultado_geojson(
         return None
 
     try:
-        data = download_bytes(geojson_key)
+        data = await run_in_threadpool(download_bytes, geojson_key)
         return json.loads(data)
     except Exception:
         return None
@@ -308,6 +309,49 @@ async def crear_analisis_indice(
     return analisis
 
 
+async def crear_analisis_indices_batch(
+    db: AsyncSession, vuelo: Vuelo, indices: list[IndiceEnum], metodo_umbral: str = "fijo",
+) -> list[AnalisisIndice]:
+    """
+    Crea (o reencola) una fila AnalisisIndice por cada índice pedido y
+    encola UNA sola task de Celery que los calcula todos en una corrida
+    (descarga y lectura de bandas compartida), en lugar de una task por
+    índice como hace crear_analisis_indice. Pensada para cuando el usuario
+    tilda varios índices a la vez al subir un vuelo.
+    """
+    filas: dict[str, AnalisisIndice] = {}
+    for indice in indices:
+        analisis = await obtener_analisis_indice(db, vuelo.id, indice)
+        if analisis is None:
+            analisis = AnalisisIndice(vuelo_id=vuelo.id, indice=indice, estado=EstadoVueloEnum.pendiente)
+            db.add(analisis)
+        else:
+            analisis.estado = EstadoVueloEnum.pendiente
+            analisis.error_detalle = None
+        filas[indice.value] = analisis
+    await db.flush()
+    for analisis in filas.values():
+        await db.refresh(analisis)
+
+    task = celery_app.send_task(
+        "workers.gis.tasks.analizar_indices_batch",
+        kwargs={
+            "analisis_ids": {indice: str(fila.id) for indice, fila in filas.items()},
+            "minio_key": vuelo.archivo_original,
+            "sensor": vuelo.sensor.value,
+            "indices": list(filas.keys()),
+            "metodo_umbral": metodo_umbral,
+        },
+        queue="gis",
+    )
+    for analisis in filas.values():
+        analisis.task_id = task.id
+    await db.flush()
+    for analisis in filas.values():
+        await db.refresh(analisis)
+    return list(filas.values())
+
+
 async def obtener_estado_analisis_indice(
     db: AsyncSession, vuelo_id: uuid.UUID, indice: IndiceEnum,
 ) -> IndiceEstadoResponse | None:
@@ -340,7 +384,7 @@ async def obtener_resultado_geojson_indice(
     if analisis is None or analisis.estado != EstadoVueloEnum.completado or analisis.geojson_key is None:
         return None
     try:
-        data = download_bytes(analisis.geojson_key)
+        data = await run_in_threadpool(download_bytes, analisis.geojson_key)
         return json.loads(data)
     except Exception:
         return None

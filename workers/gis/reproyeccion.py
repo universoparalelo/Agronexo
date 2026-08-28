@@ -16,6 +16,17 @@ from rasterio.warp import Resampling, calculate_default_transform, reproject
 
 CRS_SALIDA = CRS.from_epsg(4326)
 
+# rasterio.warp.reproject() usa num_threads=1 y warp_mem_limit=0 (~64 MB de
+# caché interno de GDAL) por defecto — para un GeoTIFF de varios GB eso
+# fuerza muchas pasadas chicas de lectura/warp/escritura en un solo hilo.
+# Con estos valores GDAL paraleliza el warp de cada banda y usa un buffer
+# más grande, reduciendo bastante el tiempo de pared en archivos pesados.
+# Conservador a propósito: el worker corre con concurrency=16 (ver
+# workers/celery_app.py) y varias tasks pesadas podrían reproyectar a la
+# vez — no hay que asumir que una sola task tiene toda la CPU disponible.
+_WARP_NUM_THREADS = 4
+_WARP_MEM_LIMIT_MB = 512
+
 
 def _resolver_crs(crs: CRS) -> CRS:
     """
@@ -98,6 +109,8 @@ def reproyectar_a_4326(data: bytes) -> bytes:
                             source=rasterio.band(src_fix, i),
                             destination=rasterio.band(dst, i),
                             resampling=Resampling.bilinear,
+                            num_threads=_WARP_NUM_THREADS,
+                            warp_mem_limit=_WARP_MEM_LIMIT_MB,
                         )
                 return memfile.read()
         finally:
@@ -158,6 +171,8 @@ def reproyectar_a_4326_archivo(src_path: str, dst_path: str) -> str:
                 source=rasterio.band(src, i),
                 destination=rasterio.band(dst, i),
                 resampling=Resampling.bilinear,
+                num_threads=_WARP_NUM_THREADS,
+                warp_mem_limit=_WARP_MEM_LIMIT_MB,
             )
 
     return dst_path

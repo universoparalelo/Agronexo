@@ -47,12 +47,12 @@ export default function DetalleLote() {
     if (!activos.length) return
 
     const resultados = await Promise.allSettled(
-      activos.map(v => obtenerEstadoVuelo(loteId, v.id))
+      activos.map(v => obtenerEstadoVuelo(loteId, v.vuelo_id))
     )
 
     const nuevos = {}
     activos.forEach((v, i) => {
-      if (resultados[i].status === 'fulfilled') nuevos[v.id] = resultados[i].value
+      if (resultados[i].status === 'fulfilled') nuevos[v.vuelo_id] = resultados[i].value
     })
     setEstados(prev => ({ ...prev, ...nuevos }))
 
@@ -109,12 +109,12 @@ export default function DetalleLote() {
 
         <div className="vuelos-lista">
           {vuelos.map(vuelo => {
-            const estadoActual = estados[vuelo.id] || vuelo
+            const estadoActual = estados[vuelo.vuelo_id] || vuelo
             const estadoStr = estadoActual.estado || vuelo.estado
             const progreso = estadoActual.progreso ?? null
 
             return (
-              <div key={vuelo.id} className="vuelo-card">
+              <div key={vuelo.vuelo_id} className="vuelo-card">
                 <div className="vuelo-card-info">
                   <p className="vuelo-fecha">
                     {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
@@ -150,7 +150,7 @@ export default function DetalleLote() {
                   {vuelo.estado === 'completado' && (
                     <button
                       className="btn-primary btn-sm"
-                      onClick={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.id}`)}
+                      onClick={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
                     >
                       Ver resultados
                     </button>

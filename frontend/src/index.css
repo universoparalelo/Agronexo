@@ -1166,7 +1166,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* Por encima de cualquier overlay de mapa (.mapa-leyenda usa 1000) — con
+     el mismo z-index, empataban y ganaba el que quedara después en el DOM,
+     tapando el modal detrás de la leyenda del mapa de índices/zonas. */
+  z-index: 2000;
   padding: 1rem;
 }
 
@@ -2212,7 +2215,7 @@ body {
 
 .resultados-main { flex: 1; display: grid; grid-template-columns: 1fr 340px; overflow: hidden; }
 .resultados-mapa { overflow: hidden; }
-.resultados-sidebar { background: #fff; border-left: 1px solid #e5e7eb; overflow-y: auto; padding: 1.25rem; }
+.resultados-sidebar { background: #fff; border-left: 1px solid #e5e7eb; overflow-y: auto; overflow-x: hidden; padding: 1.25rem; box-sizing: border-box; }
 
 /* ── Mapa Zonas (usado en ResultadosVuelo) ── */
 .mapa-zonas-wrapper { position: relative; height: 100%; }
@@ -2243,6 +2246,73 @@ body {
   border-radius: 50%;
   margin-right: 0.45rem;
   vertical-align: middle;
+}
+
+/* ── Tabs Zonas/Diagnóstico (ResultadosVuelo) ── */
+.resultados-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+.resultados-tab {
+  background: none; border: none; cursor: pointer;
+  padding: 0.5rem 0.1rem; margin-right: 0.75rem;
+  font-size: 0.85rem; font-weight: 600; color: #6b7280;
+  border-bottom: 2px solid transparent;
+}
+.resultados-tab:hover { color: #1a3a2a; }
+.resultados-tab--activo { color: #1a3a2a; border-bottom-color: #1a3a2a; }
+
+/* ── Tabla/Cards Diagnóstico ── */
+.tabla-diagnostico-wrapper { display: flex; flex-direction: column; gap: 0.75rem; }
+.diagnostico-metadata { font-size: 0.78rem; color: #6b7280; margin: -0.4rem 0 0.2rem; }
+.diagnostico-lista { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.diagnostico-card {
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #9ca3af;
+  border-radius: 6px;
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+.diagnostico-card.confianza-alta  { border-left-color: #dc2626; }
+.diagnostico-card.confianza-media { border-left-color: #f59e0b; }
+.diagnostico-card.confianza-baja  { border-left-color: #9ca3af; }
+.diagnostico-card--ok { border-left-color: #16a34a; opacity: 0.75; }
+
+.diagnostico-card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem; margin-bottom: 0.35rem;
+}
+.diagnostico-regla-nombre {
+  font-weight: 700; font-size: 0.88rem; color: #1a1a1a;
+  min-width: 0; flex: 1 1 140px;
+  overflow-wrap: break-word; word-break: break-word;
+}
+
+.diagnostico-badge {
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap;
+  flex-shrink: 0;
+}
+.confianza-badge-alta  { background: #fee2e2; color: #b91c1c; }
+.confianza-badge-media { background: #fef3c7; color: #b45309; }
+.confianza-badge-baja  { background: #f3f4f6; color: #6b7280; }
+
+.diagnostico-card-meta {
+  font-size: 0.76rem; color: #6b7280; display: flex; flex-wrap: wrap;
+  gap: 0.3rem 0.4rem; margin-bottom: 0.5rem;
+}
+.diagnostico-accion { font-size: 0.82rem; color: #1a1a1a; margin: 0.4rem 0; line-height: 1.4; overflow-wrap: break-word; }
+.diagnostico-confirmar { font-size: 0.8rem; margin: 0.4rem 0; }
+.diagnostico-confirmar summary { cursor: pointer; color: #1a3a2a; font-weight: 600; }
+.diagnostico-confirmar p { margin-top: 0.35rem; color: #4b5563; line-height: 1.4; overflow-wrap: break-word; }
+
+.diagnostico-productos { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+.producto-chip {
+  font-size: 0.72rem; background: #f0f4f0; color: #1a3a2a;
+  padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid #d1d5db;
 }
 
 /* ══════════════════════════════════════

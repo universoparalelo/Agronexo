@@ -30,7 +30,7 @@
 | Botón "Nuevo lote" (formulario + límite GeoJSON, sin GeoTIFF) | ✅ | `frontend/src/components/ModalNuevoLote.jsx` → `POST /lotes` |
 | Modal "Cargar Ortomosaico" con selector de lote existente | ✅ | `ModalCargaGeoTIFF.jsx` ahora sube vuelos a un lote ya creado vía `POST /lotes/{id}/vuelos`, no crea lote nuevo |
 | Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
-| Motor de diagnóstico (RFDR-01) | ❌ | Próximo a implementar |
+| Motor de diagnóstico (RFDR-01) | ✅ | On-demand/sin persistencia — `GET /lotes/{id}/vuelos/{id}/diagnostico`. 20 reglas en `app/diagnostico/reglas.py`. Historial persistido queda para release 4 (ver `docs/release-v1.0.0.md`) |
 | Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 5 en curso |
 | Testing integral y demo 7/jul | ❌ | Sprint 5 en curso |
 | Exportación Shapefile / PDF | ❌ | Pendiente |

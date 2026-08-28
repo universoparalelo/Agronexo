@@ -637,6 +637,141 @@ El sidebar tenía 3 items de "PRINCIPAL" que no llevaban a ningún lado (solo ca
 
 ---
 
+#### Motor de reglas de diagnóstico (RFDR-01)
+**Fecha:** 2026-08-27
+**Rama:** `main`
+
+Se implementó el motor de reglas de diagnóstico completo a partir de un documento de referencia provisto por el usuario (20 reglas en 9 bloques, extraídas de `AgroNexo_Motor_Reglas_Referencia.docx`). Dado un análisis ya calculado (NDVI + opcionalmente NDRE/SAVI/ExG/GNDVI), el motor evalúa cada zona vectorizada contra las reglas en cascada y devuelve causa probable, nivel de confianza, acción recomendada, cómo confirmar en campo y productos sugeridos.
+
+**Decisiones de alcance acordadas con el usuario antes de implementar:**
+- Sin persistencia por ahora — el diagnóstico se calcula on-demand (síncrono) en cada `GET`, sin tabla nueva ni Celery. Ver "Problemas abiertos" — el usuario ya anticipó que el historial persistido es tarea de una release futura (release 4).
+- GNDVI se agregó como quinto índice (antes solo NDVI/NDRE/SAVI/ExG) para cubrir la única regla del documento que lo requiere (R21, enfermedad tardía en soja).
+
+**Piezas implementadas:**
+- `workers/gis/indices.py` + `band_mapping.py` + `app/lotes/models.py` (`IndiceEnum.gndvi`): GNDVI como quinto índice, mismo patrón que NDRE/SAVI/ExG. Migraciones `0012` (ALTER TYPE del enum Postgres) y `0013` (`estadio_fenologico` de `VARCHAR(10)` a `VARCHAR(30)`, para tokens de algodón como `apertura_de_capsulas`).
+- `app/diagnostico/forma.py` (nuevo): clasificación de patrón espacial (circular, lineal, difuso_homogeneo, manchas_irregulares, bordes_lote, focos_aislados, por_sectores) — no existía ningún cálculo de esto en el código, era solo aspiracional en CLAUDE.md. Heurística con Shapely puro (circularidad, elongación vía `minimum_rotated_rectangle`, distancia/fracción de borde, densidad de zonas por clase).
+- `app/diagnostico/estadios.py`, `productos.py`, `reglas.py` (las 20 reglas), `engine.py` (evaluador en cascada), `service.py` (orquestación: MinIO + DB), `router.py`: `GET /api/v1/lotes/{lote_id}/vuelos/{vuelo_id}/diagnostico`.
+
+**Decisión de arquitectura no obvia — sin GeoPandas en `app/diagnostico/`:** el primer intento usó GeoPandas (igual que `workers/gis/zonas.py`) tanto en `workers/gis/forma.py` como en `app/diagnostico/service.py`. Al correr los tests contra el contenedor `api` real, falló con `ModuleNotFoundError: No module named 'geopandas'` — `docker/requirements.api.txt` deliberadamente no incluye GeoPandas/GDAL (esas dependencias pesadas están reservadas al worker, ver CLAUDE.md: "El Worker GIS es un proceso separado"). Como el motor de diagnóstico corre dentro del proceso FastAPI (no reprocesa el GeoTIFF, solo lee GeoJSON ya generado), se rediseñó `app/diagnostico/forma.py` con Shapely puro + una proyección equirectangular local (matemática pura, sin pyproj) para convertir grados a metros locales antes de medir área/perímetro/distancias. `workers/gis/forma.py` se eliminó (la lógica vive en `app/diagnostico/`, no en `workers/gis/`, porque no corre en el worker).
+
+**Resolución de reglas multi-índice (R10 malezas: NDVI+ExG; R44 fósforo: NDVI+NDRE):** los índices se vectorizan de forma independiente (bordes de polígono distintos entre NDVI y ExG del mismo vuelo). Se resuelve con `enriquecer_con_indice()`: para cada zona NDVI (partición canónica), se calcula el promedio del otro índice ponderado por área de intersección geométrica real contra el GeoDataFrame de ese índice. Si el segundo índice no fue calculado para ese vuelo, la regla se salta sin error (cae al siguiente nivel del cascade).
+
+**Verificación:**
+- 39 tests nuevos (`test_forma.py`, `test_diagnostico_engine.py`, `test_diagnostico_api.py`) + 1 test agregado a `test_indices_worker.py` (GNDVI) — todos pasando, agregados al CI.
+- Suite completa existente (86 tests API + 38 tests GIS) sigue pasando sin regresiones.
+- Verificación E2E manual contra el stack Docker real: lote soja (R2) + GeoTIFF sintético con una zona circular de NDVI bajo (~0.30) → `GET .../diagnostico` devolvió `regla_id=R20` (enfermedad fúngica) con confianza alta y los 5 fungicidas correctos; la zona sana circundante cayó correctamente en `R99`.
+
+**Bug real encontrado y corregido — "Ver resultados" navegaba a `vuelos/undefined`**
+Al probar la integración desde la UI real (no Swagger), `DetalleLote.jsx` → botón "Ver resultados" navegaba a `/lotes/{id}/vuelos/undefined`, rompiendo el acceso a la página de resultados (y por lo tanto a la nueva pestaña de Diagnóstico) para cualquier usuario real. Causa raíz: `GET /lotes/{id}/vuelos` (`app/ingesta/router.py`, schema `VueloListItem`) devuelve el id del vuelo en el campo `vuelo_id` (mismo criterio que `VueloUploadResponse`), pero `DetalleLote.jsx` leía `vuelo.id` (inexistente en la respuesta). `Dashboard.jsx` ya tenía el fallback correcto (`v.vuelo_id ?? v.id`) — `DetalleLote.jsx` nunca lo tuvo. Esto es lo mismo que la falla ya registrada como "Problema abierto #3" (`tests/test_vuelos_estado.py::test_listar_vuelos_de_lote`, `KeyError: 'id'`) — no era un conflicto de rutas como se sospechaba inicialmente, sino un desajuste simple de nombre de campo entre frontend y API.
+
+**Cambios:**
+- `frontend/src/pages/DetalleLote.jsx`: los 5 usos de `vuelo.id`/`v.id` pasan a `vuelo.vuelo_id`/`v.vuelo_id`.
+- `tests/test_vuelos_estado.py::test_listar_vuelos_de_lote`: corregida la aserción para esperar `vuelo_id` (el test tenía la misma suposición incorrecta que el componente).
+
+**Verificación:** reproducido el bug en vivo con Claude in Chrome navegando el flujo real (Dashboard → Lotes → detalle de lote → "Ver resultados"), confirmado el fix con el mismo flujo, y `tests/test_vuelos_estado.py` completo (13 tests) pasa.
+
+**Decisiones tomadas:**
+- `ndvi_promedio` (nombre de columna heredado de `zonas.py`, fijo sin importar el índice real procesado) no se renombra — es un contrato de API vivo consumido por `MapaIndice.jsx`, `TablaZonas.jsx` y `MapaZonas.jsx` (confirmado por grep). El motor de reglas simplemente sabe leerlo como "el valor del índice que sea".
+- Catálogo de estadios fenológicos válidos (`app/diagnostico/estadios.py`) extraído de la **sección 5** del documento de referencia (las condiciones de cada regla), no de la sección 3 (descriptiva, con tokens más largos e inconsistentes entre cultivos).
+
+---
+
+#### Caché de GeoTIFF preparado + fix leyenda tapando modales + fix overflow en tarjetas de diagnóstico
+**Fecha:** 2026-08-28
+**Rama:** `main`
+
+El usuario reportó que el cálculo de índices era muy lento, más al pedir varios sobre el mismo vuelo, y dos bugs de UI: la leyenda de colores del mapa se proyectaba por encima de cualquier modal (tapando información al cargar un ortomosaico nuevo), y en la pestaña Diagnóstico había textos que se salían de la tarjeta sin poder leerse completos.
+
+**Causa raíz del rendimiento:** cada índice adicional (NDRE/SAVI/ExG/GNDVI) pedido sobre un vuelo ya existente (`workers/gis/tasks.py::analizar_indice`) volvía a descargar el archivo original completo desde MinIO y repetía desde cero la optimización (recompresión tileada) y la reproyección a EPSG:4326 — el mismo trabajo pesado que `procesar_vuelo` ya había hecho para el NDVI del mismo vuelo, sin ningún tipo de caché entre llamadas.
+
+**Cambios — caché del GeoTIFF preparado:**
+- `app/core/storage.py`: `object_exists(key)` (HEAD sin descargar) y `upload_file(key, local_path)` (`fput_object`, streaming sin cargar en RAM).
+- `workers/gis/tasks.py`: nuevas funciones `_key_preparado()` (deriva `.../preparado_4326.tif` del key del original), `_preparar_geotiff()` (reproyecta si hace falta — reproyectar ya deja el archivo tileado+comprimido, así que solo se corre `_optimizar_si_necesario` por separado si NO hace falta reproyectar, evitando reescribir el archivo dos veces), `_descargar_preparado()` y `_guardar_preparado_en_cache()`. `procesar_vuelo` y `analizar_indice` ahora chequean la caché antes de descargar/validar/optimizar/reproyectar — si existe, se saltan esos pasos enteros y solo calculan el índice pedido. `procesar_vuelo` además ya no reproyecta dos veces para extraer el bounding box del lote — lee los bounds directo del archivo ya preparado.
+- Sin migración de BD: la clave de caché se deriva del `minio_key` existente (mismo prefijo `{usuario}/{lote}/{vuelo}/`), no hace falta persistir nada nuevo.
+
+**Verificación de la caché:** probado en vivo contra el stack real — primer pedido de un índice nuevo (GNDVI) sobre un vuelo existente mostró `cache=False` + los pasos de optimización/reproyección en los logs del worker; un segundo pedido sobre el mismo vuelo mostró `cache=True` y saltó completamente esos pasos (`GeoTIFF preparado encontrado en caché`).
+
+**Fix — leyenda de mapa tapando modales:** `.mapa-leyenda` y `.modal-overlay` compartían el mismo `z-index: 1000` en `frontend/src/index.css` — al empatar, ganaba el que apareciera después en el DOM, que en el Dashboard (mapa "Vista geoespacial" persistente) terminaba siendo la leyenda. Se subió `.modal-overlay` a `z-index: 2000`.
+
+**Fix — texto desbordado en tarjetas de Diagnóstico:** bug clásico de flexbox — `.diagnostico-card-header` (flex row con el nombre de la regla + badge de confianza) no tenía `min-width: 0` en el span de texto, así que nombres de regla largos ("Enfermedad fúngica en soja — estadio reproductivo") no envolvían y desbordaban la tarjeta en vez de hacer wrap. Se agregó `min-width: 0` + `overflow-wrap: break-word` al texto y `flex-wrap: wrap` al header; mismo tratamiento preventivo en `.diagnostico-accion`, `.diagnostico-confirmar p` y `.diagnostico-card-meta`. `.resultados-sidebar` suma `overflow-x: hidden` como red de seguridad adicional.
+
+**Verificación de los dos fixes de UI:** reproducidos y confirmados en vivo con Claude in Chrome (Dashboard con mapa+leyenda abierto → modal "Cargar Ortomosaico" ahora aparece por encima; pestaña Diagnóstico con el nombre de regla largo ahora hace wrap dentro de la tarjeta sin desbordar).
+
+**Decisiones tomadas:**
+- Caché best-effort: si `_guardar_preparado_en_cache` falla (ej. MinIO caído momentáneamente), se loguea un warning y el pipeline sigue con el archivo ya preparado en memoria — nunca bloquea el análisis en curso, solo se pierde el beneficio de caché para la próxima llamada.
+- No se creó un mecanismo de invalidación de caché — la clave depende solo del vuelo (que nunca cambia de archivo original una vez subido), así que la caché es válida indefinidamente para ese vuelo. Un "reintentar" vuelo reusa el mismo `archivo_original`, por lo que también se beneficia de la caché si ya existe.
+
+---
+
+#### Cálculo batch de múltiples índices (evita releer el GeoTIFF una vez por índice)
+**Fecha:** 2026-08-28
+**Rama:** `main`
+
+El usuario reportó que probar el motor de diagnóstico con imágenes más pesadas "se hacía imposible" al tildar varios índices (NDRE/SAVI/ExG/GNDVI) al subir un vuelo — su teoría era que la imagen se reducía (downsample) 3 veces antes de los cálculos.
+
+**Diagnóstico (la teoría del usuario era incorrecta):** revisando `workers/gis/pipeline.py`, el downsample ocurre una sola vez por corrida de pipeline, y ocurre **después** de calcular el índice a resolución completa, no antes. El cuello de botella real es otro: `ModalCargaGeoTIFF.jsx` disparaba un `POST /indices` **por cada índice tildado** (`Promise.allSettled`), y cada uno encolaba una task de Celery independiente (`analizar_indice`) que repetía el pipeline completo desde cero — descarga del GeoTIFF preparado desde MinIO, lectura de banda(s) a resolución completa, cálculo — aunque la caché de `_preparar_geotiff` (ver tarea anterior) ya evitara repetir la reproyección/optimización. Con 3-4 índices tildados, el archivo se descargaba 3-4 veces y bandas compartidas (NIR la usan NDVI/NDRE/SAVI/GNDVI, RED la usan NDVI/SAVI/ExG) se releían 3-4 veces cada una.
+
+**Cambios:**
+- `workers/gis/pipeline.py`: extraído `_procesar_indice_desde_bandas()` (núcleo compartido: calcular índice → downsample → suavizar → clasificar → vectorizar → exportar → estadísticas) reusado por `ejecutar_pipeline`/`ejecutar_pipeline_archivo` (sin cambio de comportamiento) y por la nueva `ejecutar_pipeline_multi_indice_archivo()`, que reproyecta y abre el archivo **una sola vez** y lee cada banda distinta **una sola vez** con un cache compartido entre índices de la lista. Un índice que falla (banda faltante para ese índice puntual) no aborta los demás — vía callbacks `on_indice_completado`/`on_indice_error`.
+- `workers/gis/tasks.py`: extraído `_preparar_archivo_para_pipeline()` (descarga con caché + validación + optimización/reproyección, antes triplicado entre `procesar_vuelo`/`analizar_indice`/la nueva task). Nueva task `analizar_indices_batch(analisis_ids, minio_key, sensor, indices, ...)` — `analisis_ids` mapea índice → fila `AnalisisIndice`, cada una se actualiza de forma independiente a medida que su índice termina (o falla), así que el polling por índice existente no se tocó.
+- `app/ingesta/schemas.py` (`IndicesBatchRequest`/`IndicesBatchIniciarResponse`), `service.py` (`crear_analisis_indices_batch` — crea las filas y encola UNA sola task con todos los índices), `router.py` (`POST /{lote_id}/vuelos/{vuelo_id}/indices/batch`, nuevo, no reemplaza el endpoint single).
+- `frontend/src/api/analisis.js` (`analizarIndicesBatch`), `ModalCargaGeoTIFF.jsx`: el `Promise.allSettled` de un POST por índice pasa a un único `POST .../indices/batch`.
+
+**Decisiones tomadas:**
+- El endpoint/task single (`POST .../indices`, `analizar_indice`) se mantiene intacto — sigue siendo el camino para cuando el usuario pide un único índice adicional después de subir (switcher de `Dashboard.jsx`). El batch solo se usa al tildar varios índices juntos en el modal de carga.
+- Las filas `AnalisisIndice` del batch comparten el mismo `task_id` de Celery (una sola task real) pero se actualizan individualmente en DB — el frontend (`useVueloProgreso.js`) no necesitó ningún cambio, sigue haciendo polling por índice contra `GET .../indices/{indice}/estado`.
+
+**Verificación:**
+- `tests/test_indices_worker.py`: 2 tests nuevos — `test_pipeline_multi_indice_bandas_compartidas` (el batch da exactamente el mismo resultado que llamar al pipeline individual por índice) y `test_pipeline_multi_indice_error_no_aborta_batch` (ExG sin banda Blue en DJI falla sin frenar el cálculo de NDVI en la misma corrida). Suite completa (17 tests) pasando.
+- Suites existentes sin regresiones: `test_ingesta_worker.py`, `test_celery_integracion.py` (E2E real contra MinIO+Redis+worker), `test_vuelos_estado.py` + `test_diagnostico_api.py` (21 tests API) — todo verde tras el refactor de `tasks.py`/`pipeline.py`.
+- Verificación E2E manual contra el stack Docker real (API + worker + MinIO reales, usuario/lote/vuelo de prueba creados y luego eliminados): `POST .../indices/batch` con `["ndre","savi","gndvi"]` devolvió las 3 filas con el mismo `task_id`; logs del worker confirmaron **una sola** línea de descarga MinIO, **una sola** reproyección, y 4 lecturas de banda distintas (NIR, RE, RED, GREEN — sin repetir NIR entre NDRE/SAVI/GNDVI); `GET .../diagnostico` devolvió `indices_disponibles: [ndvi, ndre, savi, gndvi]`.
+
+---
+
+#### Fix crítico: OOM del worker + reproyección duplicada en imágenes grandes reales
+**Fecha:** 2026-08-28
+**Rama:** `main`
+
+Al probar la tarea anterior (batch de índices) con una imagen real de producción (2.5 GB, no un fixture sintético), aparecieron dos problemas graves que el usuario resumió como "sigue tardando demasiado, esto no lo puedo publicar así" — verificados en vivo contra el stack Docker real, no en tests.
+
+**Bug 1 — reproyección duplicada por condición de carrera:** el frontend dispara `POST /vuelos` (NDVI) y, apenas responde, `POST /indices/batch` (NDRE/SAVI/GNDVI) casi al mismo tiempo. Ambas tasks de Celery (`procesar_vuelo` y `analizar_indices_batch`) revisan la caché de `preparado_4326.tif` antes de reproyectar — pero como NDVI todavía no terminó de escribirla, el batch no la encuentra y **también** descarga y reproyecta el archivo de 2.5 GB desde cero, en paralelo. Confirmado en los logs reales: dos reproyecciones simultáneas de **672 s y 671 s** (~11 min cada una, compitiendo por CPU) en vez de una sola.
+
+**Bug 2 — out-of-memory real, worker matado con SIGKILL:** `workers/gis/pipeline.py::_leer_bandas_requeridas` leía cada banda a resolución completa (`src.read(num)`) y recién *después* de calcular el índice se aplicaba el downsample (ver tarea de "caché de GeoTIFF preparado"). Para un raster grande ya reproyectado, una sola banda float32 puede pesar varios GB — con el VM de Docker Desktop en 7.4 GiB compartidos entre todos los servicios, el proceso terminó devorando >4 GiB y el kernel lo mató: `billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 9 (SIGKILL)`. El vuelo real del usuario quedó trabado en `estado='procesando'` para siempre (el `except`/`finally` que marca error nunca corrió porque el proceso fue matado, no lanzó una excepción Python) — se corrigió a mano en la base (`UPDATE vuelos/analisis_indices SET estado='error'`) para que "Reintentar" funcione.
+
+**Cambios:**
+- `workers/gis/tasks.py`: nuevo lock distribuido en Redis (`_cliente_redis_lock`, `_esperar_preparacion_en_curso`, TTL 30 min) dentro de `_preparar_archivo_para_pipeline` — si dos tasks del mismo vuelo intentan optimizar/reproyectar a la vez, la segunda espera (sondeando cada 3s si la caché ya está lista) y la reusa, en vez de reproyectar en paralelo. Si Redis no responde por algún motivo, se sigue sin lock (mismo comportamiento que antes) en vez de bloquear el pipeline — nunca es un punto de falla dura.
+- `workers/gis/pipeline.py`: nueva `_leer_banda()` — si el raster supera `_UMBRAL_DOWNSAMPLE_PX` (9M px), lee la banda **ya decimada por GDAL** (`out_shape` + `Resampling.average`, `masked=True` para no promediar el nodata crudo del borde) en vez de leer a resolución completa y reducir después en NumPy. `_procesar_indice_desde_bandas` se simplificó — ya no hay downsample posterior al cálculo, todo (índice, estadísticas, vectorización) corre sobre la resolución que decidió `_leer_banda`. Se eliminó `_downsample_array` (ya no se usa).
+
+**Decisión de trade-off no obvia:** antes, las estadísticas globales del lote (min/max/promedio) se calculaban siempre sobre resolución completa por diseño explícito (documentado en un comentario que ahora se removió). Con este cambio, para rasters grandes las estadísticas se calculan sobre la resolución ya decimada, no la completa — se prioriza que el análisis **termine sin tirar el worker** por sobre precisión estadística exacta en imágenes muy grandes. La diferencia es marginal en la práctica (promediar bandas antes de calcular el índice vs. promediar el índice ya calculado da resultados muy cercanos para vegetación con variación suave), y no aplica en absoluto a rasters por debajo del umbral (la inmensa mayoría de los casos reales).
+
+**Verificación:**
+- 2 tests nuevos en `test_indices_worker.py`: `test_lectura_decimada_raster_grande_no_materializa_resolucion_completa` (raster sintético 3100×3100 con borde de nodata — confirma shape decimada correcta y que el nodata crudo no contamina el promedio) y `test_pipeline_archivo_grande_completa_sin_cargar_resolucion_completa` (pipeline completo end-to-end sobre ese mismo raster). Suite completa (19 tests) pasando.
+- Reproducción real del bug del lock: dos tasks de Celery reales (`procesar_vuelo` + `analizar_indices_batch`) disparadas casi simultáneamente sobre el mismo archivo (100 MB, UTM, fuerza reproyección) — **antes** del fix ambas reproyectaban (6.05s y 6.19s cada una); **después** del fix, logs confirmaron que solo una reproyectó y la otra esperó y reusó ("otro análisis del mismo vuelo ya preparó el archivo (6s esperados) — se reusa").
+- Detectado y corregido en el camino un bug real en el primer intento del lock: `object_exists` no estaba importado dentro de `_esperar_preparacion_en_curso`, así que el lock fallaba silenciosamente (`NameError` capturado por el `except Exception` defensivo) y ambas tasks reproyectaban igual — encontrado recién al probar la carrera real contra el stack, no en tests unitarios.
+- Suites existentes sin regresiones: `test_ndvi_pipeline.py`, `test_clasificacion.py` (16 tests), `test_celery_integracion.py` (E2E real), `test_vuelos_estado.py` + `test_diagnostico_api.py` (21 tests API).
+
+**Problema abierto (no resuelto en esta tarea):** el worker sigue sin límite de memoria explícito (`mem_limit` en `docker-compose.yml`) ni límite de concurrencia acorde a la RAM disponible (`concurrency: 16` por defecto de Celery, heredado del conteo de CPUs) — con Docker Desktop en 7.4 GiB totales, varias tasks pesadas concurrentes (aunque ya no dupliquen trabajo entre sí) todavía podrían competir por memoria. Ver "Problemas abiertos".
+
+**Addendum — mismo día, probando contra el archivo real de producción (2.5 GB):**
+
+**Bug 3 — `TypeError: Cannot convert fill_value nan to dtype uint8`:** al probar el fix anterior contra el archivo real (no un fixture sintético — todos los fixtures de test usan `dtype="float32"`), `_leer_banda()` reventó: el archivo real tiene bandas en `uint8` (DN crudo sin calibrar), y `np.ma.filled(banda, np.nan)` no puede rellenar un array entero con NaN. Fix: castear a `float32` **antes** de rellenar (`np.ma.filled(banda.astype(np.float32), np.nan)`) — un `MaskedArray.astype()` preserva la máscara. Test de regresión agregado: `test_lectura_decimada_dtype_entero_no_falla` (raster sintético `uint8` que cruza el umbral de downsample).
+
+**Optimización adicional — reproyección con GDAL multi-hilo:** con el lock puesto, la reproyección del archivo real de 2.5 GB seguía tardando ~11-16 min (942s medido, con variación entre corridas por contención de recursos) porque `rasterio.warp.reproject()` usa `num_threads=1` y `warp_mem_limit=0` (~64 MB de caché) por defecto — fuerza a GDAL a hacer muchas pasadas chicas en un solo hilo para un archivo de varios GB. Se agregó `num_threads=4` y `warp_mem_limit=512` (MB) a las dos llamadas a `reproject()` en `workers/gis/reproyeccion.py` (`_WARP_NUM_THREADS`/`_WARP_MEM_LIMIT_MB`, valores conservadores a propósito porque el worker corre con `concurrency=16` y varias tasks podrían reproyectar a la vez). **Importante:** esto ataca el costo de la reproyección en sí — es distinto del fix del lock (que evita *duplicar* ese costo) y del fix del downsample (que evita el OOM al *calcular el índice* después). Los tres fixes son complementarios, no alternativos.
+
+**Vuelo real recuperado:** el vuelo que había quedado trabado (ver bug 2 más arriba) se corrigió a mano en la base; el reintento posterior falló limpiamente con el bug 3 recién descrito (ya con mensaje de error claro en vez de SIGKILL) — la caché del archivo ya reproyectado sobrevivió ambos intentos fallidos, así que el próximo "Reintentar" del usuario debería saltarse directo a la lectura de bandas (ahora corregida) sin volver a pagar los ~15 min de reproyección.
+
+**Problema abierto nuevo:** no hay ninguna prueba automatizada contra un archivo con dtype entero real de gran tamaño en CI (solo el test sintético agregado) — el bug 3 solo apareció al probar contra producción. Vale la pena, en algún momento, sumar un fixture de test más representativo de archivos reales (dtype entero + tamaño que cruce el umbral) en vez de depender de probar contra producción para encontrar este tipo de bug.
+
+**Addendum 2026-08-28 — Bug 4, el usuario nunca podía ni empezar a procesar `ORTOMOSAICO.tif` (2.57 GB):** con los bugs 1-3 ya resueltos, el pipeline en sí funcionaba, pero el archivo nunca llegaba a encolarse — la **subida** (`POST /lotes/{id}/vuelos`, `multipart/form-data`) tardaba **42 minutos** para 2.57 GB (~1 MB/s) y para cuando terminaba el JWT ya había expirado (access token: 30 min), así que la request moría con 401 antes de que el endpoint corriera. El usuario reportó "nunca lo pude procesar" — no era el pipeline GIS, era la subida.
+
+Diagnóstico por descarte (cada capa medida por separado): MinIO directo 62-92 MB/s, red host↔contenedor (Docker Desktop/WSL2) 74-92 MB/s en ambos sentidos, disco (escrituras chicas o grandes) 180-230 MB/s, `run_in_threadpool` ~1200 llamadas/s, `python_multipart.MultipartParser.write()` >1000 MB/s en aislado — todas las capas individuales eran rápidas. El síntoma solo aparecía en vivo, a través de `uvicorn`, y solo por encima de ~2 GiB: subidas de 200 MB y 1 GB (mismo endpoint, mismo contenedor) andaban a 78-88 MB/s; 2.2 GB se colgaba igual que el archivo real. **Causa raíz:** `httptools` (parser HTTP por defecto de `uvicorn[standard]`) tiene un bug de rendimiento severo con request bodies mayores a 2³¹ bytes (2 GiB) — confirmado subiendo el mismo archivo de prueba de 2.2 GB contra una instancia de `uvicorn` corriendo con `--http h11` en vez de `httptools`: 12.4s (177 MB/s) vs. >10 min con `httptools`.
+
+**Fix:** agregar `--http h11` al comando de `uvicorn` en el servicio `api` de `docker-compose.yml`. Verificado con el archivo real: la subida completa de `ORTOMOSAICO.tif` (2.57 GB) pasó de 42+ min (con 401 final) a **1m27s**. Con eso, el pipeline completo (descarga MinIO 27.5s → reproyección ~14 min, one-time y cacheada → cálculo de índices) corrió de punta a punta por primera vez con este archivo: NDVI completó en 1281.7s totales (incluye la reproyección de la primera vez), NDRE reusando la caché en 113s.
+
+**Problema abierto nuevo:** confirmado en vivo (dos vuelos con archivos de ~2.5 GB procesando en simultáneo durante esta prueba) que el worker llegó a 4.4 GiB / 7.4 GiB (59%) con solo 2 tasks pesadas concurrentes — refuerza el problema abierto #3 (sin `mem_limit` ni concurrencia acotada). No se tocó en esta tarea.
+
+---
+
 ## Tareas en progreso
 
 _Ir completando a medida que avanza el desarrollo._
@@ -648,7 +783,7 @@ _Ir completando a medida que avanza el desarrollo._
 | Frontend — modal carga GeoTIFF | _nombre_ | completado | main |
 | Frontend — dashboard de resultados (mapa + tabla) | _nombre_ | completado | main |
 | Optimización de rendimiento del pipeline GIS | _nombre_ | completado | feat/optimizar-pipeline |
-| Motor de diagnóstico (RFDR-01) | _nombre_ | pendiente | — |
+| Motor de diagnóstico (RFDR-01) | _nombre_ | completado (sin persistencia, ver Problemas abiertos) | main |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
 
 ---
@@ -821,6 +956,8 @@ _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._
 | # | Descripción | Impacto | Detectado |
 |---|---|---|---|
 | 1 | Test E2E (`test_ciclo_completo_encolar_y_esperar`) no corre en CI — necesita MinIO + worker | Bajo — pasa localmente, demostrable en la demo | 2026-07-01 |
+| 2 | Motor de diagnóstico sin persistencia — cada `GET .../diagnostico` recalcula on-demand contra los GeoJSON en MinIO, sin tabla de zonas/diagnósticos ni historial entre vuelos. Bloquea RFGL-03 (distinguir patrones persistentes de episódicos) y el criterio técnico versionable de RFDR-04 (aceptar/modificar/rechazar). Planificado para release 4 con una entidad "zona" unificada y persistida. | Medio — funcional para demo, no para producción con historial multi-vuelo | 2026-08-27 |
+| 3 | El worker no tiene `mem_limit` en `docker-compose.yml` ni concurrencia acotada a la RAM disponible (`concurrency` de Celery hereda el conteo de CPUs, hoy 16). Con Docker Desktop en 7.4 GiB totales compartidos con db/redis/minio/api/frontend, varias tasks pesadas concurrentes (imágenes de varios GB) todavía pueden competir por memoria y provocar un SIGKILL por OOM, aunque ya no dupliquen trabajo entre sí (ver fix del 2026-08-28). Mitigación pendiente: `mem_limit` explícito + `--concurrency` acorde, o una cola/prioridad separada para archivos grandes. | Alto — un archivo lo bastante grande puede seguir matando el worker | 2026-08-28 |
 
 ---
 
@@ -837,6 +974,8 @@ _Registro de las decisiones importantes que no son obvias desde el código._
 | Celery con `result_backend` en Redis | Solo broker sin backend | El polling de `/analisis/{id}/estado` necesita `AsyncResult` para leer el estado; sin `result_backend` siempre devuelve PENDING |
 | Cast a `float32` antes de `features.shapes()` | Pasar el array NDVI directamente (float64) | `rasterio.features.shapes()` rechaza `float64` e `int8` — confirmado en docs de Rasterio (Context7 2026-06-26) |
 | `rasterio.band(src, n)` en vectorización de archivos grandes | `src.read()` + `shapes()` | Evita cargar el array completo en memoria RAM antes de vectorizar; crítico para GeoTIFFs > 500 MB |
+| Motor de diagnóstico sin GeoPandas, con Shapely + proyección local equirectangular | Usar GeoPandas (como `workers/gis/zonas.py`) también en `app/diagnostico/` | El motor corre dentro del proceso FastAPI, que no tiene GeoPandas/GDAL instalados a propósito (`docker/requirements.api.txt` los reserva al worker). Confirmado por error real (`ModuleNotFoundError`) al testear contra el contenedor `api`. |
+| NDVI como partición espacial canónica del motor de reglas; NDRE/GNDVI/SAVI/ExG se resuelven por overlay geométrico ponderado por área en vez de re-vectorizar por regla | Persistir una entidad "zona" unificada entre índices | NDVI siempre existe (se calcula al subir el vuelo); evita duplicar geometrías para reglas multi-índice (R10, R44) a costa de resolución reducida cuando NDVI ya está saturado (afecta solo a R21/GNDVI) — limitación aceptada y documentada, a resolver junto con la persistencia en release 4. |
 
 ---
 

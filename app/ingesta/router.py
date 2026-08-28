@@ -14,6 +14,8 @@ from app.ingesta.schemas import (
     IndiceAnalisisItem,
     IndiceAnalisisRequest,
     IndiceEstadoResponse,
+    IndicesBatchIniciarResponse,
+    IndicesBatchRequest,
     InspeccionGeotiffResponse,
     LoteDesdeGeotiffResponse,
     VueloListItem,
@@ -361,6 +363,48 @@ async def analizar_indice_vuelo(
         estado=analisis.estado,
         task_id=analisis.task_id,
     )
+
+
+@router.post(
+    "/{lote_id}/vuelos/{vuelo_id}/indices/batch",
+    response_model=IndicesBatchIniciarResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Analizar varios índices adicionales en una sola corrida (evita releer el GeoTIFF por índice)",
+)
+async def analizar_indices_batch_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    data: IndicesBatchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    if not vuelo.archivo_original:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El vuelo no tiene un archivo original disponible para analizar.",
+        )
+
+    # NDVI ya se calcula automáticamente al subir el vuelo — no hay nada
+    # nuevo que encolar para ese índice dentro del batch.
+    indices_a_encolar = [i for i in data.indices if i != IndiceEnum.ndvi]
+    if not indices_a_encolar:
+        return IndicesBatchIniciarResponse(items=[], mensaje="Nada para encolar (NDVI ya se calcula al subir).")
+
+    filas = await service.crear_analisis_indices_batch(db, vuelo, indices_a_encolar, data.metodo_umbral)
+    await db.commit()
+
+    return IndicesBatchIniciarResponse(items=[
+        IndiceAnalisisIniciarResponse(indice=f.indice, estado=f.estado, task_id=f.task_id)
+        for f in filas
+    ])
 
 
 @router.get(

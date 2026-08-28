@@ -68,7 +68,11 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --http h11: el parser por defecto (httptools) tiene un bug de
+    # rendimiento severo con bodies > 2 GiB (2^31 bytes) — un upload de un
+    # GeoTIFF de ~2.7 GB tarda minutos en vez de segundos. h11 no tiene ese
+    # problema (probado: mismo archivo, 12s con h11 vs 40+ min con httptools).
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --http h11
 
   frontend:
     build:

@@ -1,0 +1,175 @@
+"""
+Tests del endpoint GET /lotes/{id}/vuelos/{id}/diagnostico.
+
+Mismo criterio que test_vuelos_estado.py: los vuelos se insertan
+directamente en la BD (sin MinIO ni Celery) para testear la capa HTTP sin
+depender del stack completo. El camino feliz (regla que efectivamente
+matchea sobre un GeoJSON real) está cubierto por test_diagnostico_engine.py
+(motor puro) y test_forma.py (patrón espacial) — acá se cubren los 404 y
+la integración de la capa HTTP/ownership.
+
+Correr en el contenedor api:
+    docker compose exec api python3 -m pytest tests/test_diagnostico_api.py -v
+
+Correr en CI o local (con DB levantada):
+    PYTHONPATH=$(pwd) python3 -m pytest tests/test_diagnostico_api.py -v
+"""
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import create_engine, text
+from starlette.testclient import TestClient
+
+from app.core.config import settings
+from app.main import app
+
+_EMAIL = f"diagnostico_{uuid.uuid4().hex[:8]}@agronexo-test.com"
+_PASS = "diagnostico_pass_123"
+_GEOM = {
+    "type": "Polygon",
+    "coordinates": [[
+        [-60.6753, -27.4693],
+        [-60.6701, -27.4693],
+        [-60.6701, -27.4741],
+        [-60.6753, -27.4741],
+        [-60.6753, -27.4693],
+    ]],
+}
+
+# El TestClient se abre en setup_module y se cierra en teardown_module para
+# mantener el mismo event loop de anyio en todas las llamadas del módulo.
+_tc = TestClient(app)
+_token: str = ""
+_lote_id: str = ""
+
+
+def setup_module(module):
+    global _token, _lote_id
+    from app.core.database import engine as _engine
+    _engine.sync_engine.dispose(close=False)
+    _tc.__enter__()
+    _tc.post("/api/v1/auth/register", json={
+        "email": _EMAIL, "nombre": "Test Diagnostico", "password": _PASS,
+    })
+    r = _tc.post("/api/v1/auth/login", json={"email": _EMAIL, "password": _PASS})
+    assert r.status_code == 200, f"setup_module login falló: {r.status_code} {r.text}"
+    _token = r.json()["access_token"]
+
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Para Tests de Diagnostico",
+        "cultivo": "soja",
+        "estadio_fenologico": "R2",
+        "geometry": _GEOM,
+    }, headers={"Authorization": f"Bearer {_token}"})
+    assert r.status_code == 201, f"setup_module crear lote falló: {r.text}"
+    _lote_id = r.json()["id"]
+
+
+def teardown_module(module):
+    _tc.__exit__(None, None, None)
+
+
+def _auth() -> dict:
+    return {"Authorization": f"Bearer {_token}"}
+
+
+def _insertar_vuelo(lote_id: str, estado: str = "pendiente", geojson_key: str | None = None) -> str:
+    """Inserta un vuelo directamente en la BD, sin pasar por MinIO ni Celery."""
+    vuelo_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    engine = create_engine(settings.database_url_sync)
+    with engine.connect() as conn:
+        conn.execute(text(
+            "INSERT INTO vuelos (id, lote_id, sensor, fecha_vuelo, estado, geojson_key, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), :sensor, :fecha, :estado, :geojson_key, :created_at)"
+        ), {
+            "id": vuelo_id,
+            "lote_id": lote_id,
+            "sensor": "dji_mavic3",
+            "fecha": now,
+            "estado": estado,
+            "geojson_key": geojson_key,
+            "created_at": now,
+        })
+        conn.commit()
+    engine.dispose()
+    return vuelo_id
+
+
+# ── 404 por estado del vuelo ─────────────────────────────────────────
+
+def test_diagnostico_vuelo_pendiente_es_404():
+    vuelo_id = _insertar_vuelo(_lote_id, "pendiente")
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo pendiente → 404")
+
+
+def test_diagnostico_vuelo_procesando_es_404():
+    vuelo_id = _insertar_vuelo(_lote_id, "procesando")
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo procesando → 404")
+
+
+def test_diagnostico_vuelo_error_es_404():
+    vuelo_id = _insertar_vuelo(_lote_id, "error")
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo en error → 404")
+
+
+def test_diagnostico_vuelo_completado_sin_geojson_es_404():
+    # completado pero sin geojson_key (worker no llegó a guardar el resultado)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key=None)
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo completado sin geojson_key → 404")
+
+
+# ── 404 por lote/vuelo inexistente o ajeno ───────────────────────────
+
+def test_diagnostico_vuelo_inexistente():
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{uuid.uuid4()}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo inexistente → 404")
+
+
+def test_diagnostico_lote_inexistente():
+    r = _tc.get(f"/api/v1/lotes/{uuid.uuid4()}/vuelos/{uuid.uuid4()}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico lote inexistente → 404")
+
+
+def test_diagnostico_vuelo_de_otro_lote_es_404():
+    # Un vuelo real, pero consultado con un lote_id que no es el suyo —
+    # nunca debe filtrar existencia con 403.
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="alguna/key.geojson")
+    r = _tc.get(f"/api/v1/lotes/{uuid.uuid4()}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /diagnostico vuelo con lote_id ajeno → 404")
+
+
+# ── Auth ──────────────────────────────────────────────────────────────
+
+def test_diagnostico_sin_auth():
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{uuid.uuid4()}/diagnostico")
+    assert r.status_code == 401
+    print("✓ GET /diagnostico sin token → 401")
+
+
+if __name__ == "__main__":
+    setup_module(None)
+    try:
+        print("\n── Diagnóstico: casos 404 y auth ────────────────────")
+        test_diagnostico_vuelo_pendiente_es_404()
+        test_diagnostico_vuelo_procesando_es_404()
+        test_diagnostico_vuelo_error_es_404()
+        test_diagnostico_vuelo_completado_sin_geojson_es_404()
+        test_diagnostico_vuelo_inexistente()
+        test_diagnostico_lote_inexistente()
+        test_diagnostico_vuelo_de_otro_lote_es_404()
+        test_diagnostico_sin_auth()
+        print("\nTodos los tests de diagnóstico pasaron.\n")
+    finally:
+        teardown_module(None)

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import client from '../api/client'
-import { obtenerZonas } from '../api/analisis'
+import { obtenerDiagnostico, obtenerZonas } from '../api/analisis'
 import MapaZonas from '../components/MapaZonas'
+import TablaDiagnostico from '../components/TablaDiagnostico'
 import TablaZonas from '../components/TablaZonas'
 
 const SENSOR_LABELS = {
@@ -23,6 +24,11 @@ export default function ResultadosVuelo() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
+  const [tab, setTab] = useState('zonas')
+  const [diagnostico, setDiagnostico] = useState(null)
+  const [diagnosticoLoading, setDiagnosticoLoading] = useState(false)
+  const [diagnosticoError, setDiagnosticoError] = useState('')
+
   useEffect(() => {
     Promise.all([
       client.get(`/lotes/${loteId}`).then(r => r.data),
@@ -37,6 +43,16 @@ export default function ResultadosVuelo() {
       .catch(() => setError('No se pudieron cargar los resultados del análisis.'))
       .finally(() => setLoading(false))
   }, [loteId, vueloId])
+
+  useEffect(() => {
+    if (tab !== 'diagnostico' || diagnostico || diagnosticoLoading) return
+    setDiagnosticoLoading(true)
+    setDiagnosticoError('')
+    obtenerDiagnostico(loteId, vueloId)
+      .then(setDiagnostico)
+      .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
+      .finally(() => setDiagnosticoLoading(false))
+  }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
 
   if (loading) return <div className="page-loading">Cargando resultados...</div>
 
@@ -91,10 +107,34 @@ export default function ResultadosVuelo() {
         </div>
 
         <div className="resultados-sidebar">
-          {features.length > 0
-            ? <TablaZonas features={features} />
-            : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
-          }
+          <div className="resultados-tabs">
+            <button
+              className={`resultados-tab ${tab === 'zonas' ? 'resultados-tab--activo' : ''}`}
+              onClick={() => setTab('zonas')}
+            >
+              Zonas
+            </button>
+            <button
+              className={`resultados-tab ${tab === 'diagnostico' ? 'resultados-tab--activo' : ''}`}
+              onClick={() => setTab('diagnostico')}
+            >
+              Diagnóstico
+            </button>
+          </div>
+
+          {tab === 'zonas' && (
+            features.length > 0
+              ? <TablaZonas features={features} />
+              : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
+          )}
+
+          {tab === 'diagnostico' && (
+            <>
+              {diagnosticoLoading && <p className="empty-hint">Generando diagnóstico...</p>}
+              {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
+              {diagnostico && <TablaDiagnostico diagnostico={diagnostico} />}
+            </>
+          )}
         </div>
       </main>
     </div>

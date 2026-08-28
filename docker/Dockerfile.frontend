@@ -2,6 +2,14 @@ FROM node:20-slim
 
 WORKDIR /app
 
+# Certificado raíz de Avast (SSL/TLS scanning) — sin esto, npm no puede
+# verificar HTTPS al registry en máquinas con Avast interceptando TLS.
+COPY docker/certs/avast-root.crt /usr/local/share/ca-certificates/avast-root.crt
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ENV NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/avast-root.crt
+
 COPY frontend/package.json .
 RUN npm install
 

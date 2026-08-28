@@ -107,7 +107,16 @@ def vectorizar_zonas(
     crs = meta["crs"]
     out_shape = ndvi.shape
 
-    tolerancia = abs(transform.a) * 0.5
+    # 0.5px daba polígonos con cientos de miles de vértices en rasters reales
+    # ruidosos (una sola zona de 28 ha con 383k vértices, medido contra
+    # ORTOMOSAICO.tif — ver docs/release-v1.0.0.md 2026-08-28) porque a esa
+    # tolerancia casi no se limpia el patrón "escalera" de los bordes de
+    # píxeles. 2px sigue siendo indistinguible a la escala de un mapa web y
+    # reduce el costo de las intersecciones geométricas del motor de
+    # diagnóstico (app/diagnostico/service.py) — no elimina el problema en
+    # rasters extremadamente ruidosos (ahí la simplificación por sí sola no
+    # alcanza, ver mismo doc), pero ayuda al caso general sin distorsionar la forma.
+    tolerancia = abs(transform.a) * 2
 
     filas = []
     # Una sola pasada sobre el raster en lugar de 4 (una por clase):

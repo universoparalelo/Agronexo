@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import os
 import tempfile
 import time
 
@@ -71,8 +72,6 @@ def _optimizar_si_necesario(src_path: str) -> str:
     Retorna src_path si el archivo ya está en formato óptimo (sin I/O extra).
     Si necesita optimización, borra el original y retorna la ruta del nuevo archivo.
     """
-    import os
-
     with rasterio.open(src_path) as src:
         ya_comprimido = src.profile.get("compress") is not None
         ya_tileado = src.profile.get("tiled", False)
@@ -116,6 +115,201 @@ def _optimizar_si_necesario(src_path: str) -> str:
     )
     os.unlink(src_path)
     return dst_path
+
+
+def _key_preparado(minio_key: str) -> str:
+    """
+    {usuario}/{lote}/{vuelo}/original.tif -> {usuario}/{lote}/{vuelo}/preparado_4326.tif
+
+    Cachea el archivo ya optimizado (tileado+comprimido) y reproyectado a
+    EPSG:4326 en MinIO. Sin esto, cada índice adicional (NDRE/SAVI/ExG/GNDVI)
+    pedido sobre el mismo vuelo repetía desde cero la descarga del original
+    completo, la recompresión y la reproyección — pasos costosos que dan
+    exactamente el mismo resultado sin importar qué índice se calcule después.
+    """
+    partes = minio_key.rsplit("/", 1)
+    prefijo = partes[0] if len(partes) > 1 else ""
+    return f"{prefijo}/preparado_4326.tif" if prefijo else "preparado_4326.tif"
+
+
+def _preparar_geotiff(tiff_path: str) -> str:
+    """
+    Deja el archivo listo para el pipeline: reproyectado a EPSG:4326 (si
+    hace falta) y tileado+comprimido.
+
+    Si hace falta reproyectar, reproyectar_a_4326_archivo() ya escribe el
+    resultado tileado+comprimido — correr _optimizar_si_necesario después
+    reescribiría el archivo por segunda vez para nada. Si ya está en 4326,
+    solo hace falta el paso de optimización.
+    """
+    from workers.gis.reproyeccion import necesita_reproyeccion, reproyectar_a_4326_archivo
+
+    with rasterio.open(tiff_path) as src:
+        hace_falta_reproyectar = necesita_reproyeccion(src)
+
+    if not hace_falta_reproyectar:
+        return _optimizar_si_necesario(tiff_path)
+
+    dst_path = tiff_path + ".repro.tif"
+    resultado = reproyectar_a_4326_archivo(tiff_path, dst_path)
+    if resultado != tiff_path:
+        os.unlink(tiff_path)
+    return resultado
+
+
+def _descargar_preparado(minio_key: str, tiff_path: str) -> bool:
+    """
+    Descarga a tiff_path el archivo listo para procesar. Si ya existe una
+    versión preparada en caché (ver _key_preparado), la descarga directamente
+    y devuelve True — el caller debe saltear validación/optimización/
+    reproyección, ya se hicieron la primera vez que se procesó este vuelo.
+    Si no hay caché, descarga el original tal cual y devuelve False.
+    """
+    from app.core.storage import download_geotiff_to_file, object_exists
+
+    key_cache = _key_preparado(minio_key)
+    if object_exists(key_cache):
+        logger.info("[task] GeoTIFF preparado encontrado en caché: %s", key_cache)
+        download_geotiff_to_file(key_cache, tiff_path)
+        return True
+
+    download_geotiff_to_file(minio_key, tiff_path)
+    return False
+
+
+def _guardar_preparado_en_cache(minio_key: str, tiff_path: str) -> None:
+    """Sube el archivo ya preparado a la caché — best-effort, nunca bloquea el pipeline."""
+    from app.core.storage import upload_file
+
+    try:
+        t0 = time.perf_counter()
+        upload_file(_key_preparado(minio_key), tiff_path, content_type="image/tiff")
+        logger.info("[task] GeoTIFF preparado guardado en caché: %.2fs", time.perf_counter() - t0)
+    except Exception as exc:
+        logger.warning("[task] no se pudo guardar el GeoTIFF preparado en caché: %s", exc)
+
+
+# TTL del lock de preparación en Redis — cota superior generosa para un
+# archivo de varios GB (optimizar+reproyectar puede tardar minutos). Si el
+# holder del lock muere sin liberarlo, expira solo y no queda trabado.
+_LOCK_PREP_TTL_S = 1800
+_LOCK_PREP_POLL_S = 3
+
+
+def _cliente_redis_lock():
+    import redis
+    from app.core.config import settings
+    return redis.from_url(settings.celery_broker_url)
+
+
+def _esperar_preparacion_en_curso(key_cache: str, lock_key: str, r, self_task) -> bool:
+    """
+    Sondea hasta _LOCK_PREP_TTL_S esperando que la task que tiene el lock
+    termine de optimizar/reproyectar el archivo. Devuelve True si encontró
+    la caché lista (el caller debe descargarla en vez de reproyectar de
+    nuevo); False si hay que tomar el lock y prepararlo uno mismo (timeout,
+    o el que tenía el lock lo soltó sin dejar caché — falló).
+    """
+    from app.core.storage import object_exists
+
+    self_task.update_state(state="PROGRESS", meta={
+        "progreso": 12,
+        "mensaje": "Esperando preparación en curso de otro análisis de este mismo vuelo",
+    })
+    t_espera = time.perf_counter()
+    while time.perf_counter() - t_espera < _LOCK_PREP_TTL_S:
+        if object_exists(key_cache):
+            logger.info(
+                "[task] otro análisis del mismo vuelo ya preparó el archivo (%.0fs esperados) — se reusa en vez de reproyectar de nuevo",
+                time.perf_counter() - t_espera,
+            )
+            return True
+        if r.exists(lock_key) == 0:
+            return False
+        time.sleep(_LOCK_PREP_POLL_S)
+    return False
+
+
+def _preparar_archivo_para_pipeline(minio_key: str, tiff_path: str, self_task, marcar_error) -> str:
+    """
+    Descarga (con caché, ver _descargar_preparado) + valida + optimiza/
+    reproyecta un GeoTIFF antes de correr el pipeline sobre él. Compartido
+    por procesar_vuelo, analizar_indice y analizar_indices_batch para no
+    triplicar este preámbulo — es idéntico en los tres, solo cambia a quién
+    se le reporta el error si algo falla.
+
+    Devuelve la ruta final a usar (puede diferir de tiff_path si
+    _preparar_geotiff generó un archivo nuevo). Si falla la descarga o la
+    validación, llama a marcar_error(mensaje), borra tiff_path y re-lanza.
+
+    El paso de optimizar/reproyectar está protegido por un lock en Redis
+    (por vuelo): al subir un vuelo con varios índices tildados, NDVI
+    (procesar_vuelo) y el batch de índices adicionales (analizar_indices_batch)
+    se disparan casi al mismo tiempo, y sin este lock ambas tasks terminaban
+    reproyectando el mismo archivo de varios GB en paralelo — en archivos
+    pesados eso duplicaba el paso más caro del pipeline (minutos) en vez de
+    aprovechar la caché entre sí. Si Redis no está disponible por algún
+    motivo, se sigue sin lock (mismo comportamiento que antes) en vez de
+    bloquear el pipeline.
+    """
+    from app.core.storage import download_geotiff_to_file, object_exists
+
+    t_descarga = time.perf_counter()
+    try:
+        desde_cache = _descargar_preparado(minio_key, tiff_path)
+    except Exception as exc:
+        marcar_error(f"Error al descargar el archivo: {exc}")
+        os.unlink(tiff_path)
+        raise
+    size_mb = os.path.getsize(tiff_path) / 1_048_576
+    logger.info("[task] descarga MinIO (%.1f MB, cache=%s): %.2fs", size_mb, desde_cache, time.perf_counter() - t_descarga)
+
+    if desde_cache:
+        return tiff_path
+
+    key_cache = _key_preparado(minio_key)
+    lock_key = f"prep_lock:{key_cache}"
+    lock_propio = False
+    r = None
+    try:
+        r = _cliente_redis_lock()
+        lock_propio = bool(r.set(lock_key, "1", nx=True, ex=_LOCK_PREP_TTL_S))
+        if not lock_propio:
+            if _esperar_preparacion_en_curso(key_cache, lock_key, r, self_task):
+                os.unlink(tiff_path)
+                download_geotiff_to_file(key_cache, tiff_path)
+                return tiff_path
+            lock_propio = bool(r.set(lock_key, "1", nx=True, ex=_LOCK_PREP_TTL_S))
+    except Exception as exc:
+        logger.warning("[task] lock de preparación (Redis) no disponible, se continúa sin dedupe: %s", exc)
+        r = None
+
+    try:
+        self_task.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
+        try:
+            _validar_geotiff_gis_archivo(tiff_path)
+        except Exception as exc:
+            mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
+            marcar_error(mensaje)
+            os.unlink(tiff_path)
+            raise ValueError(mensaje) from exc
+
+        self_task.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Optimizando y reproyectando"})
+        t_prep = time.perf_counter()
+        try:
+            tiff_path_preparado = _preparar_geotiff(tiff_path)
+        except Exception as exc:
+            logger.warning("[task] preparación GeoTIFF fallida, continuando con archivo original: %s", exc)
+            return tiff_path
+        logger.info("[task] preparación (optimizar+reproyectar): %.2fs", time.perf_counter() - t_prep)
+        _guardar_preparado_en_cache(minio_key, tiff_path_preparado)
+        return tiff_path_preparado
+    finally:
+        if lock_propio and r is not None:
+            try:
+                r.delete(lock_key)
+            except Exception:
+                pass
 
 
 def _validar_geotiff_gis(data: bytes) -> dict:
@@ -205,10 +399,8 @@ def _validar_geotiff_gis_desde_src(src) -> dict:
     default_retry_delay=30,
 )
 def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str = "ndvi", lote_id: str | None = None, metodo_umbral: str = "fijo", area_minima_m2: int = 10_000) -> dict:
-    import os
-    from app.core.storage import download_geotiff_to_file, upload_bytes
+    from app.core.storage import upload_bytes
     from workers.gis.pipeline import ejecutar_pipeline_archivo
-    from workers.gis.reproyeccion import reproyectar_a_4326_archivo
 
     self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
 
@@ -217,47 +409,20 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
     tiff_path = tiff_tmp.name
     tiff_tmp.close()
 
-    t_descarga = time.perf_counter()
-    try:
-        download_geotiff_to_file(minio_key, tiff_path)
-    except Exception as exc:
-        _actualizar_vuelo(vuelo_id, "error", f"Error al descargar el archivo: {exc}")
-        os.unlink(tiff_path)
-        raise
-    size_mb = os.path.getsize(tiff_path) / 1_048_576
-    logger.info("[task] descarga MinIO (%.1f MB): %.2fs", size_mb, time.perf_counter() - t_descarga)
-
-    self.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
-
-    try:
-        _validar_geotiff_gis_archivo(tiff_path)
-    except Exception as exc:
-        mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
-        _actualizar_vuelo(vuelo_id, "error", mensaje)
-        os.unlink(tiff_path)
-        raise ValueError(mensaje) from exc
-
-    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Optimizando formato del archivo"})
-    try:
-        tiff_path = _optimizar_si_necesario(tiff_path)
-    except Exception as exc:
-        # No es crítico — el pipeline puede funcionar igual, solo más lento
-        logger.warning("[task] optimización GeoTIFF fallida, continuando con archivo original: %s", exc)
+    tiff_path = _preparar_archivo_para_pipeline(
+        minio_key, tiff_path, self,
+        marcar_error=lambda msg: _actualizar_vuelo(vuelo_id, "error", msg),
+    )
 
     if lote_id:
         try:
-            repro_tmp = tiff_path + ".bounds_repro.tif"
-            path_4326 = reproyectar_a_4326_archivo(tiff_path, repro_tmp)
-            with rasterio.open(path_4326) as src:
+            # A esta altura tiff_path ya está garantizado en EPSG:4326
+            # (recién preparado, o descargado directo de la caché) — no
+            # hace falta reproyectar de nuevo solo para leer los bounds.
+            with rasterio.open(tiff_path) as src:
                 b = src.bounds
                 wkt = f"POLYGON(({b.left} {b.bottom},{b.right} {b.bottom},{b.right} {b.top},{b.left} {b.top},{b.left} {b.bottom}))"
             _actualizar_lote_geometry(lote_id, wkt)
-            # Reemplazar tiff_path con el reproyectado para que el pipeline no lo haga de nuevo
-            if path_4326 != tiff_path:
-                os.unlink(tiff_path)
-                tiff_path = path_4326
-            elif os.path.exists(repro_tmp):
-                os.unlink(repro_tmp)
         except Exception:
             pass  # no bloquear el pipeline si falla la extracción de bounds
 
@@ -366,8 +531,7 @@ def analizar_indice(
     Reusa exactamente la misma lógica de pipeline; solo cambia dónde se
     guarda el resultado: fila propia en analisis_indices, no en vuelos.
     """
-    import os
-    from app.core.storage import download_geotiff_to_file, upload_bytes
+    from app.core.storage import upload_bytes
     from workers.gis.pipeline import ejecutar_pipeline_archivo
 
     self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
@@ -376,28 +540,10 @@ def analizar_indice(
     tiff_path = tiff_tmp.name
     tiff_tmp.close()
 
-    try:
-        download_geotiff_to_file(minio_key, tiff_path)
-    except Exception as exc:
-        _actualizar_analisis_indice(analisis_id, "error", f"Error al descargar el archivo: {exc}")
-        os.unlink(tiff_path)
-        raise
-
-    self.update_state(state="PROGRESS", meta={"progreso": 15, "mensaje": "Validando CRS y bandas"})
-
-    try:
-        _validar_geotiff_gis_archivo(tiff_path)
-    except Exception as exc:
-        mensaje = str(exc) if isinstance(exc, ValueError) else "El archivo no es un GeoTIFF válido o está dañado."
-        _actualizar_analisis_indice(analisis_id, "error", mensaje)
-        os.unlink(tiff_path)
-        raise ValueError(mensaje) from exc
-
-    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Optimizando formato del archivo"})
-    try:
-        tiff_path = _optimizar_si_necesario(tiff_path)
-    except Exception as exc:
-        logger.warning("[task] optimización GeoTIFF fallida, continuando con archivo original: %s", exc)
+    tiff_path = _preparar_archivo_para_pipeline(
+        minio_key, tiff_path, self,
+        marcar_error=lambda msg: _actualizar_analisis_indice(analisis_id, "error", msg),
+    )
 
     self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
 
@@ -447,6 +593,117 @@ def analizar_indice(
     )
 
     return {"analisis_id": analisis_id, "estadisticas": estadisticas}
+
+
+@celery_app.task(
+    bind=True,
+    name="workers.gis.tasks.analizar_indices_batch",
+    autoretry_for=(ConnectionError, OSError),
+    max_retries=3,
+    default_retry_delay=30,
+)
+def analizar_indices_batch(
+    self,
+    analisis_ids: dict[str, str],
+    minio_key: str,
+    sensor: str,
+    indices: list[str],
+    metodo_umbral: str = "fijo",
+    area_minima_m2: int = 10_000,
+) -> dict:
+    """
+    Calcula varios índices adicionales sobre un mismo vuelo en una sola
+    corrida: descarga el GeoTIFF una vez y lee cada banda una vez (NIR se
+    comparte entre NDVI/NDRE/SAVI/GNDVI, RED entre NDVI/SAVI/ExG), en lugar
+    de repetir el pipeline completo por índice como hace analizar_indice.
+    Se usa cuando el usuario tilda varios índices a la vez al subir un
+    vuelo (ver ModalCargaGeoTIFF.jsx); analizar_indice sigue existiendo
+    para cuando se pide un único índice adicional después.
+
+    analisis_ids: {"ndre": "<uuid fila AnalisisIndice>", "savi": "<uuid>", ...}
+    — cada fila se actualiza de forma independiente a medida que su índice
+    termina, así que el polling por índice (GET .../indices/{indice}/estado)
+    sigue funcionando igual que con la task single.
+    """
+    from app.core.storage import upload_bytes
+    from workers.gis.pipeline import ejecutar_pipeline_multi_indice_archivo
+
+    self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Descargando archivo desde almacenamiento"})
+
+    tiff_tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+    tiff_path = tiff_tmp.name
+    tiff_tmp.close()
+
+    def _marcar_todos_error(mensaje: str) -> None:
+        for analisis_id in analisis_ids.values():
+            _actualizar_analisis_indice(analisis_id, "error", mensaje)
+
+    tiff_path = _preparar_archivo_para_pipeline(minio_key, tiff_path, self, marcar_error=_marcar_todos_error)
+
+    for analisis_id in analisis_ids.values():
+        _actualizar_analisis_indice(analisis_id, "procesando")
+    self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {len(indices)} índices"})
+
+    partes = minio_key.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
+    prefijo = "/".join(partes[:3])
+
+    geojson_paths: dict[str, str] = {}
+    for indice in indices:
+        tmp = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+        geojson_paths[indice] = tmp.name
+        tmp.close()
+
+    resultados: dict[str, dict] = {}
+    errores: dict[str, str] = {}
+
+    def _on_completado(indice: str, estadisticas: dict) -> None:
+        geojson_key_guardado: str | None = f"{prefijo}/zonas_{indice}.geojson"
+        try:
+            with open(geojson_paths[indice], "rb") as f:
+                geojson_bytes = f.read()
+            upload_bytes(geojson_key_guardado, geojson_bytes, content_type="application/geo+json")
+        except Exception as exc:
+            estadisticas["advertencia_upload"] = str(exc)
+            geojson_key_guardado = None
+        resultados[indice] = estadisticas
+        _actualizar_analisis_indice(
+            analisis_ids[indice], "completado",
+            geojson_key=geojson_key_guardado,
+            metodo_umbral=estadisticas.get("metodo_umbral"),
+        )
+        self.update_state(state="PROGRESS", meta={
+            "progreso": 30 + int(60 * (len(resultados) + len(errores)) / len(indices)),
+            "mensaje": f"{indice.upper()} completado",
+        })
+
+    def _on_error(indice: str, exc: Exception) -> None:
+        errores[indice] = str(exc)
+        _actualizar_analisis_indice(analisis_ids[indice], "error", f"Error en el pipeline GIS: {exc}")
+        self.update_state(state="PROGRESS", meta={
+            "progreso": 30 + int(60 * (len(resultados) + len(errores)) / len(indices)),
+            "mensaje": f"{indice.upper()} falló",
+        })
+
+    try:
+        ejecutar_pipeline_multi_indice_archivo(
+            path=tiff_path,
+            sensor=sensor,
+            indices=indices,
+            geojson_destino_por_indice=geojson_paths,
+            metodo_umbral=metodo_umbral,
+            area_minima_m2=area_minima_m2,
+            on_indice_completado=_on_completado,
+            on_indice_error=_on_error,
+        )
+    finally:
+        if os.path.exists(tiff_path):
+            os.unlink(tiff_path)
+        for p in geojson_paths.values():
+            if os.path.exists(p):
+                os.unlink(p)
+
+    self.update_state(state="PROGRESS", meta={"progreso": 100, "mensaje": "Procesamiento completado"})
+    return {"resultados": resultados, "errores": errores}
 
 
 # Tarea legacy — se mantiene por compatibilidad con tests existentes

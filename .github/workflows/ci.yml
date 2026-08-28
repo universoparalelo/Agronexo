@@ -103,6 +103,9 @@ jobs:
       - name: Tests estado y resultado de vuelos
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_vuelos_estado.py -v
 
+      - name: Tests motor de diagnostico (patron espacial + reglas + endpoint)
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_forma.py tests/test_diagnostico_engine.py tests/test_diagnostico_api.py -v
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI

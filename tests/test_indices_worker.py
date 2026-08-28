@@ -29,6 +29,29 @@ def _geotiff_multibanda(n_bandas: int, crs: CRS, dtype: str = "float32") -> byte
     return buf.getvalue()
 
 
+def _geotiff_grande_con_nodata(n: int, n_bandas: int = 4) -> bytes:
+    """
+    GeoTIFF sintético NxN con un borde de nodata, para probar la lectura
+    decimada de rasters grandes (ver _leer_banda) sin necesitar un archivo
+    de varios GB real en CI. n=3100 cruza _UMBRAL_DOWNSAMPLE_PX (9M px).
+    """
+    buf = io.BytesIO()
+    transform = from_bounds(-60.70, -27.50, -60.60, -27.40, n, n)
+    with rasterio.open(
+        buf, "w", driver="GTiff", height=n, width=n, count=n_bandas,
+        dtype="float32", crs=CRS.from_epsg(4326), transform=transform, nodata=-9999.0,
+    ) as dst:
+        for i in range(1, n_bandas + 1):
+            arr = np.full((n, n), fill_value=0.1 * i, dtype="float32")
+            borde = 5
+            arr[:borde, :] = -9999.0
+            arr[-borde:, :] = -9999.0
+            arr[:, :borde] = -9999.0
+            arr[:, -borde:] = -9999.0
+            dst.write(arr, i)
+    return buf.getvalue()
+
+
 def _geotiff_utm() -> bytes:
     """GeoTIFF con CRS UTM zona 21 Sur (EPSG:32721) para probar reproyección."""
     buf = io.BytesIO()
@@ -98,6 +121,17 @@ def test_exg_no_requiere_nir():
     esperado = 2 * 0.4 - 0.2 - 0.1  # 0.5
     assert np.allclose(resultado, esperado, atol=1e-5)
     print(f"✓ ExG = 2G-R-B → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+
+
+def test_gndvi_valor_conocido():
+    from workers.gis.indices import calcular_gndvi
+
+    nir = np.full((5, 5), 0.7, dtype=np.float32)
+    green = np.full((5, 5), 0.3, dtype=np.float32)
+    resultado = calcular_gndvi(nir, green)
+    esperado = (0.7 - 0.3) / (0.7 + 0.3)  # 0.4
+    assert np.allclose(resultado, esperado, atol=1e-5), f"GNDVI esperado {esperado:.4f}, got {resultado[0,0]:.4f}"
+    print(f"✓ GNDVI valor conocido → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
 
 
 def test_nodata_se_convierte_en_nan():
@@ -202,6 +236,158 @@ def test_pipeline_savi_sentinel2():
     print(f"✓ Pipeline SAVI Sentinel-2 → {stats['total_poligonos']} polígonos")
 
 
+def _archivo_temporal(data: bytes) -> str:
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+    tmp.write(data)
+    tmp.close()
+    return tmp.name
+
+
+def test_lectura_decimada_raster_grande_no_materializa_resolucion_completa():
+    """
+    Un raster por encima de _UMBRAL_DOWNSAMPLE_PX debe leerse ya decimado
+    por GDAL (out_shape + Resampling.average) en vez de leerse completo y
+    reducirse después en NumPy — así se evita materializar en RAM un array
+    a resolución completa que, en un GeoTIFF real de varios GB, puede tirar
+    el worker por out-of-memory. También verifica que el nodata del borde
+    no contamine el promedio con el valor crudo del sentinel.
+    """
+    from workers.gis.pipeline import _UMBRAL_DOWNSAMPLE_PX, _factor_downsample, _leer_banda
+
+    n = 3100  # 3100x3100 = 9.61M px > 9M -> factor=2
+    assert n * n > _UMBRAL_DOWNSAMPLE_PX
+
+    data = _geotiff_grande_con_nodata(n)
+    path = _archivo_temporal(data)
+
+    with rasterio.open(path) as src:
+        factor = _factor_downsample((src.height, src.width))
+        assert factor == 2, f"factor esperado 2, dio {factor}"
+        banda = _leer_banda(src, 1, factor)  # banda 1 -> valor de relleno 0.1
+
+    assert banda.shape == (n // factor, n // factor)
+    assert not np.any(banda == -9999.0), "el nodata crudo no debe filtrarse en el promedio decimado"
+    interior = banda[10:-10, 10:-10]
+    assert np.allclose(interior, 0.1, atol=1e-4), f"interior esperado ~0.1, dio min={interior.min()} max={interior.max()}"
+    print(f"✓ Lectura decimada x{factor}: {n}x{n} → {banda.shape}, sin materializar resolución completa ni filtrar nodata crudo")
+
+
+def test_lectura_decimada_dtype_entero_no_falla():
+    """
+    Bandas con dtype entero (uint8/uint16 — DN crudo típico de dron/satélite
+    sin calibrar a reflectancia) no deben fallar al decimar. Bug real
+    encontrado con un archivo de producción: el cast a float32 tiene que
+    pasar ANTES de rellenar con NaN, porque un array entero no puede
+    representar NaN (`np.ma.filled` lanza TypeError si se hace al revés).
+    """
+    from workers.gis.pipeline import _factor_downsample, _leer_banda
+
+    n = 3100  # cruza el umbral de downsample -> fuerza la lectura decimada
+    buf = io.BytesIO()
+    transform = from_bounds(-60.70, -27.50, -60.60, -27.40, n, n)
+    with rasterio.open(
+        buf, "w", driver="GTiff", height=n, width=n, count=1,
+        dtype="uint8", crs=CRS.from_epsg(4326), transform=transform, nodata=0,
+    ) as dst:
+        arr = np.full((n, n), fill_value=100, dtype="uint8")
+        arr[:5, :] = 0  # borde nodata
+        dst.write(arr, 1)
+    path = _archivo_temporal(buf.getvalue())
+
+    with rasterio.open(path) as src:
+        factor = _factor_downsample((src.height, src.width))
+        banda = _leer_banda(src, 1, factor)  # no debe lanzar TypeError
+
+    assert banda.dtype == np.float32
+    interior = banda[10:-10, 10:-10]
+    assert np.allclose(interior, 100, atol=1.0), f"interior esperado ~100, dio min={interior.min()} max={interior.max()}"
+    print(f"✓ Lectura decimada con dtype entero (uint8) no falla → banda.dtype={banda.dtype}")
+
+
+def test_pipeline_archivo_grande_completa_sin_cargar_resolucion_completa():
+    """Pipeline completo end-to-end sobre un raster por encima del umbral —
+    confirma que ejecutar_pipeline_archivo no intenta calcular el índice
+    sobre la resolución original (fallaría/tardaría mucho en un raster real
+    de varios GB) sino sobre la ya decimada."""
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline_archivo
+
+    n = 3100
+    data = _geotiff_grande_con_nodata(n, n_bandas=4)  # dji_mavic3: G=1,R=2,RE=3,NIR=4
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats = ejecutar_pipeline_archivo(
+            _archivo_temporal(data), sensor="dji_mavic3", indice="ndvi", geojson_destino=tmp.name,
+        )
+
+    # NIR=0.4, RED=0.2 -> ndvi = (0.4-0.2)/(0.4+0.2) = 0.3333
+    assert abs(stats["ndvi_promedio_lote"] - 0.3333) < 0.01
+    print(f"✓ Pipeline en raster grande ({n}x{n}) completó sin cargar resolución completa → NDVI prom={stats['ndvi_promedio_lote']}")
+
+
+def test_pipeline_multi_indice_bandas_compartidas():
+    """El modo batch (que comparte NIR/RED entre índices en vez de releerlas
+    por cada uno) debe dar exactamente el mismo resultado que llamar al
+    pipeline individual una vez por índice."""
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline_archivo, ejecutar_pipeline_multi_indice_archivo
+
+    data = _geotiff_multibanda(8, CRS.from_epsg(4326))  # sentinel2: NIR=8, RED=4
+
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats_ndvi_individual = ejecutar_pipeline_archivo(
+            _archivo_temporal(data), sensor="sentinel2", indice="ndvi", geojson_destino=tmp.name,
+        )
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats_savi_individual = ejecutar_pipeline_archivo(
+            _archivo_temporal(data), sensor="sentinel2", indice="savi", geojson_destino=tmp.name,
+        )
+
+    geojson_ndvi = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+    geojson_ndvi.close()
+    geojson_savi = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+    geojson_savi.close()
+    resultados = ejecutar_pipeline_multi_indice_archivo(
+        _archivo_temporal(data), sensor="sentinel2", indices=["ndvi", "savi"],
+        geojson_destino_por_indice={"ndvi": geojson_ndvi.name, "savi": geojson_savi.name},
+    )
+
+    assert resultados["ndvi"]["ndvi_promedio_lote"] == stats_ndvi_individual["ndvi_promedio_lote"]
+    assert resultados["ndvi"]["total_poligonos"] == stats_ndvi_individual["total_poligonos"]
+    assert resultados["savi"]["savi_promedio_lote"] == stats_savi_individual["savi_promedio_lote"]
+    assert resultados["savi"]["total_poligonos"] == stats_savi_individual["total_poligonos"]
+    print("✓ Batch multi-índice (bandas compartidas) → mismos resultados que pipeline individual por índice")
+
+
+def test_pipeline_multi_indice_error_no_aborta_batch():
+    """Un índice que falla dentro del batch (banda no disponible para el
+    sensor) no debe impedir que los demás índices de la lista se calculen."""
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline_multi_indice_archivo
+
+    # DJI Mavic3 real: 4 bandas, sin Blue — ExG la necesita y debe fallar,
+    # NDVI no la necesita y debe completarse igual.
+    data = _geotiff_multibanda(4, CRS.from_epsg(4326))
+
+    geojson_ndvi = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+    geojson_ndvi.close()
+    geojson_exg = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
+    geojson_exg.close()
+
+    completados, errores = [], []
+    resultados = ejecutar_pipeline_multi_indice_archivo(
+        _archivo_temporal(data), sensor="dji_mavic3", indices=["ndvi", "exg"],
+        geojson_destino_por_indice={"ndvi": geojson_ndvi.name, "exg": geojson_exg.name},
+        on_indice_completado=lambda i, s: completados.append(i),
+        on_indice_error=lambda i, exc: errores.append(i),
+    )
+
+    assert "ndvi" in resultados and "exg" not in resultados
+    assert completados == ["ndvi"]
+    assert errores == ["exg"]
+    print("✓ Batch multi-índice: ExG sin banda Blue falla sin abortar el resto — NDVI se calculó igual")
+
+
 if __name__ == "__main__":
     print("\n── Índices ──────────────────────────────────────────")
     test_ndvi_valor_conocido()
@@ -209,6 +395,7 @@ if __name__ == "__main__":
     test_ndre_rango_valido()
     test_savi_difiere_de_ndvi()
     test_exg_no_requiere_nir()
+    test_gndvi_valor_conocido()
     test_nodata_se_convierte_en_nan()
 
     print("\n── Mapeo de bandas ──────────────────────────────────")
@@ -224,5 +411,14 @@ if __name__ == "__main__":
     print("\n── Pipeline completo ────────────────────────────────")
     test_pipeline_ndvi_dji()
     test_pipeline_savi_sentinel2()
+
+    print("\n── Lectura decimada (rasters grandes) ────────────────")
+    test_lectura_decimada_raster_grande_no_materializa_resolucion_completa()
+    test_lectura_decimada_dtype_entero_no_falla()
+    test_pipeline_archivo_grande_completa_sin_cargar_resolucion_completa()
+
+    print("\n── Pipeline batch multi-índice ───────────────────────")
+    test_pipeline_multi_indice_bandas_compartidas()
+    test_pipeline_multi_indice_error_no_aborta_batch()
 
     print("\nTodos los tests pasaron.\n")

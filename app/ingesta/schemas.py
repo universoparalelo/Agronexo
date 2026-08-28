@@ -94,3 +94,16 @@ class IndiceEstadoResponse(BaseModel):
     progreso: int | None
     mensaje: str | None
     error: str | None
+
+
+class IndicesBatchRequest(BaseModel):
+    """Pide varios índices adicionales de una — se calculan en una sola
+    corrida de Celery (descarga y lectura de bandas compartida) en lugar de
+    una task por índice. Ver workers.gis.tasks.analizar_indices_batch."""
+    indices: list[IndiceEnum]
+    metodo_umbral: str = "fijo"
+
+
+class IndicesBatchIniciarResponse(BaseModel):
+    items: list[IndiceAnalisisIniciarResponse]
+    mensaje: str = "Análisis encolados."

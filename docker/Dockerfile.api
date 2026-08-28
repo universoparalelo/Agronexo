@@ -8,7 +8,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Certificado raíz de Avast (SSL/TLS scanning) — sin esto, pip no puede
+# verificar HTTPS a pypi.org en máquinas con Avast interceptando TLS.
+COPY docker/certs/avast-root.crt /usr/local/share/ca-certificates/avast-root.crt
+RUN update-ca-certificates
 
 COPY docker/requirements.api.txt .
 RUN pip install --no-cache-dir -r requirements.api.txt
