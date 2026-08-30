@@ -1322,6 +1322,30 @@ body {
   justify-content: space-between;
 }
 
+/* ── Upload progress ── */
+.upload-progress-wrapper {
+  margin: 0.75rem 0 0.25rem;
+}
+.upload-progress-bar-bg {
+  width: 100%; height: 8px; background: #e5e7eb;
+  border-radius: 999px; overflow: hidden;
+}
+.upload-progress-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.upload-progress-info {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 0.35rem;
+}
+.upload-progress-msg {
+  font-size: 0.78rem; color: #4b5563;
+}
+.upload-progress-pct {
+  font-size: 0.78rem; font-weight: 700; color: #1a3a2a;
+}
+
 /* ── Wizard: carga de ortomosaico ── */
 .modal-box--wizard {
   max-width: 620px;

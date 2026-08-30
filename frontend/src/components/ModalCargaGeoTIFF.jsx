@@ -88,6 +88,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [archivo, setArchivo] = useState(null)
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadPhase, setUploadPhase] = useState(null) // 'uploading' | 'processing' | 'done'
   const [error, setError] = useState('')
   const [inspeccion, setInspeccion] = useState(null)
   const inputRef = useRef()
@@ -147,6 +149,16 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     setStep('analisis')
   }
 
+  function uploadMessage() {
+    if (uploadPhase === 'processing') return 'Archivo recibido. Encolando análisis...'
+    if (uploadPhase === 'done') return 'El análisis estará listo en unos momentos.'
+    if (uploadProgress < 15) return 'Iniciando carga del ortomosaico...'
+    if (uploadProgress < 40) return 'Subiendo archivo, aguarde un momento...'
+    if (uploadProgress < 70) return 'Cargando ortomosaico...'
+    if (uploadProgress < 95) return 'Casi listo, finalizando la carga...'
+    return 'Procesando archivo en el servidor...'
+  }
+
   async function handleSubmit() {
     const fd = new FormData()
     fd.append('archivo', archivo)
@@ -154,27 +166,33 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
 
     setLoading(true)
     setError('')
+    setUploadProgress(0)
+    setUploadPhase('uploading')
     try {
       const { data } = await client.post(`/lotes/${loteId}/vuelos`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        },
       })
-      // NDVI ya se calcula automáticamente al subir — el resto de los índices
-      // tildados se piden juntos en una sola corrida (analizarIndicesBatch),
-      // que descarga el GeoTIFF y lee cada banda una sola vez en vez de
-      // repetirlo por índice.
+
+      setUploadPhase('processing')
       const indicesAdicionales = indices.filter((i) => i !== 'ndvi')
       if (indicesAdicionales.length > 0) {
         try {
           await analizarIndicesBatch(loteId, data.vuelo_id, indicesAdicionales)
         } catch {
-          // no bloquear la creación del vuelo si falla encolar los índices —
-          // el usuario puede reintentarlos después desde el switcher
+          // no bloquear la creación del vuelo si falla encolar los índices
         }
       }
+      setUploadPhase('done')
       onSuccess(data)
     } catch (err) {
       const msg = err.response?.data?.detail
       setError(typeof msg === 'string' ? msg : 'Error al subir el archivo. Verificá que sea un GeoTIFF válido.')
+      setUploadPhase(null)
     } finally {
       setLoading(false)
     }
@@ -345,6 +363,23 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             )}
 
             {error && <p className="error-message">{error}</p>}
+
+            {loading && (
+              <div className="upload-progress-wrapper">
+                <div className="upload-progress-bar-bg">
+                  <div
+                    className="upload-progress-bar-fill"
+                    style={{ width: `${uploadPhase === 'processing' || uploadPhase === 'done' ? 100 : uploadProgress}%` }}
+                  />
+                </div>
+                <div className="upload-progress-info">
+                  <span className="upload-progress-msg">{uploadMessage()}</span>
+                  {uploadPhase === 'uploading' && (
+                    <span className="upload-progress-pct">{uploadProgress}%</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="modal-actions modal-actions--wizard">
               <button type="button" className="btn-secondary" onClick={() => setStep('carga')} disabled={loading}>
