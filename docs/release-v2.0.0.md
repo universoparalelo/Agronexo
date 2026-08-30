@@ -89,13 +89,23 @@ Al correr la migración, `sa.Enum.create(checkfirst=True)` no funcionó correcta
 | — Lógica que toma zona + índice + contexto del lote y devuelve causa probable + nivel de confianza | — | Completada |
 | — Asociar producto fitosanitario sugerido según causa | — | Completada |
 
-### Tareas pendientes
+#### Generar diagnóstico explicado por zona
+**Fecha:** 2026-08-30
+**Rama:** `feat/diagnostico-explicado`
 
-| Tarea | Estado |
-|---|---|
-| Endpoint que devuelve causa, confianza, acción recomendada y producto sugerido por zona | Pendiente |
-| Texto legible para el productor | Pendiente |
-| Vincular diagnóstico al vuelo y al lote | Pendiente |
+Implementación de las 3 subtareas pendientes del Sprint 8:
+
+1. **Endpoint con causa, confianza, acción y producto por zona** — el endpoint `GET /lotes/{id}/vuelos/{id}/diagnostico` ya existía; se enriquece cada zona con `severidad` (critica/moderada/leve/normal/vigorosa) calculada como ratio del NDVI de la zona vs. promedio del lote.
+
+2. **Texto legible para el productor** — nuevo módulo `app/diagnostico/texto.py` que genera `texto_explicativo` por zona (párrafo narrativo con área, patrón, desviación porcentual, causa, confianza, acción y productos) y `resumen_general` en metadata (conteo de zonas con/sin problema, área afectada, causas agrupadas).
+
+3. **Vincular diagnóstico al vuelo y al lote** — el metadata del response ahora incluye `lote_id`, `lote_nombre`, `vuelo_id` y `fecha_vuelo` para trazabilidad completa sin persistencia (persistencia queda para release 4).
+
+**Decisiones tomadas:**
+- `texto.py` es puro (sin I/O, sin DB) — recibe datos ya resueltos y devuelve strings, igual que `engine.py` y `reglas.py`
+- Severidad se calcula sobre NDVI solamente (el índice siempre presente); zonas R99 siempre "normal", vigor_excesivo siempre "vigorosa"
+- El `texto_explicativo` incluye la `accion_recomendada` completa (no la resume) para que el productor tenga toda la info en un solo párrafo
+- Frontend: `TablaDiagnostico.jsx` muestra el texto como párrafo principal, resumen arriba de la lista, badge de severidad por card
 
 ### Problemas encontrados
 
