@@ -29,6 +29,9 @@ async def crear_lote(db: AsyncSession, data: LoteCreate, usuario_id: uuid.UUID |
         nombre=data.nombre,
         cultivo=data.cultivo,
         estadio_fenologico=data.estadio_fenologico,
+        variedad=data.variedad,
+        tipo_suelo=data.tipo_suelo,
+        fecha_siembra=data.fecha_siembra,
         geometry=geometry,
         area_ha=area_ha,
         usuario_id=usuario_id,
@@ -62,6 +65,12 @@ async def actualizar_lote(db: AsyncSession, lote: Lote, data: LoteUpdate) -> Lot
         lote.cultivo = data.cultivo
     if data.estadio_fenologico is not None:
         lote.estadio_fenologico = data.estadio_fenologico
+    if data.variedad is not None:
+        lote.variedad = data.variedad
+    if data.tipo_suelo is not None:
+        lote.tipo_suelo = data.tipo_suelo
+    if data.fecha_siembra is not None:
+        lote.fecha_siembra = data.fecha_siembra
     if data.geometry is not None:
         geojson_str = json.dumps(data.geometry)
         lote.geometry = ST_GeomFromGeoJSON(geojson_str)

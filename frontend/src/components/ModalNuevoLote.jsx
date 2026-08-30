@@ -9,6 +9,17 @@ const CULTIVOS = [
   { value: 'sorgo', label: 'Sorgo' },
 ]
 
+const TIPOS_SUELO = [
+  { value: '', label: 'Seleccionar...' },
+  { value: 'arcilloso', label: 'Arcilloso' },
+  { value: 'franco', label: 'Franco' },
+  { value: 'franco_arcilloso', label: 'Franco arcilloso' },
+  { value: 'franco_arenoso', label: 'Franco arenoso' },
+  { value: 'arenoso', label: 'Arenoso' },
+  { value: 'vertisol', label: 'Vertisol' },
+  { value: 'otro', label: 'Otro' },
+]
+
 function FitBounds({ bounds }) {
   const map = useMap()
   useEffect(() => {
@@ -39,7 +50,10 @@ function extraerPoligono(geojson) {
 }
 
 export default function ModalNuevoLote({ onSuccess, onClose }) {
-  const [form, setForm] = useState({ nombre: '', cultivo: 'soja', estadio_fenologico: '' })
+  const [form, setForm] = useState({
+    nombre: '', cultivo: 'soja', estadio_fenologico: '',
+    variedad: '', tipo_suelo: '', fecha_siembra: '',
+  })
   const [poligono, setPoligono] = useState(null)
   const [bounds, setBounds] = useState(null)
   const [archivoNombre, setArchivoNombre] = useState('')
@@ -98,6 +112,9 @@ export default function ModalNuevoLote({ onSuccess, onClose }) {
         nombre: form.nombre.trim(),
         cultivo: form.cultivo,
         estadio_fenologico: form.estadio_fenologico.trim() || null,
+        variedad: form.variedad.trim() || null,
+        tipo_suelo: form.tipo_suelo || null,
+        fecha_siembra: form.fecha_siembra ? new Date(form.fecha_siembra).toISOString() : null,
         geometry: poligono,
       })
       onSuccess(data.id)
@@ -150,12 +167,47 @@ export default function ModalNuevoLote({ onSuccess, onClose }) {
                 name="estadio_fenologico"
                 type="text"
                 placeholder="Ej: R3"
-                maxLength={10}
+                maxLength={30}
                 value={form.estadio_fenologico}
                 onChange={handleField}
                 disabled={loading}
               />
             </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="variedad">Variedad <span className="label-opcional">(opcional)</span></label>
+              <input
+                id="variedad"
+                name="variedad"
+                type="text"
+                placeholder="Ej: DM 46i17"
+                maxLength={100}
+                value={form.variedad}
+                onChange={handleField}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="tipo_suelo">Tipo de suelo <span className="label-opcional">(opcional)</span></label>
+              <select id="tipo_suelo" name="tipo_suelo" value={form.tipo_suelo} onChange={handleField} disabled={loading}>
+                {TIPOS_SUELO.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="fecha_siembra">Fecha de siembra <span className="label-opcional">(opcional)</span></label>
+            <input
+              id="fecha_siembra"
+              name="fecha_siembra"
+              type="date"
+              value={form.fecha_siembra}
+              onChange={handleField}
+              disabled={loading}
+            />
           </div>
 
           <p className="limites-hint">
