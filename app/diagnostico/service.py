@@ -25,10 +25,12 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from sqlalchemy import select
+
 from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
-from app.diagnostico.productos import CATALOGO_PRODUCTOS
+from app.diagnostico.models import CausaIndiceEnum, ProductoFitosanitario, TipoProductoEnum
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
 from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote
 
@@ -36,6 +38,34 @@ logger = logging.getLogger(__name__)
 
 # Índices adicionales que pueden estar disponibles además de NDVI (siempre presente).
 _INDICES_ADICIONALES = (IndiceEnum.ndre, IndiceEnum.savi, IndiceEnum.exg, IndiceEnum.gndvi)
+
+
+async def listar_productos(
+    db: AsyncSession,
+    causa: CausaIndiceEnum | None = None,
+    tipo: TipoProductoEnum | None = None,
+) -> list[ProductoFitosanitario]:
+    stmt = select(ProductoFitosanitario)
+    if causa is not None:
+        stmt = stmt.where(ProductoFitosanitario.causa_indice == causa)
+    if tipo is not None:
+        stmt = stmt.where(ProductoFitosanitario.tipo == tipo)
+    stmt = stmt.order_by(ProductoFitosanitario.causa_indice, ProductoFitosanitario.nombre)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[str, str]]]:
+    result = await db.execute(
+        select(ProductoFitosanitario).order_by(ProductoFitosanitario.causa_indice)
+    )
+    catalogo: dict[str, list[dict[str, str]]] = {}
+    for prod in result.scalars().all():
+        catalogo.setdefault(prod.causa_indice.value, []).append({
+            "nombre": prod.nombre,
+            "tipo": prod.tipo.value,
+        })
+    return catalogo
 
 
 def _features_a_zonas(geojson: dict) -> list[ZonaInput]:
@@ -138,10 +168,12 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
 
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
 
+    catalogo = await _cargar_catalogo_productos(db)
+
     return await run_in_threadpool(
         _calcular_diagnostico,
         ndvi_geojson, geojson_por_indice, lote_geom_4326,
-        lote.cultivo, lote.estadio_fenologico,
+        lote.cultivo, lote.estadio_fenologico, catalogo,
     )
 
 
@@ -151,6 +183,7 @@ def _calcular_diagnostico(
     lote_geom_4326: BaseGeometry | None,
     cultivo,
     estadio_fenologico: str | None,
+    catalogo: dict[str, list[dict[str, str]]] | None = None,
 ) -> dict:
     """Cómputo geométrico puro (Shapely, sin I/O ni DB) — ver generar_diagnostico()."""
     estadio_normalizado = normalizar_estadio(estadio_fenologico)
@@ -206,7 +239,7 @@ def _calcular_diagnostico(
             "accion_recomendada": resultado.accion_recomendada,
             "como_confirmar_campo": resultado.como_confirmar_campo,
             "excluida": resultado.excluida,
-            "productos_sugeridos": CATALOGO_PRODUCTOS.get(resultado.causa_indice, []),
+            "productos_sugeridos": (catalogo or {}).get(resultado.causa_indice, []),
         })
         features_salida.append({
             "type": "Feature",

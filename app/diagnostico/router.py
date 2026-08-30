@@ -1,18 +1,36 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.diagnostico import service
+from app.diagnostico.models import CausaIndiceEnum, TipoProductoEnum
+from app.diagnostico.schemas import ProductoFitosanitarioListResponse
 from app.lotes.service import obtener_lote
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+productos_router = APIRouter()
+
+
+@productos_router.get(
+    "",
+    response_model=ProductoFitosanitarioListResponse,
+    summary="Listar catálogo de productos fitosanitarios",
+)
+async def listar_productos(
+    causa: CausaIndiceEnum | None = Query(None, description="Filtrar por causa diagnóstica"),
+    tipo: TipoProductoEnum | None = Query(None, description="Filtrar por tipo de producto"),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    productos = await service.listar_productos(db, causa=causa, tipo=tipo)
+    return ProductoFitosanitarioListResponse(total=len(productos), items=productos)
 
 
 @router.get(

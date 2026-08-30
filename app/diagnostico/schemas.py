@@ -1,18 +1,33 @@
 """
-Schemas documentales de la respuesta del motor de diagnóstico. No se usan
-como `response_model` estricto del endpoint (la forma de un Feature GeoJSON
-es dinámica, mismo criterio que los endpoints `.../resultado` existentes) —
-sirven de referencia para el frontend y para los tests.
+Schemas del motor de diagnóstico y catálogo de productos fitosanitarios.
 """
 
-from pydantic import BaseModel
+import uuid
 
-from app.diagnostico.models import ConfianzaEnum
+from pydantic import BaseModel, Field
+
+from app.diagnostico.models import CausaIndiceEnum, ConfianzaEnum, TipoProductoEnum
 
 
 class ProductoSugerido(BaseModel):
     nombre: str
     tipo: str
+
+
+class ProductoFitosanitarioResponse(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    tipo: TipoProductoEnum
+    causa_indice: CausaIndiceEnum
+    dosis_referencia: float | None
+    unidad: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class ProductoFitosanitarioListResponse(BaseModel):
+    total: int
+    items: list[ProductoFitosanitarioResponse]
 
 
 class ZonaDiagnosticoProperties(BaseModel):

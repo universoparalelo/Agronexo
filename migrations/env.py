@@ -11,6 +11,7 @@ from app.core.database import Base
 # Importar modelos acá para que Alembic los detecte en autogenerate.
 from app.auth.models import Usuario  # noqa: F401
 from app.lotes.models import Lote, Vuelo  # noqa: F401
+from app.diagnostico.models import ProductoFitosanitario  # noqa: F401
 
 config = context.config
 
