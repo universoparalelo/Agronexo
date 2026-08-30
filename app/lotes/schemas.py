@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from shapely.geometry import mapping, shape
 from shapely.geometry.polygon import Polygon
 
-from app.lotes.models import CultivoEnum
+from app.lotes.models import CultivoEnum, TipoSueloEnum
 
 
 # ── Geometry helpers ────────────────────────────────────────────────
@@ -36,6 +36,9 @@ class LoteCreate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=200, examples=["Lote Norte"])
     cultivo: CultivoEnum = Field(..., examples=["soja"])
     estadio_fenologico: str | None = Field(None, max_length=30, examples=["R3"])
+    variedad: str | None = Field(None, max_length=100, examples=["DM 46i17"])
+    tipo_suelo: TipoSueloEnum | None = Field(None, examples=["franco_arcilloso"])
+    fecha_siembra: datetime | None = Field(None, examples=["2026-11-15T00:00:00Z"])
     geometry: dict | None = Field(
         None,
         description="Opcional. Si no se provee, el lote queda sin límites — se puede cargar después.",
@@ -63,6 +66,9 @@ class LoteUpdate(BaseModel):
     nombre: str | None = Field(None, min_length=1, max_length=200)
     cultivo: CultivoEnum | None = None
     estadio_fenologico: str | None = Field(None, max_length=30)
+    variedad: str | None = Field(None, max_length=100)
+    tipo_suelo: TipoSueloEnum | None = None
+    fecha_siembra: datetime | None = None
     geometry: dict | None = None
 
     @field_validator("geometry")
@@ -78,6 +84,9 @@ class LoteResponse(BaseModel):
     nombre: str
     cultivo: CultivoEnum
     estadio_fenologico: str | None
+    variedad: str | None
+    tipo_suelo: TipoSueloEnum | None
+    fecha_siembra: datetime | None
     geometry: dict | None
     area_ha: float | None
     usuario_id: uuid.UUID | None
