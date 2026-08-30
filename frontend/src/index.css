@@ -1322,6 +1322,30 @@ body {
   justify-content: space-between;
 }
 
+/* ── Upload progress ── */
+.upload-progress-wrapper {
+  margin: 0.75rem 0 0.25rem;
+}
+.upload-progress-bar-bg {
+  width: 100%; height: 8px; background: #e5e7eb;
+  border-radius: 999px; overflow: hidden;
+}
+.upload-progress-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #16a34a, #22c55e);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.upload-progress-info {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 0.35rem;
+}
+.upload-progress-msg {
+  font-size: 0.78rem; color: #4b5563;
+}
+.upload-progress-pct {
+  font-size: 0.78rem; font-weight: 700; color: #1a3a2a;
+}
+
 /* ── Wizard: carga de ortomosaico ── */
 .modal-box--wizard {
   max-width: 620px;
@@ -2303,6 +2327,22 @@ body {
 .diagnostico-card-meta {
   font-size: 0.76rem; color: #6b7280; display: flex; flex-wrap: wrap;
   gap: 0.3rem 0.4rem; margin-bottom: 0.5rem;
+}
+.diagnostico-header-info { margin-bottom: 0.5rem; }
+.diagnostico-resumen {
+  font-size: 0.84rem; color: #1a3a2a; background: #f0f7f2;
+  border: 1px solid #d1e7d6; border-radius: 6px;
+  padding: 0.6rem 0.8rem; margin-top: 0.4rem; line-height: 1.45;
+}
+.diagnostico-badges { display: flex; gap: 0.35rem; flex-shrink: 0; flex-wrap: wrap; }
+.severidad-critica  { background: #fee2e2; color: #b91c1c; }
+.severidad-moderada { background: #fff3cd; color: #92400e; }
+.severidad-leve     { background: #fef9c3; color: #854d0e; }
+.severidad-normal   { background: #f0fdf4; color: #166534; }
+.severidad-vigorosa { background: #dbeafe; color: #1e40af; }
+.diagnostico-texto-explicativo {
+  font-size: 0.82rem; color: #374151; margin: 0.4rem 0;
+  line-height: 1.5; overflow-wrap: break-word;
 }
 .diagnostico-accion { font-size: 0.82rem; color: #1a1a1a; margin: 0.4rem 0; line-height: 1.4; overflow-wrap: break-word; }
 .diagnostico-confirmar { font-size: 0.8rem; margin: 0.4rem 0; }

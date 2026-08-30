@@ -2,7 +2,8 @@
 
 ## Estado actual del proyecto
 
-**Release activa:** v1.0.0 (en desarrollo) — seguimiento en `docs/release-v1.0.0.md`
+**Release activa:** v2.0.0 (en desarrollo) — seguimiento en `docs/release-v2.0.0.md`
+**Release anterior:** v1.0.0 — seguimiento en `docs/release-v1.0.0.md`
 **Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
 
 ### Qué está implementado y funcionando
@@ -11,7 +12,7 @@
 |---|---|---|
 | Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
 | FastAPI + SQLAlchemy async + PostGIS | ✅ | |
-| Migraciones Alembic (0001 → 0011) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Migraciones Alembic (0001 → 0015) | ✅ | Correr `alembic upgrade head` al arrancar |
 | Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
 | CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
@@ -31,8 +32,10 @@
 | Modal "Cargar Ortomosaico" con selector de lote existente | ✅ | `ModalCargaGeoTIFF.jsx` ahora sube vuelos a un lote ya creado vía `POST /lotes/{id}/vuelos`, no crea lote nuevo |
 | Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
 | Motor de diagnóstico (RFDR-01) | ✅ | On-demand/sin persistencia — `GET /lotes/{id}/vuelos/{id}/diagnostico`. 20 reglas en `app/diagnostico/reglas.py`. Historial persistido queda para release 4 (ver `docs/release-v1.0.0.md`) |
-| Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 5 en curso |
-| Testing integral y demo 7/jul | ❌ | Sprint 5 en curso |
+| Atributos enriquecidos del lote | ✅ | `variedad` (String), `tipo_suelo` (enum 7 valores NEA), `fecha_siembra` (DateTime). Migración 0014. Formulario frontend actualizado |
+| Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |
+| Diagnóstico explicado por zona | ❌ | Sprint 8 en curso — texto legible, severidad, vincular a lote/vuelo |
+| Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 10 pendiente |
 | Exportación Shapefile / PDF | ❌ | Pendiente |
 
 ### Credenciales de desarrollo
@@ -53,6 +56,9 @@
 - El worker pasa `lote_id` como kwarg a la tarea Celery para poder actualizar la geometry después.
 - `rasterio.features.shapes()` rechaza `float64` — el array NDVI siempre se castea a `float32` antes de vectorizar.
 - `test_celery_integracion.py` tiene tres tests: dos de configuración (corren en CI dentro del job `test-gis`) y uno de ciclo completo E2E que requiere MinIO + worker levantados — ese solo corre con `docker compose exec worker`.
+- `tipo_suelo` en tabla `lotes` es un PostgreSQL enum (`tiposueloenum`) — asyncpg no auto-castea VARCHAR a enum, así que las migraciones crean enums con SQL directo y `DO/EXCEPTION` para idempotencia.
+- `productos_fitosanitarios` tiene su propio router (`productos_router`) montado en `/api/v1/productos-fitosanitarios` — no puede ir bajo `/api/v1/lotes/` porque FastAPI interpreta el segmento como `{lote_id}` UUID y falla.
+- El servicio de diagnóstico (`app/diagnostico/service.py`) carga productos desde BD en cada request vía `_cargar_catalogo_productos()` — el dict estático en `app/diagnostico/productos.py` sigue existiendo pero ya no se importa.
 
 ---
 
@@ -143,8 +149,9 @@ Separación: PostGIS guarda **metadatos y vectores**. MinIO guarda **archivos bi
 POST /auth/login → tokens
 POST /lotes → crear lote con GeoJSON
 POST /lotes/{id}/vuelos → subir GeoTIFF → encola Celery → 202 Accepted
-GET  /lotes/{id}/vuelos/{id}/analisis/{id}/estado → polling progreso
-GET  /lotes/{id}/vuelos/{id}/analisis/{id}/diagnostico → resultado
+GET  /lotes/{id}/vuelos/{id}/estado → polling progreso
+GET  /lotes/{id}/vuelos/{id}/diagnostico → diagnóstico agronómico por zona
+GET  /productos-fitosanitarios → catálogo de productos (?causa=...&tipo=...)
 GET  /analisis/{id}/reportes/shapefile → .zip para maquinaria
 ```
 

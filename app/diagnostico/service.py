@@ -31,6 +31,7 @@ from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import CausaIndiceEnum, ProductoFitosanitario, TipoProductoEnum
+from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
 from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote
 
@@ -174,6 +175,10 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
         _calcular_diagnostico,
         ndvi_geojson, geojson_por_indice, lote_geom_4326,
         lote.cultivo, lote.estadio_fenologico, catalogo,
+        lote_id=str(lote.id),
+        lote_nombre=lote.nombre,
+        vuelo_id=str(vuelo_id),
+        fecha_vuelo=str(vuelo.fecha_vuelo) if vuelo.fecha_vuelo else None,
     )
 
 
@@ -184,6 +189,11 @@ def _calcular_diagnostico(
     cultivo,
     estadio_fenologico: str | None,
     catalogo: dict[str, list[dict[str, str]]] | None = None,
+    *,
+    lote_id: str | None = None,
+    lote_nombre: str | None = None,
+    vuelo_id: str | None = None,
+    fecha_vuelo: str | None = None,
 ) -> dict:
     """Cómputo geométrico puro (Shapely, sin I/O ni DB) — ver generar_diagnostico()."""
     estadio_normalizado = normalizar_estadio(estadio_fenologico)
@@ -228,6 +238,9 @@ def _calcular_diagnostico(
         )
         resultado = evaluar_zona(contexto)
 
+        ndvi_zona = float(feat_original.get("properties", {}).get("ndvi_promedio", 0.0))
+        severidad = calcular_severidad(ndvi_zona, ndvi_promedio_lote, resultado.causa_indice)
+
         props = dict(feat_original.get("properties", {}))
         props.update({
             "patron_espacial": contexto.patron_espacial,
@@ -236,24 +249,34 @@ def _calcular_diagnostico(
             "regla_nombre": resultado.regla_nombre,
             "confianza": resultado.confianza.value,
             "causa_indice": resultado.causa_indice,
+            "severidad": severidad,
             "accion_recomendada": resultado.accion_recomendada,
             "como_confirmar_campo": resultado.como_confirmar_campo,
             "excluida": resultado.excluida,
             "productos_sugeridos": (catalogo or {}).get(resultado.causa_indice, []),
         })
+        props["texto_explicativo"] = generar_texto_zona(props, ndvi_promedio_lote)
+
         features_salida.append({
             "type": "Feature",
             "geometry": mapping(zona.geometry),
             "properties": props,
         })
 
+    resumen = generar_resumen_general(features_salida)
+
     return {
         "type": "FeatureCollection",
         "features": features_salida,
         "metadata": {
+            "lote_id": lote_id,
+            "lote_nombre": lote_nombre,
+            "vuelo_id": vuelo_id,
+            "fecha_vuelo": fecha_vuelo,
             "cultivo": cultivo.value,
             "estadio_fenologico": estadio_fenologico,
             "ndvi_promedio_lote": round(ndvi_promedio_lote, 4),
             "indices_disponibles": list(valores_por_indice.keys()),
+            "resumen_general": resumen,
         },
     }

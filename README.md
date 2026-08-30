@@ -188,7 +188,8 @@ POST /api/v1/auth/login                              → tokens JWT
 POST /api/v1/lotes                                   → crear lote con polígono GeoJSON
 POST /api/v1/lotes/{id}/vuelos                       → subir GeoTIFF → encola Celery → 202 Accepted
 GET  /api/v1/lotes/{id}/vuelos/{id}/estado           → polling de progreso (%)
-GET  /api/v1/lotes/{id}/vuelos/{id}/analisis/{id}/diagnostico → resultado con zonas
+GET  /api/v1/lotes/{id}/vuelos/{id}/diagnostico      → diagnóstico agronómico por zona
+GET  /api/v1/productos-fitosanitarios                → catálogo de productos (?causa=...&tipo=...)
 GET  /api/v1/analisis/{id}/reportes/shapefile        → .zip para maquinaria agrícola
 ```
 
@@ -237,7 +238,7 @@ agronexo/
 │   ├── auth/               # Registro, login, JWT
 │   ├── lotes/              # CRUD de lotes agrícolas con geometrías PostGIS
 │   ├── ingesta/            # Upload GeoTIFF, validación, encolado Celery
-│   ├── diagnostico/        # Motor de reglas, resultados de análisis
+│   ├── diagnostico/        # Motor de reglas (20 reglas en cascada), productos fitosanitarios
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── core/               # Config (pydantic-settings), BD, cliente MinIO
 │   └── main.py             # Punto de entrada FastAPI
@@ -245,7 +246,7 @@ agronexo/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
 ├── migrations/             # Migraciones Alembic
-│   └── versions/           # Scripts versionados (0001 → 0004+)
+│   └── versions/           # Scripts versionados (0001 → 0015)
 ├── tests/                  # Tests del pipeline GIS con GeoTIFF sintético
 ├── frontend/               # React + Vite
 ├── docker/

@@ -8,30 +8,30 @@
 
 ## Sprint 6 — Investigación y diseño del motor de diagnóstico
 
-**Período:** previo al desarrollo
+**Período:** 2026-06-23 → 2026-07-09
 
 ### Tareas completadas
 
-| Tarea | Responsable | Estado |
-|---|---|---|
-| Revisar cómo interpretar NDVI, NDRE, SAVI y ExG para detectar necesidad de fumigación vs. fertilización | Matias Machado | Completada |
-| Definir umbrales y patrones espaciales asociados a cada tipo de intervención | — | Completada |
-| Documentar criterios por cultivo y estadio fenológico para el NEA | — | Completada |
-| Investigar GNDVI, MSAVI y NDWI (McFeeters) como índices candidatos a implementar | — | Completada |
-| Evaluar casos de uso de cada uno para el NEA | — | Completada |
-| Esquema de datos de productos fitosanitarios | Matias Machado | Completada |
+| Tarea | Estado |
+|---|---|
+| Revisar cómo interpretar NDVI, NDRE, SAVI y ExG para detectar necesidad de fumigación vs. fertilización | Completada |
+| Definir umbrales y patrones espaciales asociados a cada tipo de intervención | Completada |
+| Documentar criterios por cultivo y estadio fenológico para el NEA | Completada |
+| Investigar GNDVI, MSAVI y NDWI (McFeeters) como índices candidatos a implementar | Completada |
+| Evaluar casos de uso de cada uno para el NEA | Completada |
+| Esquema de datos de productos fitosanitarios | Completada |
 
 ### Tareas pendientes / en progreso
 
-| Tarea | Responsable | Estado |
-|---|---|---|
-| Investigación fumigación localizada | Zaira Rosin | En progreso |
-| Investigación de productos fitosanitarios: relevar productos comerciales usados en NEA | — | Pendiente |
-| Clasificar por tipo: herbicida, fungicida, insecticida, defoliante | — | Pendiente |
-| Identificar el problema/causa que trata cada producto | — | Pendiente |
-| Relevar dosis de referencia por hectárea y unidad | — | Pendiente |
-| Definir esquema: nombre, tipo, cultivos aplicables, problema asociado, dosis de referencia y unidad | — | Pendiente |
-| Relevar catálogo mínimo viable de productos para NEA | — | Pendiente |
+| Tarea | Estado |
+|---|---|
+| Investigación fumigación localizada | En progreso |
+| Investigación de productos fitosanitarios: relevar productos comerciales usados en NEA | Pendiente |
+| Clasificar por tipo: herbicida, fungicida, insecticida, defoliante | Pendiente |
+| Identificar el problema/causa que trata cada producto | Pendiente |
+| Relevar dosis de referencia por hectárea y unidad | Pendiente |
+| Definir esquema: nombre, tipo, cultivos aplicables, problema asociado, dosis de referencia y unidad | Pendiente |
+| Relevar catálogo mínimo viable de productos para NEA | Pendiente |
 
 ### Problemas encontrados
 
@@ -41,23 +41,25 @@ _(sin problemas reportados en esta fase)_
 
 ## Sprint 7 — Atributos del lote, nuevos índices y tabla de productos
 
+**Período:** 2026-08-04 → 2026-08-30
+
 ### Tareas completadas
 
-| Tarea | Responsable | Estado |
-|---|---|---|
-| Tabla de atributos del lote / guardar info completa | Amilcar Aguirre, Celeste Martin Rodich | Completada |
-| — Identificar campos faltantes en el modelo lote | — | Completada |
-| — Migración para enriquecer modelo lotes (0014) | — | Completada |
-| — Actualizar formulario frontend para capturar variedad, tipo de suelo y fecha de siembra | — | Completada |
-| Implementación de nuevos índices | Amilcar Aguirre | Completada |
-| — Agregar índice(s) nuevos seleccionados al worker GIS (NDVI, NDRE, SAVI, ExG, GNDVI) | — | Completada |
-| — Actualizar band_mapping.py y lógica de selección de índice según sensor y estadio | — | Completada |
-| Optimización del cálculo de índices | Matias Machado | Completada |
-| — Confirmar windowed reading activo para archivos grandes | — | Completada |
-| Tabla de productos fitosanitarios (implementación) | — | Completada |
-| — Migración Alembic para tabla productos_fitosanitarios (0015) | — | Completada |
-| — Cargar catálogo inicial con seed data (21 productos) | — | Completada |
-| — Endpoint de consulta para el motor de reglas (`GET /api/v1/productos-fitosanitarios`) | — | Completada |
+| Tarea | Estado |
+|---|---|
+| Tabla de atributos del lote / guardar info completa | Completada |
+| — Identificar campos faltantes en el modelo lote | Completada |
+| — Migración para enriquecer modelo lotes (0014) | Completada |
+| — Actualizar formulario frontend para capturar variedad, tipo de suelo y fecha de siembra | Completada |
+| Implementación de nuevos índices | Completada |
+| — Agregar índice(s) nuevos seleccionados al worker GIS (NDVI, NDRE, SAVI, ExG, GNDVI) | Completada |
+| — Actualizar band_mapping.py y lógica de selección de índice según sensor y estadio | Completada |
+| Optimización del cálculo de índices | Completada |
+| — Confirmar windowed reading activo para archivos grandes | Completada |
+| Tabla de productos fitosanitarios (implementación) | Completada |
+| — Migración Alembic para tabla productos_fitosanitarios (0015) | Completada |
+| — Cargar catálogo inicial con seed data (21 productos) | Completada |
+| — Endpoint de consulta para el motor de reglas (`GET /api/v1/productos-fitosanitarios`) | Completada |
 
 ### Decisiones de arquitectura
 
@@ -80,22 +82,34 @@ Al correr la migración, `sa.Enum.create(checkfirst=True)` no funcionó correcta
 
 ## Sprint 8 — Motor de reglas y diagnóstico por zona
 
+**Período:** 2026-08-28 → 2026-08-30
+
 ### Tareas completadas
-
-| Tarea | Responsable | Estado |
-|---|---|---|
-| Implementar motor de reglas en backend | Matias Machado | Completada |
-| — Crear módulo `app/diagnostico/` (engine.py, reglas.py, productos.py, forma.py, estadios.py, service.py) | — | Completada |
-| — Lógica que toma zona + índice + contexto del lote y devuelve causa probable + nivel de confianza | — | Completada |
-| — Asociar producto fitosanitario sugerido según causa | — | Completada |
-
-### Tareas pendientes
 
 | Tarea | Estado |
 |---|---|
-| Endpoint que devuelve causa, confianza, acción recomendada y producto sugerido por zona | Pendiente |
-| Texto legible para el productor | Pendiente |
-| Vincular diagnóstico al vuelo y al lote | Pendiente |
+| Implementar motor de reglas en backend | Completada |
+| — Crear módulo `app/diagnostico/` (engine.py, reglas.py, productos.py, forma.py, estadios.py, service.py) | Completada |
+| — Lógica que toma zona + índice + contexto del lote y devuelve causa probable + nivel de confianza | Completada |
+| — Asociar producto fitosanitario sugerido según causa | Completada |
+
+#### Generar diagnóstico explicado por zona
+**Fecha:** 2026-08-30
+**Rama:** `feat/diagnostico-explicado`
+
+Implementación de las 3 subtareas pendientes del Sprint 8:
+
+1. **Endpoint con causa, confianza, acción y producto por zona** — el endpoint `GET /lotes/{id}/vuelos/{id}/diagnostico` ya existía; se enriquece cada zona con `severidad` (critica/moderada/leve/normal/vigorosa) calculada como ratio del NDVI de la zona vs. promedio del lote.
+
+2. **Texto legible para el productor** — nuevo módulo `app/diagnostico/texto.py` que genera `texto_explicativo` por zona (párrafo narrativo con área, patrón, desviación porcentual, causa, confianza, acción y productos) y `resumen_general` en metadata (conteo de zonas con/sin problema, área afectada, causas agrupadas).
+
+3. **Vincular diagnóstico al vuelo y al lote** — el metadata del response ahora incluye `lote_id`, `lote_nombre`, `vuelo_id` y `fecha_vuelo` para trazabilidad completa sin persistencia (persistencia queda para release 4).
+
+**Decisiones tomadas:**
+- `texto.py` es puro (sin I/O, sin DB) — recibe datos ya resueltos y devuelve strings, igual que `engine.py` y `reglas.py`
+- Severidad se calcula sobre NDVI solamente (el índice siempre presente); zonas R99 siempre "normal", vigor_excesivo siempre "vigorosa"
+- El `texto_explicativo` incluye la `accion_recomendada` completa (no la resume) para que el productor tenga toda la info en un solo párrafo
+- Frontend: `TablaDiagnostico.jsx` muestra el texto como párrafo principal, resumen arriba de la lista, badge de severidad por card
 
 ### Problemas encontrados
 
@@ -104,6 +118,8 @@ _(sin problemas reportados)_
 ---
 
 ## Sprint 9 — Severidad y zonificación de manejo
+
+**Período:** pendiente de inicio
 
 ### Tareas pendientes
 
@@ -120,6 +136,8 @@ _(sprint no iniciado)_
 ---
 
 ## Sprint 10 — Dashboard de resultados, testing y demo
+
+**Período:** pendiente de inicio
 
 ### Tareas pendientes
 
@@ -141,7 +159,7 @@ _(sprint no iniciado)_
 
 ## Otros
 
-| Tarea | Responsable | Estado |
-|---|---|---|
-| Armar paper | Zaira Rosin | En progreso |
-| Preparar ortomosaico con QGIS | Zaira Rosin | Completada |
+| Tarea | Estado |
+|---|---|
+| Armar paper | En progreso |
+| Preparar ortomosaico con QGIS | Completada |

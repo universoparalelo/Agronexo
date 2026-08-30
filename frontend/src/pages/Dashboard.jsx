@@ -120,6 +120,56 @@ function fmtFechaHoy() {
   })
 }
 
+function fmtTiempoRelativo(fecha) {
+  const diff = Date.now() - fecha.getTime()
+  const mins = Math.floor(diff / 60000)
+  const horas = Math.floor(diff / 3600000)
+  const dias = Math.floor(diff / 86400000)
+  if (mins < 1) return 'Justo ahora'
+  if (mins < 60) return `Hace ${mins} min`
+  if (horas < 24) return `Hace ${horas}h`
+  if (dias === 1) return 'Ayer'
+  if (dias < 7) return `Hace ${dias} días`
+  return fmtFecha(fecha.toISOString())
+}
+
+function buildActivityFeed(loteRows, vueloRows, userName) {
+  const items = []
+
+  items.push({
+    tipo: 'user',
+    texto: `Sesión iniciada por ${userName}`,
+    fecha: new Date(),
+  })
+
+  for (const lote of loteRows) {
+    if (lote.created_at) {
+      items.push({
+        tipo: 'ok',
+        texto: `Lote "${lote.nombre}" registrado`,
+        fecha: new Date(lote.created_at),
+      })
+    }
+  }
+
+  for (const v of vueloRows) {
+    const nombre = v.lote?.nombre || 'Lote'
+    const fecha = new Date(v.created_at)
+    if (v.estado === 'completado') {
+      items.push({ tipo: 'ok', texto: `Análisis completado en ${nombre}`, fecha })
+    } else if (v.estado === 'error') {
+      items.push({ tipo: 'alerta', texto: `Error en análisis de ${nombre}`, fecha })
+    } else if (v.estado === 'procesando') {
+      items.push({ tipo: 'upload', texto: `Procesando análisis en ${nombre}`, fecha })
+    } else {
+      items.push({ tipo: 'upload', texto: `Ortomosaico cargado en ${nombre}`, fecha })
+    }
+  }
+
+  items.sort((a, b) => b.fecha - a.fecha)
+  return items.slice(0, 6)
+}
+
 
 /* ──────── KPI Card ──────── */
 function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
@@ -598,22 +648,16 @@ export default function Dashboard() {
                 </div>
                 <div className="card-body">
                   <div className="actividad-feed">
-                    {[
-                      { tipo: 'ok',     texto: 'Análisis completado en Lote Norte #1',           tiempo: 'Hace 2 horas' },
-                      { tipo: 'upload', texto: 'Nuevo ortomosaico cargado para Lote Este #7',    tiempo: 'Hace 6 horas' },
-                      { tipo: 'alerta', texto: 'Alerta detectada: Estrés hídrico en Lote Central #5', tiempo: 'Ayer a las 18:45' },
-                      { tipo: 'user',   texto: 'Perfil actualizado por Juan García',             tiempo: 'Ayer a las 09:20' },
-                    ].map((item, i) => (
+                    {buildActivityFeed(loteRows, vueloRows, user?.nombre?.split(' ')[0] || 'el usuario').map((item, i) => (
                       <div key={i} className={`actividad-item actividad-item--${item.tipo}`}>
                         <span className="actividad-dot" />
                         <div className="actividad-content">
                           <p className="actividad-texto">{item.texto}</p>
-                          <p className="actividad-tiempo">{item.tiempo}</p>
+                          <p className="actividad-tiempo">{fmtTiempoRelativo(item.fecha)}</p>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <button className="card-link card-link--center">Ver historial completo</button>
                 </div>
               </div>
             </div>
