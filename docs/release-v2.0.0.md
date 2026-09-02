@@ -191,14 +191,22 @@ Corrección de 6 puntos de UX pendientes:
 5. Loading de diagnóstico — spinner animado con mensaje descriptivo en lugar de texto plano
 6. Link contextual desde tab "Zonas" a "Ver diagnóstico agronómico →"
 
+#### Testing integral — tests unitarios del motor de diagnóstico
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Dos archivos nuevos de tests puros (sin DB, sin I/O):
+- `test_texto.py` (26 tests) — severidad (umbrales, edge cases, boundaries), texto por zona (R99/R00/problema, desviación porcentual, productos truncados), texto de unidad de manejo, resumen general
+- `test_zonificacion.py` (15 tests) — BFS de componentes conexos, filtros (R99/R00/normal), agrupación por contigüidad espacial, separación por causa y severidad, NDVI ponderado, área acumulada, ordenamiento por criticidad, validez GeoJSON
+
+Total: 84 tests del motor de diagnóstico pasan (engine 14 + forma 12 + texto 26 + zonificación 15 + API 8 + clasificación existentes 9).
+
 ### Tareas pendientes
 
 | Tarea | Estado |
 |---|---|
-| Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Pendiente |
-| Cerrar huecos de cobertura en tests del motor de reglas | Pendiente |
-| Preparar demo Hito 2 | Pendiente |
-| Testing integral | Pendiente |
+| Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Manual (usuario) |
+| Preparar demo Hito 2 | Manual |
 
 ### Problemas encontrados
 
