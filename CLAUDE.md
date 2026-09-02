@@ -37,7 +37,8 @@
 | Diagnóstico explicado por zona | ✅ | Texto legible, severidad, vinculado a lote/vuelo. `app/diagnostico/texto.py` |
 | Zonificación de manejo (RFDR-02) | ✅ | Agrupa zonas contiguas por causa+severidad en unidades de manejo. `app/diagnostico/zonificacion.py` |
 | Mapa con color por severidad | ✅ | Toggle automático al activar tab Diagnóstico + contornos de unidades de manejo |
-| Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 10 pendiente |
+| Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
+| Tests unitarios del motor de diagnóstico | ✅ | 84 tests: engine, forma, texto, zonificación, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py` |
 | Exportación Shapefile / PDF | ❌ | Pendiente |
 
 ### Credenciales de desarrollo

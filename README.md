@@ -221,6 +221,9 @@ docker compose exec db psql -U agronexo
 # Correr tests del pipeline GIS
 docker compose exec worker python3 tests/test_ndvi_pipeline.py
 
+# Correr tests del motor de diagnóstico (engine + forma + texto + zonificación + API)
+docker compose exec api python3 -m pytest tests/test_diagnostico_engine.py tests/test_forma.py tests/test_texto.py tests/test_zonificacion.py tests/test_diagnostico_api.py -v
+
 # Apagar todo (preserva los datos)
 docker compose down
 
@@ -238,7 +241,7 @@ agronexo/
 │   ├── auth/               # Registro, login, JWT
 │   ├── lotes/              # CRUD de lotes agrícolas con geometrías PostGIS
 │   ├── ingesta/            # Upload GeoTIFF, validación, encolado Celery
-│   ├── diagnostico/        # Motor de reglas (20 reglas en cascada), productos fitosanitarios
+│   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── core/               # Config (pydantic-settings), BD, cliente MinIO
 │   └── main.py             # Punto de entrada FastAPI
@@ -247,7 +250,7 @@ agronexo/
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
 ├── migrations/             # Migraciones Alembic
 │   └── versions/           # Scripts versionados (0001 → 0015)
-├── tests/                  # Tests del pipeline GIS con GeoTIFF sintético
+├── tests/                  # Tests: pipeline GIS, motor diagnóstico (engine, forma, texto, zonificación), API
 ├── frontend/               # React + Vite
 ├── docker/
 │   ├── Dockerfile.api      # Python 3.11 + FastAPI

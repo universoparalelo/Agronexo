@@ -168,6 +168,7 @@ _(sin problemas reportados)_
 |---|---|
 | Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Completada |
 | Pulido de UX y mensajes de estado | Completada |
+| Testing integral — tests unitarios del motor de diagnóstico | Completada |
 
 #### Tabla de estadísticas por zona
 **Fecha:** 2026-09-02
