@@ -103,7 +103,7 @@ export default function ResultadosVuelo() {
 
       <main className="resultados-main">
         <div className="resultados-mapa">
-          <MapaZonas geojson={zonas} />
+          <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} />
         </div>
 
         <div className="resultados-sidebar">
@@ -124,13 +124,23 @@ export default function ResultadosVuelo() {
 
           {tab === 'zonas' && (
             features.length > 0
-              ? <TablaZonas features={features} />
+              ? <>
+                  <TablaZonas features={features} />
+                  <button className="link-diagnostico" onClick={() => setTab('diagnostico')}>
+                    Ver diagnóstico agronómico →
+                  </button>
+                </>
               : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
           )}
 
           {tab === 'diagnostico' && (
             <>
-              {diagnosticoLoading && <p className="empty-hint">Generando diagnóstico...</p>}
+              {diagnosticoLoading && (
+                <div className="diagnostico-loading">
+                  <span className="diagnostico-spinner" />
+                  <p>Analizando zonas y generando diagnóstico agronómico...</p>
+                </div>
+              )}
               {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
               {diagnostico && <TablaDiagnostico diagnostico={diagnostico} />}
             </>

@@ -119,41 +119,99 @@ _(sin problemas reportados)_
 
 ## Sprint 9 — Severidad y zonificación de manejo
 
-**Período:** pendiente de inicio
+**Período:** 2026-09-02
 
-### Tareas pendientes
+### Tareas completadas
 
 | Tarea | Estado |
 |---|---|
-| Calcular afectación relativa de cada zona vs. promedio del lote | Pendiente |
-| Clasificar cada zona por nivel de severidad (crítica / deficiente / normal / vigorosa) | Pendiente |
-| Agrupar zonas con el mismo problema y severidad similar en una unidad de manejo común | Pendiente |
+| Calcular afectación relativa de cada zona vs. promedio del lote | Completada (Sprint 8) |
+| Clasificar cada zona por nivel de severidad (crítica / moderada / leve / normal / vigorosa) | Completada (Sprint 8) |
+| Agrupar zonas con el mismo problema y severidad similar en una unidad de manejo común | Completada |
+| Mapa de zonas clasificadas con color por severidad | Completada |
+
+#### Zonificación de manejo (RFDR-02)
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Implementación de la agrupación automática de zonas contiguas con misma causa y severidad en unidades de manejo únicas para prescripción diferenciada.
+
+**Backend:**
+- Nuevo módulo `app/diagnostico/zonificacion.py` — agrupa zonas por (causa_indice, severidad), detecta contigüidad espacial usando buffer de 20m con proyección local a metros, fusiona geometrías con `unary_union` de Shapely, y calcula estadísticas agregadas (área total, NDVI promedio ponderado, conteo de zonas)
+- Nueva función `generar_texto_unidad()` en `app/diagnostico/texto.py` — genera texto descriptivo para cada unidad de manejo
+- Integración en `service.py` — el response del diagnóstico ahora incluye `unidades_manejo` como array de Features GeoJSON con geometría fusionada y propiedades agregadas
+
+**Frontend:**
+- `MapaZonas.jsx` ahora acepta prop `diagnostico` — cuando la tab "Diagnóstico" está activa, colorea zonas por severidad (rojo/ámbar/amarillo/verde/azul) en lugar de por clase NDVI, y dibuja contornos punteados de las unidades de manejo como overlay
+- `TablaDiagnostico.jsx` — nueva sección "Unidades de manejo" al final de la lista de diagnóstico, con cards por unidad mostrando área total, nro. de zonas, texto descriptivo y productos sugeridos
+- Leyenda del mapa se adapta dinámicamente al modo activo (clase vs severidad)
+
+**Decisiones tomadas:**
+- La severidad ya estaba implementada en Sprint 8 (`texto.py:calcular_severidad`); se verificó que los umbrales (>50% crítica, >25% moderada, >10% leve) son correctos
+- Buffer de contigüidad de 20m — lo suficiente para unir zonas separadas por bordes de vectorización sin fusionar zonas realmente distantes
+- El mapa de severidad (originalmente Sprint 10) se adelantó a Sprint 9 porque era necesario para visualizar las unidades de manejo
+- Las unidades de manejo se devuelven como campo top-level `unidades_manejo` en el response (no dentro de metadata) porque contienen geometría GeoJSON necesaria para el mapa
 
 ### Problemas encontrados
 
-_(sprint no iniciado)_
+_(sin problemas reportados)_
 
 ---
 
 ## Sprint 10 — Dashboard de resultados, testing y demo
 
-**Período:** pendiente de inicio
+**Período:** 2026-09-02
+
+### Tareas completadas
+
+| Tarea | Estado |
+|---|---|
+| Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Completada |
+| Pulido de UX y mensajes de estado | Completada |
+| Testing integral — tests unitarios del motor de diagnóstico | Completada |
+
+#### Tabla de estadísticas por zona
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Vista compacta tipo tabla con columnas: Zona, Área, NDVI, Severidad, Causa, Confianza, Producto. Toggle entre vista tabla y vista cards (detalle). Zonas sin problema (R99) aparecen atenuadas. Labels abreviados para causas y confianza.
+
+**Decisiones tomadas:**
+- Vista tabla como default (más compacta para muchas zonas), cards como alternativa para ver texto explicativo completo
+- Zonas R99 con clase CSS `.stats-row--ok` para atenuar visualmente sin ocultar
+
+#### Pulido de UX y mensajes de estado
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Corrección de 6 puntos de UX pendientes:
+1. KPI cards del Dashboard — reemplazados "Recomendaciones Activas" (Próximamente) y "Ahorro Estimado" (pendiente) por "Análisis Completados" y "Área Monitoreada" con datos reales
+2. Badge "Óptimo" → "Completado" para vuelos procesados
+3. Botón "Ver Diagnósticos" — habilitado cuando hay análisis completados, navega al último vuelo con resultados
+4. DetalleLote empty state — texto actualizado para referenciar el flujo real desde el Dashboard
+5. Loading de diagnóstico — spinner animado con mensaje descriptivo en lugar de texto plano
+6. Link contextual desde tab "Zonas" a "Ver diagnóstico agronómico →"
+
+#### Testing integral — tests unitarios del motor de diagnóstico
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Dos archivos nuevos de tests puros (sin DB, sin I/O):
+- `test_texto.py` (26 tests) — severidad (umbrales, edge cases, boundaries), texto por zona (R99/R00/problema, desviación porcentual, productos truncados), texto de unidad de manejo, resumen general
+- `test_zonificacion.py` (15 tests) — BFS de componentes conexos, filtros (R99/R00/normal), agrupación por contigüidad espacial, separación por causa y severidad, NDVI ponderado, área acumulada, ordenamiento por criticidad, validez GeoJSON
+
+Total: 84 tests del motor de diagnóstico pasan (engine 14 + forma 12 + texto 26 + zonificación 15 + API 8 + clasificación existentes 9).
 
 ### Tareas pendientes
 
 | Tarea | Estado |
 |---|---|
-| Mapa de zonas clasificadas con color por severidad | Pendiente |
-| Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Pendiente |
-| Pulido de UX y mensajes de estado | Pendiente |
-| Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Pendiente |
-| Cerrar huecos de cobertura en tests del motor de reglas | Pendiente |
-| Preparar demo Hito 2 | Pendiente |
-| Testing integral | Pendiente |
+| Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Manual (usuario) |
+| Preparar demo Hito 2 | Manual |
 
 ### Problemas encontrados
 
-_(sprint no iniciado)_
+_(sin problemas reportados)_
 
 ---
 

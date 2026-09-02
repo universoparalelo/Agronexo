@@ -103,7 +103,7 @@ export default function DetalleLote() {
         {vuelos.length === 0 && (
           <div className="empty-state">
             <p>No hay vuelos registrados para este lote.</p>
-            <p className="empty-hint">Subí un GeoTIFF desde la API para iniciar el análisis.</p>
+            <p className="empty-hint">Usá "Cargar Ortomosaico" desde el Dashboard para subir un vuelo a este lote.</p>
           </div>
         )}
 

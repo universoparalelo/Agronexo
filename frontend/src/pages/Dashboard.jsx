@@ -103,7 +103,7 @@ const IconContraer = () => (
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
 const ESTADO_BADGE = {
-  completado: { label: 'Óptimo',     cls: 'badge-optimo' },
+  completado: { label: 'Completado', cls: 'badge-optimo' },
   procesando: { label: 'Procesando', cls: 'badge-procesando' },
   pendiente:  { label: 'Pendiente',  cls: 'badge-procesando' },
   error:      { label: 'Error',      cls: 'badge-critico' },
@@ -384,31 +384,31 @@ export default function Dashboard() {
             <KpiCard
               label="LOTES REGISTRADOS"
               value={loteRows.length || '—'}
-              delta={loteRows.length > 0 ? `${loteRows.length} registrados` : null}
+              delta={loteRows.length > 0 ? `${loteRows.length} activo${loteRows.length !== 1 ? 's' : ''}` : null}
               deltaType="up"
               icon={<IconLotes />}
             />
             <KpiCard
               label="ANÁLISIS REALIZADOS"
               value={vueloRows.length || '—'}
-              delta={vueloRows.length > 0 ? `+${vueloRows.length} procesados` : null}
+              delta={vueloRows.filter(v => v.estado === 'completado').length > 0 ? `${vueloRows.filter(v => v.estado === 'completado').length} completados` : null}
               deltaType="up"
               icon={<IconDiagnostico />}
             />
             <KpiCard
-              label="RECOMENDACIONES ACTIVAS"
-              value="—"
-              delta="Próximamente"
-              deltaType="neutral"
+              label="ANÁLISIS COMPLETADOS"
+              value={vueloRows.filter(v => v.estado === 'completado').length || '—'}
+              delta={vueloRows.some(v => v.estado === 'completado') ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
+              deltaType={vueloRows.some(v => v.estado === 'completado') ? 'up' : 'neutral'}
               icon={<IconInformes />}
             />
             <KpiCard
-              label="AHORRO ESTIMADO"
-              value="—"
-              delta="Motor de diagnóstico pendiente"
-              deltaType="neutral"
+              label="ÁREA MONITOREADA"
+              value={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? `${Math.round(loteRows.reduce((s, l) => s + (l.area_ha || 0), 0))}` : '—'}
+              delta={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'hectáreas totales' : 'Registrá un lote para comenzar'}
+              deltaType={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'up' : 'neutral'}
               icon={<IconConfig />}
-              highlight
+              highlight={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0}
             />
           </div>
 
@@ -618,13 +618,24 @@ export default function Dashboard() {
                     </div>
                     <IconArrow />
                   </button>
-                  <button className="accion-item" disabled>
+                  <button
+                    className="accion-item"
+                    disabled={!vueloRows.some(v => v.estado === 'completado')}
+                    onClick={() => {
+                      const ultimo = vueloRows.find(v => v.estado === 'completado')
+                      if (ultimo) navigate(`/lotes/${ultimo.lote.id}/vuelos/${ultimo.vueloId}`)
+                    }}
+                  >
                     <div className="accion-icon">
                       <IconDiagnostico />
                     </div>
                     <div className="accion-text">
                       <span className="accion-label">Ver Diagnósticos</span>
-                      <span className="accion-sub">Motor de diagnóstico pendiente</span>
+                      <span className="accion-sub">
+                        {vueloRows.some(v => v.estado === 'completado')
+                          ? 'Resultados del último análisis'
+                          : 'Cargá un ortomosaico primero'}
+                      </span>
                     </div>
                     <IconArrow />
                   </button>
