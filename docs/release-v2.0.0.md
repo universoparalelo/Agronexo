@@ -160,14 +160,41 @@ _(sin problemas reportados)_
 
 ## Sprint 10 — Dashboard de resultados, testing y demo
 
-**Período:** pendiente de inicio
+**Período:** 2026-09-02
+
+### Tareas completadas
+
+| Tarea | Estado |
+|---|---|
+| Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Completada |
+| Pulido de UX y mensajes de estado | Completada |
+
+#### Tabla de estadísticas por zona
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Vista compacta tipo tabla con columnas: Zona, Área, NDVI, Severidad, Causa, Confianza, Producto. Toggle entre vista tabla y vista cards (detalle). Zonas sin problema (R99) aparecen atenuadas. Labels abreviados para causas y confianza.
+
+**Decisiones tomadas:**
+- Vista tabla como default (más compacta para muchas zonas), cards como alternativa para ver texto explicativo completo
+- Zonas R99 con clase CSS `.stats-row--ok` para atenuar visualmente sin ocultar
+
+#### Pulido de UX y mensajes de estado
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Corrección de 6 puntos de UX pendientes:
+1. KPI cards del Dashboard — reemplazados "Recomendaciones Activas" (Próximamente) y "Ahorro Estimado" (pendiente) por "Análisis Completados" y "Área Monitoreada" con datos reales
+2. Badge "Óptimo" → "Completado" para vuelos procesados
+3. Botón "Ver Diagnósticos" — habilitado cuando hay análisis completados, navega al último vuelo con resultados
+4. DetalleLote empty state — texto actualizado para referenciar el flujo real desde el Dashboard
+5. Loading de diagnóstico — spinner animado con mensaje descriptivo en lugar de texto plano
+6. Link contextual desde tab "Zonas" a "Ver diagnóstico agronómico →"
 
 ### Tareas pendientes
 
 | Tarea | Estado |
 |---|---|
-| Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Pendiente |
-| Pulido de UX y mensajes de estado | Pendiente |
 | Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Pendiente |
 | Cerrar huecos de cobertura en tests del motor de reglas | Pendiente |
 | Preparar demo Hito 2 | Pendiente |
@@ -175,7 +202,7 @@ _(sin problemas reportados)_
 
 ### Problemas encontrados
 
-_(sprint no iniciado)_
+_(sin problemas reportados)_
 
 ---
 

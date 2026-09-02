@@ -1,7 +1,15 @@
+import { useState } from 'react'
+
 const CONFIANZA_LABELS = {
   alta:  'Confianza alta',
   media: 'Confianza media — confirmar en campo',
   baja:  'Confianza baja — orientativo',
+}
+
+const CONFIANZA_CORTO = {
+  alta:  'Alta',
+  media: 'Media',
+  baja:  'Baja',
 }
 
 const SEVERIDAD_COLORS = {
@@ -20,9 +28,23 @@ const SEVERIDAD_LABELS = {
   vigorosa: 'Vigorosa',
 }
 
+const CAUSA_LABELS = {
+  sin_problema_detectado: 'Sin problema',
+  interferencia_vegetacion: 'Malezas',
+  estres_biotico_fungico: 'Hongo',
+  estres_biotico_insecto: 'Insecto',
+  estres_nutricional_nitrogeno: 'Déficit N',
+  estres_nutricional_micro: 'Déficit micro',
+  estres_nutricional_fosforo: 'Déficit P',
+  estres_hidrico: 'Estrés hídrico',
+  madurez_temprana_diferencial: 'Madurez dif.',
+  vigor_excesivo: 'Vigor excesivo',
+}
+
 export default function TablaDiagnostico({ diagnostico }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
+  const [vista, setVista] = useState('tabla')
 
   if (features.length === 0) {
     return <p className="empty-hint">Sin zonas para diagnosticar.</p>
@@ -36,7 +58,25 @@ export default function TablaDiagnostico({ diagnostico }) {
 
   return (
     <div className="tabla-diagnostico-wrapper">
-      <h3 className="tabla-zonas-title">Diagnóstico agronómico</h3>
+      <div className="diagnostico-title-row">
+        <h3 className="tabla-zonas-title">Diagnóstico agronómico</h3>
+        <div className="diagnostico-vista-toggle">
+          <button
+            className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}
+            onClick={() => setVista('tabla')}
+            title="Vista tabla"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="3" rx="0.5" fill="currentColor"/><rect x="1" y="5.5" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="1" y="10" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.35"/></svg>
+          </button>
+          <button
+            className={`vista-btn ${vista === 'cards' ? 'vista-btn--active' : ''}`}
+            onClick={() => setVista('cards')}
+            title="Vista detalle"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
+          </button>
+        </div>
+      </div>
 
       {metadata && (
         <div className="diagnostico-header-info">
@@ -53,58 +93,105 @@ export default function TablaDiagnostico({ diagnostico }) {
         </div>
       )}
 
-      <div className="diagnostico-lista">
-        {ordenadas.map((f, i) => {
-          const p = f.properties || {}
-          const sinProblema = p.regla_id === 'R99'
-          const severidad = p.severidad || 'normal'
-          return (
-            <div key={i} className={`diagnostico-card confianza-${p.confianza || 'media'} ${sinProblema ? 'diagnostico-card--ok' : ''}`}>
-              <div className="diagnostico-card-header">
-                <span className="diagnostico-regla-nombre">{p.regla_nombre || 'Sin diagnóstico'}</span>
-                <div className="diagnostico-badges">
-                  {!sinProblema && (
-                    <span className={`diagnostico-badge ${SEVERIDAD_COLORS[severidad] || 'severidad-normal'}`}>
-                      {SEVERIDAD_LABELS[severidad] || severidad}
+      {vista === 'tabla' && (
+        <div className="stats-table-wrap">
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th>Zona</th>
+                <th>Área</th>
+                <th>NDVI</th>
+                <th>Severidad</th>
+                <th>Causa</th>
+                <th>Conf.</th>
+                <th>Producto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordenadas.map((f, i) => {
+                const p = f.properties || {}
+                const sinProblema = p.regla_id === 'R99'
+                const severidad = p.severidad || 'normal'
+                const producto = p.productos_sugeridos?.[0]?.nombre || '—'
+                return (
+                  <tr key={i} className={sinProblema ? 'stats-row--ok' : ''}>
+                    <td className="stats-zona-id">Z{p.zona_id ?? i}</td>
+                    <td>{p.area_ha?.toFixed(2) ?? '—'}</td>
+                    <td className="stats-ndvi">{p.ndvi_promedio?.toFixed(3) ?? '—'}</td>
+                    <td>
+                      <span className={`stats-badge ${SEVERIDAD_COLORS[severidad] || ''}`}>
+                        {SEVERIDAD_LABELS[severidad] || severidad}
+                      </span>
+                    </td>
+                    <td className="stats-causa">{CAUSA_LABELS[p.causa_indice] || p.causa_indice || '—'}</td>
+                    <td>
+                      <span className={`stats-badge confianza-badge-${p.confianza || 'media'}`}>
+                        {CONFIANZA_CORTO[p.confianza] || p.confianza || '—'}
+                      </span>
+                    </td>
+                    <td className="stats-producto">{sinProblema ? '—' : producto}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {vista === 'cards' && (
+        <div className="diagnostico-lista">
+          {ordenadas.map((f, i) => {
+            const p = f.properties || {}
+            const sinProblema = p.regla_id === 'R99'
+            const severidad = p.severidad || 'normal'
+            return (
+              <div key={i} className={`diagnostico-card confianza-${p.confianza || 'media'} ${sinProblema ? 'diagnostico-card--ok' : ''}`}>
+                <div className="diagnostico-card-header">
+                  <span className="diagnostico-regla-nombre">{p.regla_nombre || 'Sin diagnóstico'}</span>
+                  <div className="diagnostico-badges">
+                    {!sinProblema && (
+                      <span className={`diagnostico-badge ${SEVERIDAD_COLORS[severidad] || 'severidad-normal'}`}>
+                        {SEVERIDAD_LABELS[severidad] || severidad}
+                      </span>
+                    )}
+                    <span className={`diagnostico-badge confianza-badge-${p.confianza || 'media'}`}>
+                      {CONFIANZA_LABELS[p.confianza] || p.confianza}
                     </span>
-                  )}
-                  <span className={`diagnostico-badge confianza-badge-${p.confianza || 'media'}`}>
-                    {CONFIANZA_LABELS[p.confianza] || p.confianza}
-                  </span>
+                  </div>
                 </div>
+
+                <div className="diagnostico-card-meta">
+                  <span>{p.area_ha?.toFixed(2) ?? '—'} ha</span>
+                  <span>·</span>
+                  <span>patrón: {p.patron_espacial || '—'}</span>
+                  <span>·</span>
+                  <span>NDVI: {p.ndvi_promedio?.toFixed(3) ?? '—'}</span>
+                </div>
+
+                {p.texto_explicativo && (
+                  <p className="diagnostico-texto-explicativo">{p.texto_explicativo}</p>
+                )}
+
+                {!sinProblema && (
+                  <>
+                    <details className="diagnostico-confirmar">
+                      <summary>Cómo confirmar en campo</summary>
+                      <p>{p.como_confirmar_campo}</p>
+                    </details>
+                    {p.productos_sugeridos?.length > 0 && (
+                      <div className="diagnostico-productos">
+                        {p.productos_sugeridos.map((prod, j) => (
+                          <span key={j} className="producto-chip">{prod.nombre}</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-
-              <div className="diagnostico-card-meta">
-                <span>{p.area_ha?.toFixed(2) ?? '—'} ha</span>
-                <span>·</span>
-                <span>patrón: {p.patron_espacial || '—'}</span>
-                <span>·</span>
-                <span>NDVI: {p.ndvi_promedio?.toFixed(3) ?? '—'}</span>
-              </div>
-
-              {p.texto_explicativo && (
-                <p className="diagnostico-texto-explicativo">{p.texto_explicativo}</p>
-              )}
-
-              {!sinProblema && (
-                <>
-                  <details className="diagnostico-confirmar">
-                    <summary>Cómo confirmar en campo</summary>
-                    <p>{p.como_confirmar_campo}</p>
-                  </details>
-                  {p.productos_sugeridos?.length > 0 && (
-                    <div className="diagnostico-productos">
-                      {p.productos_sugeridos.map((prod, j) => (
-                        <span key={j} className="producto-chip">{prod.nombre}</span>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {diagnostico?.unidades_manejo?.length > 0 && (
         <div className="unidades-manejo-section">
