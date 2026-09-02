@@ -105,6 +105,52 @@ export default function TablaDiagnostico({ diagnostico }) {
           )
         })}
       </div>
+
+      {diagnostico?.unidades_manejo?.length > 0 && (
+        <div className="unidades-manejo-section">
+          <h3 className="tabla-zonas-title">Unidades de manejo</h3>
+          <p className="unidades-manejo-desc">
+            Zonas agrupadas por causa y severidad para prescripción diferenciada.
+          </p>
+          <div className="unidades-manejo-lista">
+            {diagnostico.unidades_manejo.map((u) => {
+              const p = u.properties || {}
+              return (
+                <div key={p.unidad_id} className={`unidad-card ${SEVERIDAD_COLORS[p.severidad] || ''}`}>
+                  <div className="unidad-card-header">
+                    <span className="unidad-card-titulo">Unidad #{p.unidad_id}</span>
+                    <span className={`diagnostico-badge ${SEVERIDAD_COLORS[p.severidad] || 'severidad-normal'}`}>
+                      {SEVERIDAD_LABELS[p.severidad] || p.severidad}
+                    </span>
+                  </div>
+                  <div className="unidad-card-meta">
+                    <span>{p.area_total_ha} ha</span>
+                    <span>·</span>
+                    <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
+                    {p.ndvi_promedio != null && (
+                      <>
+                        <span>·</span>
+                        <span>NDVI: {p.ndvi_promedio.toFixed(3)}</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="unidad-card-causa">{p.regla_nombre}</p>
+                  {p.texto_unidad && (
+                    <p className="unidad-card-texto">{p.texto_unidad}</p>
+                  )}
+                  {p.productos_sugeridos?.length > 0 && (
+                    <div className="diagnostico-productos">
+                      {p.productos_sugeridos.map((prod, j) => (
+                        <span key={j} className="producto-chip">{prod.nombre}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

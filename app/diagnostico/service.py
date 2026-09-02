@@ -32,6 +32,7 @@ from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import CausaIndiceEnum, ProductoFitosanitario, TipoProductoEnum
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
+from app.diagnostico.zonificacion import generar_unidades_manejo
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
 from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote
 
@@ -264,10 +265,12 @@ def _calcular_diagnostico(
         })
 
     resumen = generar_resumen_general(features_salida)
+    unidades = generar_unidades_manejo(features_salida, lon0, lat0)
 
     return {
         "type": "FeatureCollection",
         "features": features_salida,
+        "unidades_manejo": unidades,
         "metadata": {
             "lote_id": lote_id,
             "lote_nombre": lote_nombre,
@@ -277,6 +280,7 @@ def _calcular_diagnostico(
             "estadio_fenologico": estadio_fenologico,
             "ndvi_promedio_lote": round(ndvi_promedio_lote, 4),
             "indices_disponibles": list(valores_por_indice.keys()),
+            "n_unidades_manejo": len(unidades),
             "resumen_general": resumen,
         },
     }

@@ -119,19 +119,42 @@ _(sin problemas reportados)_
 
 ## Sprint 9 — Severidad y zonificación de manejo
 
-**Período:** pendiente de inicio
+**Período:** 2026-09-02
 
-### Tareas pendientes
+### Tareas completadas
 
 | Tarea | Estado |
 |---|---|
-| Calcular afectación relativa de cada zona vs. promedio del lote | Pendiente |
-| Clasificar cada zona por nivel de severidad (crítica / deficiente / normal / vigorosa) | Pendiente |
-| Agrupar zonas con el mismo problema y severidad similar en una unidad de manejo común | Pendiente |
+| Calcular afectación relativa de cada zona vs. promedio del lote | Completada (Sprint 8) |
+| Clasificar cada zona por nivel de severidad (crítica / moderada / leve / normal / vigorosa) | Completada (Sprint 8) |
+| Agrupar zonas con el mismo problema y severidad similar en una unidad de manejo común | Completada |
+| Mapa de zonas clasificadas con color por severidad | Completada |
+
+#### Zonificación de manejo (RFDR-02)
+**Fecha:** 2026-09-02
+**Rama:** `feat/zonificacion-manejo`
+
+Implementación de la agrupación automática de zonas contiguas con misma causa y severidad en unidades de manejo únicas para prescripción diferenciada.
+
+**Backend:**
+- Nuevo módulo `app/diagnostico/zonificacion.py` — agrupa zonas por (causa_indice, severidad), detecta contigüidad espacial usando buffer de 20m con proyección local a metros, fusiona geometrías con `unary_union` de Shapely, y calcula estadísticas agregadas (área total, NDVI promedio ponderado, conteo de zonas)
+- Nueva función `generar_texto_unidad()` en `app/diagnostico/texto.py` — genera texto descriptivo para cada unidad de manejo
+- Integración en `service.py` — el response del diagnóstico ahora incluye `unidades_manejo` como array de Features GeoJSON con geometría fusionada y propiedades agregadas
+
+**Frontend:**
+- `MapaZonas.jsx` ahora acepta prop `diagnostico` — cuando la tab "Diagnóstico" está activa, colorea zonas por severidad (rojo/ámbar/amarillo/verde/azul) en lugar de por clase NDVI, y dibuja contornos punteados de las unidades de manejo como overlay
+- `TablaDiagnostico.jsx` — nueva sección "Unidades de manejo" al final de la lista de diagnóstico, con cards por unidad mostrando área total, nro. de zonas, texto descriptivo y productos sugeridos
+- Leyenda del mapa se adapta dinámicamente al modo activo (clase vs severidad)
+
+**Decisiones tomadas:**
+- La severidad ya estaba implementada en Sprint 8 (`texto.py:calcular_severidad`); se verificó que los umbrales (>50% crítica, >25% moderada, >10% leve) son correctos
+- Buffer de contigüidad de 20m — lo suficiente para unir zonas separadas por bordes de vectorización sin fusionar zonas realmente distantes
+- El mapa de severidad (originalmente Sprint 10) se adelantó a Sprint 9 porque era necesario para visualizar las unidades de manejo
+- Las unidades de manejo se devuelven como campo top-level `unidades_manejo` en el response (no dentro de metadata) porque contienen geometría GeoJSON necesaria para el mapa
 
 ### Problemas encontrados
 
-_(sprint no iniciado)_
+_(sin problemas reportados)_
 
 ---
 
@@ -143,7 +166,6 @@ _(sprint no iniciado)_
 
 | Tarea | Estado |
 |---|---|
-| Mapa de zonas clasificadas con color por severidad | Pendiente |
 | Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Pendiente |
 | Pulido de UX y mensajes de estado | Pendiente |
 | Pruebas E2E del flujo completo: upload → análisis → diagnóstico | Pendiente |

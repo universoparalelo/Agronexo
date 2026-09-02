@@ -114,6 +114,37 @@ def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
     return " ".join(parts)
 
 
+def generar_texto_unidad(props: dict) -> str:
+    area = props.get("area_total_ha", 0)
+    n_zonas = props.get("n_zonas", 1)
+    causa = props.get("causa_indice", "")
+    severidad = props.get("severidad", "")
+    ndvi = props.get("ndvi_promedio")
+    accion = props.get("accion_recomendada", "")
+    productos = props.get("productos_sugeridos", [])
+
+    causa_label = CAUSA_LABELS.get(causa, causa)
+    zonas_str = f"{n_zonas} zona{'s' if n_zonas != 1 else ''} agrupada{'s' if n_zonas != 1 else ''}"
+
+    parts = [f"Unidad de manejo de {area:.1f} ha ({zonas_str}) con {causa_label}, severidad {severidad}."]
+
+    if ndvi is not None:
+        parts.append(f"NDVI promedio: {ndvi:.3f}.")
+
+    if accion:
+        parts.append(accion)
+
+    if productos:
+        nombres = [p["nombre"] for p in productos[:3]]
+        if len(productos) > 3:
+            nombres_str = ", ".join(nombres) + f" y {len(productos) - 3} más"
+        else:
+            nombres_str = ", ".join(nombres)
+        parts.append(f"Productos sugeridos: {nombres_str}.")
+
+    return " ".join(parts)
+
+
 def generar_resumen_general(features: list[dict]) -> str:
     total = len(features)
     if total == 0:

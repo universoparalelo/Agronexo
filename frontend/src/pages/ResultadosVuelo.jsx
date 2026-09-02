@@ -103,7 +103,7 @@ export default function ResultadosVuelo() {
 
       <main className="resultados-main">
         <div className="resultados-mapa">
-          <MapaZonas geojson={zonas} />
+          <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} />
         </div>
 
         <div className="resultados-sidebar">

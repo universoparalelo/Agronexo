@@ -34,7 +34,9 @@
 | Motor de diagnóstico (RFDR-01) | ✅ | On-demand/sin persistencia — `GET /lotes/{id}/vuelos/{id}/diagnostico`. 20 reglas en `app/diagnostico/reglas.py`. Historial persistido queda para release 4 (ver `docs/release-v1.0.0.md`) |
 | Atributos enriquecidos del lote | ✅ | `variedad` (String), `tipo_suelo` (enum 7 valores NEA), `fecha_siembra` (DateTime). Migración 0014. Formulario frontend actualizado |
 | Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |
-| Diagnóstico explicado por zona | ❌ | Sprint 8 en curso — texto legible, severidad, vincular a lote/vuelo |
+| Diagnóstico explicado por zona | ✅ | Texto legible, severidad, vinculado a lote/vuelo. `app/diagnostico/texto.py` |
+| Zonificación de manejo (RFDR-02) | ✅ | Agrupa zonas contiguas por causa+severidad en unidades de manejo. `app/diagnostico/zonificacion.py` |
+| Mapa con color por severidad | ✅ | Toggle automático al activar tab Diagnóstico + contornos de unidades de manejo |
 | Dashboard de resultados (tabla stats + UX) | ❌ | Sprint 10 pendiente |
 | Exportación Shapefile / PDF | ❌ | Pendiente |
 

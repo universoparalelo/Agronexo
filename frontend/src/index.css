@@ -2355,6 +2355,76 @@ body {
   padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid #d1d5db;
 }
 
+/* ── Unidades de manejo ── */
+.unidades-manejo-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 2px solid #e5e8df;
+}
+
+.unidades-manejo-desc {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.unidades-manejo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.unidad-card {
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #9ca3af;
+  border-radius: 6px;
+  padding: 0.75rem 0.9rem;
+  background: #fafbf9;
+}
+
+.unidad-card.severidad-critica  { border-left-color: #ef4444; }
+.unidad-card.severidad-moderada { border-left-color: #f59e0b; }
+.unidad-card.severidad-leve     { border-left-color: #eab308; }
+.unidad-card.severidad-vigorosa { border-left-color: #3b82f6; }
+
+.unidad-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.unidad-card-titulo {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #1a1a1a;
+}
+
+.unidad-card-meta {
+  font-size: 0.76rem;
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.unidad-card-causa {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0.25rem 0;
+}
+
+.unidad-card-texto {
+  font-size: 0.8rem;
+  color: #4b5563;
+  line-height: 1.45;
+  margin: 0.2rem 0;
+  overflow-wrap: break-word;
+}
+
 /* ══════════════════════════════════════
    Landing  (l2nd-*)  —  dark glass design
    ══════════════════════════════════════ */
