@@ -7,6 +7,8 @@ import SidebarNav from '../components/SidebarNav'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
+import ModalCultivosLote from '../components/ModalCultivosLote'
+import MiniMapaLote from '../components/MiniMapaLote'
 
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
@@ -33,15 +35,24 @@ const IconTrash = () => (
     <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
   </svg>
 )
+const IconLeaf = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 20A7 7 0 019.8 6.1C15.5 5 17 3 17 3s3.5 2.5 3.5 8.5c0 4.5-3.5 8.5-9.5 8.5z"/>
+    <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+  </svg>
+)
+const IconExpandir = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 3 21 3 21 9"/>
+    <polyline points="9 21 3 21 3 15"/>
+    <line x1="21" y1="3" x2="14" y2="10"/>
+    <line x1="3" y1="21" x2="10" y2="14"/>
+  </svg>
+)
 function fmtFechaHoy() {
   return new Date().toLocaleDateString('es-AR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   })
-}
-
-function fmtFecha(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export default function Lotes() {
@@ -53,6 +64,17 @@ export default function Lotes() {
   const [showModalCarga, setShowModalCarga] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
+  const [mapaExpandidoId, setMapaExpandidoId] = useState(null)
+  const [loteCultivos, setLoteCultivos] = useState(null)
+
+  useEffect(() => {
+    if (!mapaExpandidoId) return
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setMapaExpandidoId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [mapaExpandidoId])
 
   const cargarLotes = useCallback(async () => {
     setLoading(true)
@@ -102,6 +124,12 @@ export default function Lotes() {
           mensaje={`¿Seguro que querés eliminar el lote "${loteParaEliminar.nombre}"? Esta acción no se puede deshacer.`}
           onConfirmar={handleEliminar}
           onClose={() => setLoteParaEliminar(null)}
+        />
+      )}
+      {loteCultivos && (
+        <ModalCultivosLote
+          lote={loteCultivos}
+          onClose={() => setLoteCultivos(null)}
         />
       )}
 
@@ -157,13 +185,37 @@ export default function Lotes() {
             <div className="lotes-grid">
               {lotes.map((lote) => (
                 <div className="lote-card" key={lote.id}>
-                  <div className="lote-card-thumb">
-                    <img src="/fondo.jpeg" alt="" />
-                  </div>
+                  <MiniMapaLote geometry={lote.geometry} />
+                  {lote.geometry && (
+                    <button
+                      className="mini-mapa-expand-btn"
+                      title="Expandir mapa"
+                      onClick={() => setMapaExpandidoId(lote.id)}
+                    >
+                      <IconExpandir />
+                    </button>
+                  )}
+                  {mapaExpandidoId === lote.id && (
+                    <>
+                      <div className="mapa-expand-backdrop" onClick={() => setMapaExpandidoId(null)} />
+                      <div className="lote-mapa-overlay">
+                        <div className="lote-mapa-overlay-header">
+                          <h3>{lote.nombre}</h3>
+                          <button className="modal-close" onClick={() => setMapaExpandidoId(null)} aria-label="Cerrar">✕</button>
+                        </div>
+                        <div className="lote-mapa-overlay-body">
+                          <MiniMapaLote geometry={lote.geometry} expandido />
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <div className="lote-card-body">
                     <div className="lote-card-title-row">
                       <h3>{lote.nombre}</h3>
                       <div className="lote-card-acciones">
+                        <button className="tbl-btn" title="Ver cultivos" onClick={() => setLoteCultivos(lote)}>
+                          <IconLeaf />
+                        </button>
                         <button className="tbl-btn" title="Ver detalle" onClick={() => navigate(`/lotes/${lote.id}`)}>
                           <IconZoom />
                         </button>
@@ -173,10 +225,10 @@ export default function Lotes() {
                       </div>
                     </div>
                     <div className="lote-card-meta">
-                      <span>🌱 {CULTIVO_LABEL[lote.cultivo] ?? lote.cultivo}</span>
+                      <span>🌱 {lote.cultivo_activo ? (CULTIVO_LABEL[lote.cultivo_activo.cultivo] ?? lote.cultivo_activo.cultivo) : 'Sin cultivo activo'}</span>
                       <span>📐 {lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}</span>
                       <span>🛰️ {lote.vuelos.length} vuelo{lote.vuelos.length !== 1 ? 's' : ''}</span>
-                      <span>📅 {fmtFecha(lote.created_at)}</span>
+                      <span>🪨 {lote.suelo?.tipo ?? 'Sin suelo'}</span>
                     </div>
                   </div>
                 </div>

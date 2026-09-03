@@ -1,12 +1,12 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from shapely.geometry import mapping, shape
 from shapely.geometry.polygon import Polygon
 
-from app.lotes.models import CultivoEnum
+from app.lotes.models import CultivoEnum, ProvinciaEnum
 
 
 # ── Geometry helpers ────────────────────────────────────────────────
@@ -33,36 +33,26 @@ def _validar_polygon_geojson(v: Any) -> dict:
 # ── Lote schemas ────────────────────────────────────────────────────
 
 class LoteCreate(BaseModel):
+    """El límite geográfico no se pide acá — se deriva automáticamente del
+    bounding box del primer GeoTIFF que se suba como vuelo (ver workers/gis/tasks.py)."""
     nombre: str = Field(..., min_length=1, max_length=200, examples=["Lote Norte"])
-    cultivo: CultivoEnum = Field(..., examples=["soja"])
-    estadio_fenologico: str | None = Field(None, max_length=10, examples=["R3"])
-    geometry: dict | None = Field(
-        None,
-        description="Opcional. Si no se provee, el lote queda sin límites — se puede cargar después.",
-        examples=[{
-            "type": "Polygon",
-            "coordinates": [[
-                [-60.6753, -27.4693],
-                [-60.6701, -27.4693],
-                [-60.6701, -27.4741],
-                [-60.6753, -27.4741],
-                [-60.6753, -27.4693],
-            ]]
-        }]
-    )
+    suelo_id: uuid.UUID = Field(..., description="FK a suelos — ver GET /lotes/suelos.")
+    provincia: ProvinciaEnum | None = Field(None, examples=["chaco"])
+    departamento: str | None = Field(None, min_length=1, max_length=100, examples=["Presidencia Roque Sáenz Peña"])
+    localidad: str | None = Field(None, min_length=1, max_length=100)
 
-    @field_validator("geometry")
-    @classmethod
-    def geometry_valida(cls, v: Any) -> dict | None:
-        if v is None:
-            return v
-        return _validar_polygon_geojson(v)
+    @model_validator(mode="after")
+    def ubicacion_consistente(self) -> "LoteCreate":
+        algo = self.provincia is not None or self.departamento is not None or self.localidad is not None
+        if algo and self.provincia is None:
+            raise ValueError("Para cargar ubicación hace falta al menos la provincia.")
+        return self
 
 
 class LoteUpdate(BaseModel):
     nombre: str | None = Field(None, min_length=1, max_length=200)
-    cultivo: CultivoEnum | None = None
-    estadio_fenologico: str | None = Field(None, max_length=10)
+    suelo_id: uuid.UUID | None = None
+    ubicacion_id: uuid.UUID | None = None
     geometry: dict | None = None
 
     @field_validator("geometry")
@@ -73,16 +63,50 @@ class LoteUpdate(BaseModel):
         return _validar_polygon_geojson(v)
 
 
+class SueloResponse(BaseModel):
+    id: uuid.UUID
+    tipo: str
+    serie: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class UbicacionResponse(BaseModel):
+    id: uuid.UUID
+    provincia: ProvinciaEnum
+    departamento: str | None
+    localidad: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class CultivoResponse(BaseModel):
+    id: uuid.UUID
+    lote_id: uuid.UUID
+    cultivo: CultivoEnum
+    estadio_fenologico: str | None
+    fecha_siembra: date
+    fecha_cosecha_estimada: date | None
+    fecha_cosecha_real: date | None
+    activo: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class LoteResponse(BaseModel):
     id: uuid.UUID
     nombre: str
-    cultivo: CultivoEnum
-    estadio_fenologico: str | None
+    suelo_id: uuid.UUID | None
+    ubicacion_id: uuid.UUID | None
     geometry: dict | None
     area_ha: float | None
     usuario_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    suelo: SueloResponse | None = None
+    ubicacion: UbicacionResponse | None = None
+    cultivo_activo: CultivoResponse | None = None
 
     model_config = {"from_attributes": True}
 

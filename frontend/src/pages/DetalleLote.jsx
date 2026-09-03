@@ -85,9 +85,11 @@ export default function DetalleLote() {
           <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
           <div className="detalle-titulo">
             <h1>{lote.nombre}</h1>
-            <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
-              {CULTIVO_LABELS[lote.cultivo] || lote.cultivo}
-            </span>
+            {lote.cultivo_activo && (
+              <span className={`cultivo-badge cultivo-${lote.cultivo_activo.cultivo}`}>
+                {CULTIVO_LABELS[lote.cultivo_activo.cultivo] || lote.cultivo_activo.cultivo}
+              </span>
+            )}
           </div>
         </div>
         {lote.area_ha && (

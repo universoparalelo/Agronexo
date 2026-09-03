@@ -5,3 +5,6 @@ export const listarLotes = () =>
 
 export const eliminarLote = (loteId) =>
   client.delete(`/lotes/${loteId}`)
+
+export const listarCultivosLote = (loteId) =>
+  client.get(`/lotes/${loteId}/cultivos`).then(r => r.data)

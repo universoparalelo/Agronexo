@@ -3,6 +3,12 @@ import client from '../api/client'
 import { analizarIndice, inspeccionarGeotiff } from '../api/analisis'
 
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
+const CULTIVOS = [
+  { value: 'soja', label: 'Soja' },
+  { value: 'maiz', label: 'Maíz' },
+  { value: 'algodon', label: 'Algodón' },
+  { value: 'sorgo', label: 'Sorgo' },
+]
 
 const SENSORES = [
   { value: 'sentinel2', label: 'Sentinel-2' },
@@ -29,6 +35,18 @@ const INDICES = [
   {
     value: 'exg', label: 'ExG', sub: 'RGB', bandas: ['GREEN', 'RED', 'BLUE'],
     desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR.',
+  },
+  {
+    value: 'gndvi', label: 'GNDVI', sub: 'NIR / GREEN', bandas: ['NIR', 'GREEN'],
+    desc: 'Índice de Vegetación Verde Normalizado. Reemplaza RED por GREEN — no satura tan rápido, útil en fase reproductiva cuando el NDVI ya está por encima de 0.75.',
+  },
+  {
+    value: 'msavi', label: 'MSAVI', sub: 'NIR / RED', bandas: ['NIR', 'RED'],
+    desc: 'Índice Ajustado al Suelo (versión auto-optimizada de SAVI). Recomendado al inicio de campaña, con suelo muy expuesto.',
+  },
+  {
+    value: 'ndwi', label: 'NDWI', sub: 'GREEN / NIR', bandas: ['GREEN', 'NIR'],
+    desc: 'Índice de Agua de Diferencia Normalizada (proxy McFeeters). Detecta agua superficial y anegamiento — útil en zonas del NEA con pendientes bajas.',
   },
 ]
 
@@ -90,6 +108,10 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [inspeccion, setInspeccion] = useState(null)
+  const [cultivo, setCultivo] = useState('soja')
+  const [estadioFenologico, setEstadioFenologico] = useState('')
+  const [fechaSiembra, setFechaSiembra] = useState('')
+  const [fechaCosechaEstimada, setFechaCosechaEstimada] = useState('')
   const inputRef = useRef()
 
   const sinLotes = !lotes || lotes.length === 0
@@ -148,9 +170,16 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   }
 
   async function handleSubmit() {
+    if (!cultivo) { setError('Seleccioná el cultivo de este ciclo.'); return }
+    if (!fechaSiembra) { setError('Ingresá la fecha de siembra.'); return }
+
     const fd = new FormData()
     fd.append('archivo', archivo)
     fd.append('sensor', sensor)
+    fd.append('cultivo', cultivo)
+    fd.append('fecha_siembra', fechaSiembra)
+    if (estadioFenologico.trim()) fd.append('estadio_fenologico', estadioFenologico.trim())
+    if (fechaCosechaEstimada) fd.append('fecha_cosecha_estimada', fechaCosechaEstimada)
 
     setLoading(true)
     setError('')
@@ -216,7 +245,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               >
                 {lotes.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.nombre} — {CULTIVO_LABEL[l.cultivo] ?? l.cultivo}
+                    {l.nombre} — {l.suelo?.tipo ?? 'sin suelo'}
                   </option>
                 ))}
               </select>
@@ -303,10 +332,59 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 </div>
                 <div className="lote-info-meta">
                   <span><strong>Superficie:</strong> {loteSeleccionado?.area_ha ? `${Math.round(loteSeleccionado.area_ha)} Ha` : '—'}</span>
-                  <span><strong>Cultivo:</strong> {CULTIVO_LABEL[loteSeleccionado?.cultivo] ?? loteSeleccionado?.cultivo}</span>
+                  <span><strong>Suelo:</strong> {loteSeleccionado?.suelo?.tipo ?? '—'}</span>
                   <span><strong>Sensor:</strong> {SENSOR_LABEL[sensor]}</span>
                   <span><strong>Archivo:</strong> {archivo?.name}</span>
                 </div>
+              </div>
+            </div>
+
+            <div className="config-analisis-header">
+              <p className="config-analisis-titulo">Ciclo de cultivo</p>
+              <p className="config-analisis-sub">Este vuelo inicia (o confirma) el ciclo vigente del lote:</p>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="cultivo-vuelo">Cultivo</label>
+                <select id="cultivo-vuelo" value={cultivo} onChange={(e) => setCultivo(e.target.value)} disabled={loading}>
+                  {CULTIVOS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="estadio-vuelo">Estadio fenológico <span className="label-opcional">(opcional)</span></label>
+                <input
+                  id="estadio-vuelo"
+                  type="text"
+                  placeholder="Ej: R3"
+                  maxLength={10}
+                  value={estadioFenologico}
+                  onChange={(e) => setEstadioFenologico(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="fecha-siembra">Fecha de siembra</label>
+                <input
+                  id="fecha-siembra"
+                  type="date"
+                  value={fechaSiembra}
+                  onChange={(e) => setFechaSiembra(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="fecha-cosecha">Cosecha estimada <span className="label-opcional">(opcional)</span></label>
+                <input
+                  id="fecha-cosecha"
+                  type="date"
+                  value={fechaCosechaEstimada}
+                  onChange={(e) => setFechaCosechaEstimada(e.target.value)}
+                  disabled={loading}
+                />
               </div>
             </div>
 
@@ -343,7 +421,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               <button type="button" className="btn-secondary" onClick={() => setStep('carga')} disabled={loading}>
                 ← Atrás
               </button>
-              <button type="button" className="btn-primary" onClick={handleSubmit} disabled={loading}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSubmit}
+                disabled={loading || !cultivo || !fechaSiembra}
+              >
                 {loading ? 'Subiendo...' : 'Iniciar Análisis →'}
               </button>
             </div>

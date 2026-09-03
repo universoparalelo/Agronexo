@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,9 +76,7 @@ async def inspeccionar_geotiff(
 async def crear_lote_desde_geotiff(
     archivo: UploadFile = File(..., description="GeoTIFF multiespectral (.tif / .tiff)"),
     nombre: str = Form(..., min_length=1, max_length=200),
-    cultivo: CultivoEnum = Form(...),
     sensor: SensorEnum = Form(...),
-    estadio_fenologico: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -94,11 +92,9 @@ async def crear_lote_desde_geotiff(
         db=db,
         usuario_id=uuid.UUID(str(current_user.id)),
         nombre=nombre,
-        cultivo=cultivo,
         sensor=sensor,
         file_stream=archivo.file,
         file_size=file_size,
-        estadio_fenologico=estadio_fenologico,
     )
     await db.commit()
     return resultado
@@ -114,6 +110,10 @@ async def subir_vuelo(
     lote_id: uuid.UUID,
     archivo: UploadFile = File(..., description="GeoTIFF multiespectral (.tif / .tiff)"),
     sensor: SensorEnum = Form(..., description="Tipo de sensor utilizado"),
+    cultivo: CultivoEnum = Form(..., description="Cultivo de este ciclo"),
+    fecha_siembra: date = Form(..., description="Fecha de siembra del ciclo"),
+    estadio_fenologico: str | None = Form(default=None, max_length=10),
+    fecha_cosecha_estimada: date | None = Form(default=None),
     fecha_vuelo: datetime = Form(
         default=None,
         description="Fecha y hora del vuelo (ISO 8601). Por defecto: ahora.",
@@ -136,10 +136,14 @@ async def subir_vuelo(
 
     vuelo = await service.crear_vuelo_desde_upload(
         db=db,
-        lote_id=lote_id,
+        lote=lote,
         usuario_id=uuid.UUID(str(current_user.id)),
         sensor=sensor,
         fecha_vuelo=fecha_vuelo,
+        cultivo=cultivo,
+        fecha_siembra=fecha_siembra,
+        estadio_fenologico=estadio_fenologico,
+        fecha_cosecha_estimada=fecha_cosecha_estimada,
         file_stream=archivo.file,
         file_size=file_size,
     )

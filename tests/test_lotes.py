@@ -30,10 +30,11 @@ _GEOM = {
 # mantener el mismo event loop de anyio en todas las llamadas del módulo.
 _tc = TestClient(app)
 _token: str = ""
+_suelo_id: str = ""
 
 
 def setup_module(module):
-    global _token
+    global _token, _suelo_id
     from app.core.database import engine as _engine
     _engine.sync_engine.dispose(close=False)
     _tc.__enter__()
@@ -43,6 +44,10 @@ def setup_module(module):
     r = _tc.post("/api/v1/auth/login", json={"email": _EMAIL, "password": _PASS})
     assert r.status_code == 200, f"setup_module login falló: {r.status_code} {r.text}"
     _token = r.json()["access_token"]
+
+    suelos = _tc.get("/api/v1/lotes/suelos", headers={"Authorization": f"Bearer {_token}"}).json()
+    assert suelos, "setup_module: catálogo de suelos vacío (falta correr migración 0014)"
+    _suelo_id = suelos[0]["id"]
     print(f"\nUsuario de prueba: {_EMAIL}")
 
 
@@ -54,9 +59,9 @@ def _auth() -> dict:
     return {"Authorization": f"Bearer {_token}"}
 
 
-def _crear_lote(nombre: str = "Lote Test", cultivo: str = "soja") -> dict:
+def _crear_lote(nombre: str = "Lote Test") -> dict:
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": nombre, "cultivo": cultivo, "geometry": _GEOM,
+        "nombre": nombre, "suelo_id": _suelo_id,
     }, headers=_auth())
     assert r.status_code == 201, f"No se pudo crear lote auxiliar: {r.text}"
     return r.json()
@@ -67,44 +72,98 @@ def _crear_lote(nombre: str = "Lote Test", cultivo: str = "soja") -> dict:
 def test_crear_lote():
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Norte Principal",
-        "cultivo": "soja",
-        "geometry": _GEOM,
+        "suelo_id": _suelo_id,
     }, headers=_auth())
     assert r.status_code == 201
     body = r.json()
     assert body["nombre"] == "Lote Norte Principal"
-    assert body["cultivo"] == "soja"
-    assert body["geometry"] is not None
-    assert body["area_ha"] is not None
-    assert body["area_ha"] > 0
-    print(f"✓ POST /lotes → 201, área={body['area_ha']:.2f} ha")
+    assert body["suelo_id"] == _suelo_id
+    # El límite geográfico no se pide al crear — lo deriva el worker del primer GeoTIFF.
+    assert body["geometry"] is None
+    assert body["area_ha"] is None
+    # Ubicación es opcional — sin especificarla, el lote queda sin ubicacion_id.
+    assert body["ubicacion_id"] is None
+    print("✓ POST /lotes → 201, sin geometry/area_ha/ubicacion (opcionales)")
+
+
+def test_crear_lote_con_ubicacion():
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Con Ubicación",
+        "suelo_id": _suelo_id,
+        "provincia": "chaco",
+        "departamento": " Presidencia Roque Sáenz Peña ",
+        "localidad": " Colonia Elisa ",
+    }, headers=_auth())
+    assert r.status_code == 201
+    body = r.json()
+    assert body["ubicacion_id"] is not None
+    assert body["ubicacion"]["provincia"] == "chaco"
+    assert body["ubicacion"]["departamento"] == "Presidencia Roque Sáenz Peña"
+    assert body["ubicacion"]["localidad"] == "Colonia Elisa"
+
+    # Misma provincia/departamento/localidad (case-insensitive) en otro lote -> reusa la ubicación.
+    r2 = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Con Ubicación 2",
+        "suelo_id": _suelo_id,
+        "provincia": "chaco",
+        "departamento": "presidencia roque sáenz peña",
+        "localidad": "colonia elisa",
+    }, headers=_auth())
+    assert r2.status_code == 201
+    assert r2.json()["ubicacion_id"] == body["ubicacion_id"]
+    print("✓ POST /lotes con provincia/departamento/localidad → 201, ubicación creada y reusada")
+
+
+def test_crear_lote_ubicacion_incompleta():
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Ubicación Incompleta",
+        "suelo_id": _suelo_id,
+        "departamento": "Resistencia",
+        # sin provincia -> 422
+    }, headers=_auth())
+    assert r.status_code == 422
+    print("✓ POST /lotes con departamento sin provincia → 422")
+
+
+def test_crear_lote_provincia_y_localidad_sin_departamento():
+    """Departamento es opcional — provincia + localidad alcanza (caso típico: el
+    usuario sabe la ciudad, no el departamento administrativo)."""
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Sin Departamento",
+        "suelo_id": _suelo_id,
+        "provincia": "chaco",
+        "localidad": "Resistencia",
+    }, headers=_auth())
+    assert r.status_code == 201
+    body = r.json()
+    assert body["ubicacion"]["provincia"] == "chaco"
+    assert body["ubicacion"]["departamento"] is None
+    assert body["ubicacion"]["localidad"] == "Resistencia"
+    print("✓ POST /lotes con provincia + localidad, sin departamento → 201")
 
 
 def test_crear_lote_sin_auth():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Sin Auth", "cultivo": "maiz", "geometry": _GEOM,
+        "nombre": "Sin Auth", "suelo_id": _suelo_id,
     })
     assert r.status_code == 401
     print("✓ POST /lotes sin token → 401")
 
 
-def test_crear_lote_geometry_invalida():
-    geom_invalida = {"type": "Polygon", "coordinates": [[[0, 0], [1, 1]]]}
+def test_crear_lote_suelo_id_faltante():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Geom Rota", "cultivo": "soja", "geometry": geom_invalida,
+        "nombre": "Lote Sin Suelo",
     }, headers=_auth())
     assert r.status_code == 422
-    print("✓ POST /lotes con geometry inválida → 422")
+    print("✓ POST /lotes sin suelo_id → 422")
 
 
-def test_crear_lote_cultivo_invalido():
+def test_crear_lote_suelo_inexistente():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Cultivo Raro",
-        "cultivo": "trigo",
-        "geometry": _GEOM,
+        "nombre": "Lote Suelo Falso", "suelo_id": str(uuid.uuid4()),
     }, headers=_auth())
-    assert r.status_code == 422
-    print("✓ POST /lotes con cultivo inválido → 422")
+    assert r.status_code == 404
+    print("✓ POST /lotes con suelo_id inexistente → 404")
 
 
 # ── Listar ────────────────────────────────────────────────────────────
@@ -148,17 +207,28 @@ def test_obtener_lote_inexistente():
 
 # ── Actualizar ────────────────────────────────────────────────────────
 
-def test_actualizar_lote_nombre_y_cultivo():
-    lote = _crear_lote("Lote Original", "soja")
+def test_actualizar_lote_nombre():
+    lote = _crear_lote("Lote Original")
     r = _tc.put(f"/api/v1/lotes/{lote['id']}", json={
         "nombre": "Lote Actualizado",
-        "cultivo": "maiz",
     }, headers=_auth())
     assert r.status_code == 200
     body = r.json()
     assert body["nombre"] == "Lote Actualizado"
-    assert body["cultivo"] == "maiz"
-    print("✓ PUT /lotes/{id} → 200 con nombre y cultivo actualizados")
+    print("✓ PUT /lotes/{id} → 200 con nombre actualizado")
+
+
+def test_actualizar_lote_geometry():
+    """PUT /lotes/{id} sigue aceptando geometry manual (ModalLimites) — solo
+    se sacó de la creación, no de la actualización."""
+    lote = _crear_lote("Lote Sin Límites")
+    assert lote["geometry"] is None
+    r = _tc.put(f"/api/v1/lotes/{lote['id']}", json={"geometry": _GEOM}, headers=_auth())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["geometry"] is not None
+    assert body["area_ha"] is not None and body["area_ha"] > 0
+    print(f"✓ PUT /lotes/{{id}} con geometry → 200, área={body['area_ha']:.2f} ha")
 
 
 def test_actualizar_lote_inexistente():
@@ -202,6 +272,22 @@ def test_delete_lote_inexistente():
     print("✓ DELETE /lotes/{uuid_random} → 404")
 
 
+# ── Cultivos ────────────────────────────────────────────────────────
+
+def test_listar_cultivos_lote_vacio():
+    lote = _crear_lote("Lote Sin Cultivos")
+    r = _tc.get(f"/api/v1/lotes/{lote['id']}/cultivos", headers=_auth())
+    assert r.status_code == 200
+    assert r.json() == []
+    print("✓ GET /lotes/{id}/cultivos → 200, [] sin ciclos registrados")
+
+
+def test_listar_cultivos_lote_inexistente():
+    r = _tc.get(f"/api/v1/lotes/{uuid.uuid4()}/cultivos", headers=_auth())
+    assert r.status_code == 404
+    print("✓ GET /lotes/{uuid_random}/cultivos → 404")
+
+
 # ── Aislamiento por usuario ───────────────────────────────────────────
 
 def test_lote_de_otro_usuario_no_accesible():
@@ -215,7 +301,7 @@ def test_lote_de_otro_usuario_no_accesible():
     headers2 = {"Authorization": f"Bearer {token2}"}
 
     lote_ajeno = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote de Otro", "cultivo": "soja", "geometry": _GEOM,
+        "nombre": "Lote de Otro", "suelo_id": _suelo_id,
     }, headers=headers2).json()
 
     r = _tc.get(f"/api/v1/lotes/{lote_ajeno['id']}", headers=_auth())
@@ -233,7 +319,7 @@ def test_lote_de_otro_usuario_no_aparece_en_lista():
     }).json()["access_token"]
 
     lote_ajeno = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Privado", "cultivo": "maiz", "geometry": _GEOM,
+        "nombre": "Lote Privado", "suelo_id": _suelo_id,
     }, headers={"Authorization": f"Bearer {token3}"}).json()
 
     items = _tc.get("/api/v1/lotes", headers=_auth()).json()["items"]
@@ -247,19 +333,25 @@ if __name__ == "__main__":
     try:
         print("\n── CRUD Lotes + Soft Delete ─────────────────────────")
         test_crear_lote()
+        test_crear_lote_con_ubicacion()
+        test_crear_lote_ubicacion_incompleta()
+        test_crear_lote_provincia_y_localidad_sin_departamento()
         test_crear_lote_sin_auth()
-        test_crear_lote_geometry_invalida()
-        test_crear_lote_cultivo_invalido()
+        test_crear_lote_suelo_id_faltante()
+        test_crear_lote_suelo_inexistente()
         test_listar_lotes()
         test_listar_lotes_sin_auth()
         test_obtener_lote_por_id()
         test_obtener_lote_inexistente()
-        test_actualizar_lote_nombre_y_cultivo()
+        test_actualizar_lote_nombre()
+        test_actualizar_lote_geometry()
         test_actualizar_lote_inexistente()
         test_soft_delete_devuelve_204()
         test_lote_borrado_no_accesible_por_get()
         test_lote_borrado_no_aparece_en_lista()
         test_delete_lote_inexistente()
+        test_listar_cultivos_lote_vacio()
+        test_listar_cultivos_lote_inexistente()
         test_lote_de_otro_usuario_no_accesible()
         test_lote_de_otro_usuario_no_aparece_en_lista()
         print("\nTodos los tests de lotes pasaron.\n")

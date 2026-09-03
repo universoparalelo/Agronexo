@@ -56,9 +56,9 @@ export default function ResultadosVuelo() {
           <Link to={`/lotes/${loteId}`} className="btn-back">← Vuelos</Link>
           <div className="resultados-titulo">
             <h1>{lote?.nombre}</h1>
-            {lote && (
-              <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
-                {CULTIVO_LABELS[lote.cultivo] || lote.cultivo}
+            {lote?.cultivo_activo && (
+              <span className={`cultivo-badge cultivo-${lote.cultivo_activo.cultivo}`}>
+                {CULTIVO_LABELS[lote.cultivo_activo.cultivo] || lote.cultivo_activo.cultivo}
               </span>
             )}
           </div>

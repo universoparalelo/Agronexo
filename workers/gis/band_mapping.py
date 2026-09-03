@@ -42,6 +42,9 @@ BANDAS_POR_INDICE: dict[str, list[str]] = {
     "ndre":  ["NIR", "RE"],
     "savi":  ["NIR", "RED"],
     "exg":   ["GREEN", "RED", "BLUE"],
+    "gndvi": ["NIR", "GREEN"],
+    "msavi": ["NIR", "RED"],
+    "ndwi":  ["GREEN", "NIR"],
 }
 
 

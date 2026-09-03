@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 from geoalchemy2 import Geometry
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Time, UniqueConstraint, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, String, Time, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,36 @@ class IndiceEnum(str, enum.Enum):
     ndre = "ndre"
     savi = "savi"
     exg = "exg"
+    gndvi = "gndvi"
+    msavi = "msavi"
+    ndwi = "ndwi"
+
+
+class ProvinciaEnum(str, enum.Enum):
+    buenos_aires = "buenos_aires"
+    catamarca = "catamarca"
+    chaco = "chaco"
+    chubut = "chubut"
+    cordoba = "cordoba"
+    corrientes = "corrientes"
+    entre_rios = "entre_rios"
+    formosa = "formosa"
+    jujuy = "jujuy"
+    la_pampa = "la_pampa"
+    la_rioja = "la_rioja"
+    mendoza = "mendoza"
+    misiones = "misiones"
+    neuquen = "neuquen"
+    rio_negro = "rio_negro"
+    salta = "salta"
+    san_juan = "san_juan"
+    san_luis = "san_luis"
+    santa_cruz = "santa_cruz"
+    santa_fe = "santa_fe"
+    santiago_del_estero = "santiago_del_estero"
+    tierra_del_fuego = "tierra_del_fuego"
+    tucuman = "tucuman"
+    caba = "caba"
 
 
 class Lote(Base):
@@ -43,8 +73,6 @@ class Lote(Base):
         UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
     )
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
-    cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
-    estadio_fenologico: Mapped[str | None] = mapped_column(String(10), nullable=True)
     geometry: Mapped[object] = mapped_column(
         Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True
     )
@@ -52,6 +80,12 @@ class Lote(Base):
 
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    suelo_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suelos.id", ondelete="SET NULL"), nullable=True
+    )
+    ubicacion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ubicaciones.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -62,6 +96,58 @@ class Lote(Base):
 
     usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="lotes")
     vuelos: Mapped[list["Vuelo"]] = relationship("Vuelo", back_populates="lote")
+    cultivos: Mapped[list["Cultivo"]] = relationship("Cultivo", back_populates="lote", lazy="selectin")
+    suelo: Mapped["Suelo"] = relationship("Suelo", lazy="selectin")
+    ubicacion: Mapped["Ubicacion"] = relationship("Ubicacion", lazy="selectin")
+
+    @property
+    def cultivo_activo(self) -> "Cultivo | None":
+        """Ciclo de cultivo vigente del lote — requiere `cultivos` ya cargado (lazy='selectin')."""
+        return next((c for c in self.cultivos if c.activo), None)
+
+
+class Suelo(Base):
+    """Catálogo de tipo/serie de suelo (ej. taxonomía INTA) referenciado por lotes."""
+    __tablename__ = "suelos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    tipo: Mapped[str] = mapped_column(String(100), nullable=False)
+    serie: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class Ubicacion(Base):
+    """Catálogo de provincia/departamento/localidad referenciado por lotes."""
+    __tablename__ = "ubicaciones"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    provincia: Mapped[ProvinciaEnum] = mapped_column(Enum(ProvinciaEnum), nullable=False)
+    departamento: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    localidad: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class Cultivo(Base):
+    """Ciclo de cultivo sobre un lote (campaña) — un lote acumula varios a lo largo del tiempo."""
+    __tablename__ = "cultivos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    lote_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False
+    )
+    cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
+    estadio_fenologico: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    fecha_siembra: Mapped[date] = mapped_column(Date, nullable=False)
+    fecha_cosecha_estimada: Mapped[date | None] = mapped_column(Date, nullable=True)
+    fecha_cosecha_real: Mapped[date | None] = mapped_column(Date, nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    lote: Mapped["Lote"] = relationship("Lote", back_populates="cultivos")
 
 
 class Vuelo(Base):

@@ -7,9 +7,17 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.lotes import service
-from app.lotes.schemas import LoteCreate, LoteListResponse, LoteResponse, LoteUpdate
+from app.lotes.schemas import CultivoResponse, LoteCreate, LoteListResponse, LoteResponse, LoteUpdate, SueloResponse
 
 router = APIRouter()
+
+
+@router.get("/suelos", response_model=list[SueloResponse])
+async def listar_suelos(
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    return await service.listar_suelos(db)
 
 
 async def _get_lote_o_404(lote_id: uuid.UUID, db: AsyncSession, usuario_id: uuid.UUID) -> service.Lote:
@@ -34,6 +42,9 @@ async def crear_lote(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
+    suelo = await service.obtener_suelo(db, data.suelo_id)
+    if not suelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suelo no encontrado.")
     return await service.crear_lote(db, data, usuario_id=uuid.UUID(current_user.id))
 
 
@@ -54,6 +65,10 @@ async def actualizar_lote(
     current_user: Usuario = Depends(get_current_user),
 ):
     lote = await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    if data.suelo_id is not None:
+        suelo = await service.obtener_suelo(db, data.suelo_id)
+        if not suelo:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suelo no encontrado.")
     return await service.actualizar_lote(db, lote, data)
 
 
@@ -65,6 +80,16 @@ async def eliminar_lote(
 ):
     lote = await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
     await service.eliminar_lote(db, lote)
+
+
+@router.get("/{lote_id}/cultivos", response_model=list[CultivoResponse])
+async def listar_cultivos_lote(
+    lote_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    return await service.listar_cultivos_lote(db, lote_id)
 
 
 @router.get("/{lote_id}/historial")

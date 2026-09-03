@@ -12,7 +12,7 @@ function boundsDesdePoligono(coords) {
 
 const ESTILO_POLIGONO = { color: '#2d7a3d', weight: 2, fillColor: '#2d7a3d', fillOpacity: 0.18 }
 
-export default function MiniMapaLote({ geometry }) {
+export default function MiniMapaLote({ geometry, expandido = false }) {
   if (!geometry) {
     return (
       <div className="mini-mapa-sin-limites">
@@ -29,18 +29,18 @@ export default function MiniMapaLote({ geometry }) {
   }
 
   return (
-    <div className="mini-mapa-lote">
+    <div className={expandido ? 'mini-mapa-lote mini-mapa-lote--expandido' : 'mini-mapa-lote'}>
       <MapContainer
         bounds={bounds}
-        boundsOptions={{ padding: [8, 8] }}
-        zoomControl={false}
-        scrollWheelZoom={false}
-        dragging={false}
-        touchZoom={false}
-        doubleClickZoom={false}
-        keyboard={false}
-        attributionControl={false}
-        style={{ height: '110px', width: '100%' }}
+        boundsOptions={{ padding: [20, 20] }}
+        zoomControl={expandido}
+        scrollWheelZoom={expandido}
+        dragging={expandido}
+        touchZoom={expandido}
+        doubleClickZoom={expandido}
+        keyboard={expandido}
+        attributionControl={expandido}
+        style={{ height: expandido ? '100%' : '110px', width: '100%' }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <GeoJSON data={geometry} style={ESTILO_POLIGONO} />

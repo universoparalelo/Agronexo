@@ -1,7 +1,7 @@
 """
 Pipeline GIS generalizado: GeoTIFF → índice → clasificación → GeoJSON.
 
-Soporta NDVI, NDRE, SAVI y ExG con mapeo de bandas configurable por sensor.
+Soporta NDVI, NDRE, SAVI, ExG, GNDVI, MSAVI y NDWI con mapeo de bandas configurable por sensor.
 La lógica de vectorización y exportación reutiliza workers/gis/zonas.py.
 """
 
@@ -55,9 +55,11 @@ from workers.gis.reproyeccion import reproyectar_a_4326
 from workers.gis.zonas import clasificar_ndvi, exportar_geojson, suavizar_indice, vectorizar_zonas
 
 # Umbrales de clasificación reutilizados del módulo de zonificación.
-# NDVI, NDRE y SAVI son índices "razón" (diferencia sobre suma) — su rango
-# es siempre ~[-1,1] sin importar la escala de las bandas de entrada
-# (reflectancia 0-1 o DN crudo), así que el umbral fijo aplica directamente.
+# NDVI, NDRE, SAVI, GNDVI y NDWI son índices "razón" (diferencia sobre suma)
+# — su rango es siempre ~[-1,1] sin importar la escala de las bandas de
+# entrada (reflectancia 0-1 o DN crudo), así que el umbral fijo aplica
+# directamente. MSAVI2 no es una razón simple pero su fórmula está acotada
+# al mismo rango ~[-1,1], así que también admite el umbral fijo sin ajuste.
 # ExG (2*GREEN-RED-BLUE) NO es una razón — es una resta lineal absoluta cuya
 # escala depende de las unidades crudas de la cámara (reflectancia 0-1 da
 # valores ~[-2,2]; DN 8-bit sin calibrar da valores de cientos). El umbral
@@ -109,7 +111,7 @@ def ejecutar_pipeline(
     ----------
     data            : bytes del GeoTIFF descargado desde MinIO
     sensor          : "sentinel2" | "dji_mavic3"
-    indice          : "ndvi" | "ndre" | "savi" | "exg"
+    indice          : "ndvi" | "ndre" | "savi" | "exg" | "gndvi" | "msavi" | "ndwi"
     geojson_destino : ruta local donde se escribe el GeoJSON de salida
     """
     t0 = time.perf_counter()

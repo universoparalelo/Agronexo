@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from celery.result import AsyncResult
 from sqlalchemy import select
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.storage import download_bytes
 from app.ingesta.schemas import EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse
+from app.lotes import service as lotes_service
 from app.lotes.models import AnalisisIndice, CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, SensorEnum, Vuelo
 from workers.celery_app import celery_app
 
@@ -16,16 +17,12 @@ async def crear_lote_y_vuelo_desde_geotiff(
     db: AsyncSession,
     usuario_id: uuid.UUID,
     nombre: str,
-    cultivo: CultivoEnum,
     sensor: SensorEnum,
     file_stream,
     file_size: int = -1,
-    estadio_fenologico: str | None = None,
 ) -> LoteDesdeGeotiffResponse:
     lote = Lote(
         nombre=nombre,
-        cultivo=cultivo,
-        estadio_fenologico=estadio_fenologico,
         usuario_id=usuario_id,
         geometry=None,
     )
@@ -80,15 +77,19 @@ async def crear_lote_y_vuelo_desde_geotiff(
 
 async def crear_vuelo_desde_upload(
     db: AsyncSession,
-    lote_id: uuid.UUID,
+    lote: Lote,
     usuario_id: uuid.UUID,
     sensor: SensorEnum,
     fecha_vuelo: datetime,
+    cultivo: CultivoEnum,
+    fecha_siembra: date,
     file_stream,
     file_size: int = -1,
+    estadio_fenologico: str | None = None,
+    fecha_cosecha_estimada: date | None = None,
 ) -> Vuelo:
     vuelo = Vuelo(
-        lote_id=lote_id,
+        lote_id=lote.id,
         sensor=sensor,
         fecha_vuelo=fecha_vuelo,
         estado=EstadoVueloEnum.pendiente,
@@ -100,7 +101,7 @@ async def crear_vuelo_desde_upload(
     from app.core.storage import upload_geotiff_stream
     key = upload_geotiff_stream(
         usuario_id=str(usuario_id),
-        lote_id=str(lote_id),
+        lote_id=str(lote.id),
         vuelo_id=str(vuelo.id),
         stream=file_stream,
         length=file_size,
@@ -110,7 +111,7 @@ async def crear_vuelo_desde_upload(
         "workers.gis.tasks.procesar_vuelo",
         kwargs={
             "vuelo_id": str(vuelo.id),
-            "lote_id": str(lote_id),
+            "lote_id": str(lote.id),
             "minio_key": key,
             "sensor": sensor.value,
             "indice": "ndvi",
@@ -120,6 +121,19 @@ async def crear_vuelo_desde_upload(
 
     vuelo.archivo_original = key
     vuelo.task_id = task.id
+
+    # Cada vuelo declara el ciclo de cultivo vigente del lote (RFMA/dominio:
+    # un lote acumula campañas a lo largo del tiempo). La ubicación se carga
+    # aparte, al crear el lote (opcional) — no se pide de nuevo acá.
+    await lotes_service.crear_ciclo_cultivo(
+        db,
+        lote_id=lote.id,
+        cultivo=cultivo,
+        fecha_siembra=fecha_siembra,
+        estadio_fenologico=estadio_fenologico,
+        fecha_cosecha_estimada=fecha_cosecha_estimada,
+    )
+
     await db.flush()
     await db.refresh(vuelo)
     return vuelo

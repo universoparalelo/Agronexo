@@ -100,6 +100,51 @@ def test_exg_no_requiere_nir():
     print(f"✓ ExG = 2G-R-B → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
 
 
+def test_gndvi_valor_conocido():
+    from workers.gis.indices import calcular_gndvi
+
+    nir = np.full((5, 5), 0.8, dtype=np.float32)
+    green = np.full((5, 5), 0.3, dtype=np.float32)
+    resultado = calcular_gndvi(nir, green)
+    esperado = (0.8 - 0.3) / (0.8 + 0.3)
+    assert np.allclose(resultado, esperado, atol=1e-5), f"GNDVI esperado {esperado:.4f}, got {resultado[0,0]:.4f}"
+    print(f"✓ GNDVI valor conocido → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+
+
+def test_msavi_valor_conocido():
+    from workers.gis.indices import calcular_msavi
+
+    nir = np.full((5, 5), 0.6, dtype=np.float32)
+    red = np.full((5, 5), 0.2, dtype=np.float32)
+    resultado = calcular_msavi(nir, red)
+    termino = (2 * 0.6 + 1) ** 2 - 8 * (0.6 - 0.2)
+    esperado = (2 * 0.6 + 1 - termino ** 0.5) / 2
+    assert np.allclose(resultado, esperado, atol=1e-5), f"MSAVI esperado {esperado:.4f}, got {resultado[0,0]:.4f}"
+    print(f"✓ MSAVI valor conocido → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+
+
+def test_msavi_termino_negativo_no_lanza_excepcion():
+    """Con nir-red muy grande el término bajo la raíz puede volverse negativo — no debe lanzar excepción."""
+    from workers.gis.indices import calcular_msavi
+
+    nir = np.full((3, 3), 0.1, dtype=np.float32)
+    red = np.full((3, 3), 0.9, dtype=np.float32)
+    resultado = calcular_msavi(nir, red)
+    assert not np.any(np.isnan(resultado)), "MSAVI con término negativo bajo la raíz no debe dar NaN"
+    print(f"✓ MSAVI con término negativo bajo la raíz → sin excepción, valor {resultado[0,0]:.4f}")
+
+
+def test_ndwi_valor_conocido():
+    from workers.gis.indices import calcular_ndwi
+
+    green = np.full((5, 5), 0.3, dtype=np.float32)
+    nir = np.full((5, 5), 0.6, dtype=np.float32)
+    resultado = calcular_ndwi(green, nir)
+    esperado = (0.3 - 0.6) / (0.3 + 0.6)
+    assert np.allclose(resultado, esperado, atol=1e-5), f"NDWI esperado {esperado:.4f}, got {resultado[0,0]:.4f}"
+    print(f"✓ NDWI valor conocido → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+
+
 def test_nodata_se_convierte_en_nan():
     from workers.gis.indices import calcular_ndvi
 
@@ -147,6 +192,15 @@ def test_bandas_insuficientes():
     except ValueError as e:
         assert "banda" in str(e).lower()
         print(f"✓ Bandas insuficientes → ValueError: {e}")
+
+
+def test_gndvi_msavi_ndwi_disponibles_en_dji():
+    """A diferencia de ExG (necesita Blue), GNDVI/MSAVI/NDWI no requieren Blue
+    y deben estar disponibles también en DJI Mavic 3 (4 bandas, sin Blue)."""
+    from workers.gis.band_mapping import validar_bandas_disponibles
+    for indice in ("gndvi", "msavi", "ndwi"):
+        validar_bandas_disponibles("dji_mavic3", indice, n_bandas_archivo=4)
+    print("✓ GNDVI/MSAVI/NDWI disponibles en DJI Mavic 3 sin banda Blue")
 
 
 # ── Tests de reproyección ─────────────────────────────────────────────
@@ -202,6 +256,43 @@ def test_pipeline_savi_sentinel2():
     print(f"✓ Pipeline SAVI Sentinel-2 → {stats['total_poligonos']} polígonos")
 
 
+def test_pipeline_gndvi_dji():
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    data = _geotiff_multibanda(4, CRS.from_epsg(4326))
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats = ejecutar_pipeline(data, sensor="dji_mavic3", indice="gndvi", geojson_destino=tmp.name)
+
+    assert stats["indice"] == "gndvi"
+    assert "gndvi_promedio_lote" in stats
+    print(f"✓ Pipeline GNDVI DJI → {stats['total_poligonos']} polígonos, GNDVI prom={stats['gndvi_promedio_lote']}")
+
+
+def test_pipeline_msavi_sentinel2():
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    data = _geotiff_multibanda(8, CRS.from_epsg(4326))
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats = ejecutar_pipeline(data, sensor="sentinel2", indice="msavi", geojson_destino=tmp.name)
+
+    assert stats["indice"] == "msavi"
+    print(f"✓ Pipeline MSAVI Sentinel-2 → {stats['total_poligonos']} polígonos")
+
+
+def test_pipeline_ndwi_dji():
+    import tempfile
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    data = _geotiff_multibanda(4, CRS.from_epsg(4326))
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        stats = ejecutar_pipeline(data, sensor="dji_mavic3", indice="ndwi", geojson_destino=tmp.name)
+
+    assert stats["indice"] == "ndwi"
+    print(f"✓ Pipeline NDWI DJI → {stats['total_poligonos']} polígonos")
+
+
 if __name__ == "__main__":
     print("\n── Índices ──────────────────────────────────────────")
     test_ndvi_valor_conocido()
@@ -209,6 +300,10 @@ if __name__ == "__main__":
     test_ndre_rango_valido()
     test_savi_difiere_de_ndvi()
     test_exg_no_requiere_nir()
+    test_gndvi_valor_conocido()
+    test_msavi_valor_conocido()
+    test_msavi_termino_negativo_no_lanza_excepcion()
+    test_ndwi_valor_conocido()
     test_nodata_se_convierte_en_nan()
 
     print("\n── Mapeo de bandas ──────────────────────────────────")
@@ -216,6 +311,7 @@ if __name__ == "__main__":
     test_mapeo_dji()
     test_sensor_invalido()
     test_bandas_insuficientes()
+    test_gndvi_msavi_ndwi_disponibles_en_dji()
 
     print("\n── Reproyección ─────────────────────────────────────")
     test_reproyeccion_utm_a_4326()
@@ -224,5 +320,8 @@ if __name__ == "__main__":
     print("\n── Pipeline completo ────────────────────────────────")
     test_pipeline_ndvi_dji()
     test_pipeline_savi_sentinel2()
+    test_pipeline_gndvi_dji()
+    test_pipeline_msavi_sentinel2()
+    test_pipeline_ndwi_dji()
 
     print("\nTodos los tests pasaron.\n")

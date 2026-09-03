@@ -136,7 +136,7 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
 }
 
 /* ──────── Mapa de análisis (panel inferior) ──────── */
-const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', exg: 'ExG' }
+const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', exg: 'ExG', gndvi: 'GNDVI', msavi: 'MSAVI', ndwi: 'NDWI' }
 
 function AnalisisMap({ loteId, vueloId, indice }) {
   const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
@@ -410,7 +410,7 @@ export default function Dashboard() {
                                 <td>
                                   <div className="td-lote-nombre">{v.lote.nombre}</div>
                                   <div className="td-lote-info">
-                                    {CULTIVO_LABEL[v.lote.cultivo] ?? v.lote.cultivo}
+                                    {v.lote.cultivo_activo ? (CULTIVO_LABEL[v.lote.cultivo_activo.cultivo] ?? v.lote.cultivo_activo.cultivo) : 'Sin cultivo activo'}
                                     {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>

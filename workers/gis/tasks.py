@@ -24,7 +24,10 @@ def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
         with Session(engine) as session:
             session.execute(
                 text(
-                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
+                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326), "
+                    # ST_Transform a EPSG:32721 (UTM zona 21 Sur, metros) — mismo criterio que
+                    # app/lotes/service.py — para que ST_Area devuelva m² y no grados².
+                    "area_ha = ROUND(CAST(ST_Area(ST_Transform(ST_GeomFromText(:wkt, 4326), 32721)) / 10000 AS numeric), 4) "
                     "WHERE id = CAST(:lote_id AS uuid)"
                 ),
                 {"wkt": wkt, "lote_id": lote_id},

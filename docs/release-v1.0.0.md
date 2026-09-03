@@ -814,6 +814,173 @@ Se implementaron 44 tests de integración HTTP que cubren las brechas detectadas
 
 **Problema resuelto — Problema abierto #2 cerrado**
 
+---
+
+#### Ciclos de cultivo separados del lote + catálogos de suelo/ubicación
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+Se separó la información de campaña (cultivo, estadio fenológico, fechas de siembra/cosecha) del lote físico. Un lote ahora es solo la parcela (nombre + tipo de suelo); cada vuelo subido declara el ciclo de cultivo vigente, que queda registrado en una tabla aparte con historial completo.
+
+**Modelo de datos (migraciones 0012–0015):**
+- `cultivos`: `lote_id` FK, `cultivo`, `estadio_fenologico`, `fecha_siembra`, `fecha_cosecha_estimada`, `fecha_cosecha_real`, `activo` — un lote acumula varios ciclos a lo largo del tiempo; `activo=true` identifica el vigente sin comparar fechas.
+- `suelos` y `ubicaciones`: catálogos (`tipo`/`serie` y `departamento`/`localidad`) referenciados por `lotes.suelo_id`/`ubicacion_id` (FK nullable, `SET NULL`). `suelos` se sembró con 6 órdenes típicos del NEA (Vertisol, Molisol, Alfisol, Entisol, Inceptisol, Suelo sódico-salino) — sin seed, el selector del formulario no tendría opciones.
+- `lotes.cultivo`/`estadio_fenologico` (columnas originales) se eliminaron — la info vive ahora en `cultivos`.
+
+**Flujo nuevo:**
+- `POST /lotes`: solo pide `nombre` + `suelo_id` (FK validada contra el catálogo, 404 si no existe).
+- `GET /lotes/suelos`: catálogo para el selector del frontend.
+- `POST /lotes/{id}/vuelos`: además de `sensor`+archivo, ahora exige `cultivo` y `fecha_siembra`, y opcionalmente `estadio_fenologico`/`fecha_cosecha_estimada`; exige `departamento` (opcional `localidad`). Al subir, crea un nuevo `Cultivo` activo (desactivando cualquier otro ciclo activo previo del mismo lote) y resuelve/crea la `Ubicacion` (case-insensitive, sin duplicar) asignándola a `lote.ubicacion_id`.
+- `LoteResponse` expone `suelo`, `ubicacion` y `cultivo_activo` anidados (no solo los FK ids) para que el frontend no tenga que resolverlos aparte.
+
+**Piezas de frontend:**
+- `ModalNuevoLote.jsx`: solo pide nombre + selector de tipo de suelo (fetch a `GET /lotes/suelos`).
+- `ModalCargaGeoTIFF.jsx`: agrega sección "Ciclo de cultivo" (cultivo, estadio, fecha siembra/cosecha, departamento/localidad) en el paso de análisis, antes de "Iniciar Análisis".
+- `Dashboard.jsx`, `Lotes.jsx`, `DetalleLote.jsx`, `ResultadosVuelo.jsx`: el badge de cultivo pasa de `lote.cultivo` a `lote.cultivo_activo?.cultivo` (puede ser `null` en un lote recién creado, sin vuelos todavía).
+
+**Decisiones tomadas:**
+- Suelo por selector sobre catálogo (no texto libre) — requiere seed, pero evita duplicados tipo "Vertisol"/"vertisol"/"Vertisol " en la tabla.
+- Ubicación por texto libre con get-or-create case-insensitive — no se justificaba un catálogo cerrado de departamentos/localidades para esta release.
+- `lazy="selectin"` en `Lote.cultivos`/`suelo`/`ubicacion` — necesario porque SQLAlchemy async no soporta lazy load implícito (`MissingGreenlet` si se accede a una relación no cargada fuera de un `await`); con `selectin` cualquier `select(Lote)` trae las relaciones sin tocar cada endpoint. Al crear/actualizar un lote (que no pasa por `select()`, sino `Lote()` + `flush()` + `refresh()`), hace falta `await db.refresh(lote, attribute_names=["suelo","ubicacion","cultivos"])` explícito.
+- Property `Lote.cultivo_activo` (no columna) — deriva el ciclo vigente de `self.cultivos` ya cargado; permite que `LoteResponse` lo sirva vía `from_attributes=True` sin lógica extra en cada endpoint.
+- El endpoint legacy `POST /lotes/desde-geotiff` (ya no usado por el frontend, ver tarea "Eliminar/reintentar diagnóstico...") no se tocó — sigue creando lotes sin `suelo_id`/cultivo asociado.
+
+**Error encontrado — `ResponseValidationError` en `cultivo_activo.created_at`**
+```
+fastapi.exceptions.ResponseValidationError: 1 validation errors:
+  {'type': 'missing', 'loc': ('response', 'cultivo_activo', 'created_at'), 'msg': 'Field required', ...}
+```
+El modelo `Cultivo` (migración 0012) nunca tuvo columna `created_at`, pero `CultivoResponse` la exponía como campo requerido — pasaba desapercibido porque ningún test end-to-end subía un vuelo real contra la tabla `cultivos` hasta el smoke test manual de esta tarea. Se agregó la migración 0015 (`ALTER TABLE cultivos ADD COLUMN created_at`) y el campo al modelo.
+
+**Verificación:** suite `test_lotes.py`/`test_vuelos_estado.py` (29/30 tests — el único que falla es un bug preexistente no relacionado, `test_listar_vuelos_de_lote` espera `id` donde el endpoint devuelve `vuelo_id`); smoke test E2E manual contra la API real (crear lote → subir 2 vuelos con cultivos distintos → confirma que el segundo ciclo queda activo y el primero se desactiva, y que la ubicación se asigna al lote); `npm run build` del frontend sin errores. No se verificó visualmente en navegador — sin herramienta de automatización de browser disponible en esta sesión.
+
+---
+
+#### Fix: el límite del lote (geojson) ya no se pide al crearlo — se deriva del GeoTIFF del vuelo
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+`ModalNuevoLote.jsx` todavía tenía un dropzone opcional para subir un `.geojson` y fijar el límite del lote a mano. Era redundante y confuso: el worker ya sobreescribe `lotes.geometry` con el bounding box del GeoTIFF en cada `procesar_vuelo` (`_actualizar_lote_geometry`, incondicional) — cualquier límite cargado a mano en la creación se perdía en cuanto se subía el primer vuelo.
+
+**Cambios:**
+- `frontend/src/components/ModalNuevoLote.jsx`: se sacó el dropzone, el preview Leaflet y el estado asociado (`poligono`, `bounds`, `archivoNombre`, `dragActivo`) — el formulario queda en nombre + tipo de suelo, con un texto explicando que el límite sale del primer ortomosaico.
+- `app/lotes/schemas.py`: `LoteCreate` perdió el campo `geometry` (y su validador Shapely, que se mantiene para `LoteUpdate`).
+- `app/lotes/service.py::crear_lote`: ya no calcula `area_ha`/`geometry` — el lote nace siempre con ambos en `NULL`.
+- `workers/gis/tasks.py::_actualizar_lote_geometry`: además de `geometry`, ahora calcula `area_ha` en el mismo `UPDATE` (`ST_Area(ST_Transform(..., 32721))/10000`, mismo criterio que `app/lotes/service.py`). Antes quedaba en `NULL` para siempre en lotes sin límite cargado a mano — nadie lo había notado porque hasta esta tarea siempre existía la opción de cargar geometry manual al crear.
+
+**No se tocó:** `PUT /lotes/{id}` (`LoteUpdate.geometry`) y `ModalLimites.jsx` — la edición manual de límites sigue disponible después de creado el lote, para corregir o ajustar lo que el worker infirió.
+
+**Verificación E2E (API + worker reales, no mocks):** lote creado sin geometry (`None`/`None`) → se sube un GeoTIFF sintético real de 4 bandas vía `POST /lotes/{id}/vuelos` → el worker lo procesa → `GET /lotes/{id}` devuelve `geometry` con el polígono del bounding box y `area_ha=109.79` calculado. Suite `test_lotes.py` actualizada (se sacó `test_crear_lote_geometry_invalida`, que ya no aplica; se agregó `test_actualizar_lote_geometry` para cubrir que el `PUT` manual sigue funcionando) — 30/31 tests pasan (el único fallo es el bug preexistente no relacionado de `test_listar_vuelos_de_lote`).
+
+---
+
+#### Vista previa del límite del lote en la pantalla "Lotes"
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+`MiniMapaLote.jsx` (mapa Leaflet chico, no interactivo, con el polígono del lote) existía desde una tarea anterior pero nunca se conectó a la pantalla `Lotes.jsx` actual — quedó huérfano cuando esa pantalla se rediseñó. Cada card mostraba en su lugar una imagen estática de fondo (`/fondo.jpeg`) sin relación con el lote real.
+
+**Cambios:**
+- `frontend/src/pages/Lotes.jsx`: la card pasa de layout horizontal (thumb 44×44 + texto al lado) a vertical — `MiniMapaLote` como banner arriba (bleed a los bordes vía CSS ya existente, `mini-mapa-lote`/`mini-mapa-sin-limites`) y el resto de la info debajo, igual que en el diseño original del Dashboard.
+- `frontend/src/index.css`: `.lotes-grid .lote-card` deja de ser `display:flex`; se eliminan `.lote-card-thumb`/`.lote-card-thumb img` (sin otros usos en el código).
+
+**Decisiones tomadas:**
+- Un lote recién creado (sin vuelos todavía) va a mostrar "Sin límites definidos" — es el caso esperado ahora que la geometría se deriva del primer GeoTIFF (ver tarea anterior), no un bug.
+
+---
+
+#### Botón "Expandir mapa" en las cards de la pantalla "Lotes"
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+El mini-mapa agregado a cada card de `Lotes.jsx` (tarea anterior) es chico (110px) y no interactivo — solo un preview. Se agregó un botón para verlo más grande e interactivo, reusando el mismo patrón de overlay fijo + backdrop + cierre con Escape que ya existía en `Dashboard.jsx` para "Vista geoespacial" (`mapaExpandido`/`card--mapa-expandido`/`mapa-expand-backdrop`).
+
+**Cambios:**
+- `frontend/src/components/MiniMapaLote.jsx`: nueva prop `expandido` (default `false`) — en `true` habilita interacción real de Leaflet (zoom, drag, scroll, atribución) y el contenedor pasa a `height: 100%` para llenar el panel expandido; en `false` sigue igual que antes (preview quieto de 110px).
+- `frontend/src/pages/Lotes.jsx`: botón "Expandir" (ícono, esquina superior derecha del mini-mapa) solo si el lote tiene `geometry`; estado `mapaExpandidoId` (id del lote cuyo mapa está expandido, o `null`) — overlay fijo con backdrop semitransparente, header con el nombre del lote y botón de cierre, y `Escape` para cerrar (mismo hook `useEffect` que ya usaba `Dashboard.jsx`).
+- `frontend/src/index.css`: `.lote-card` pasa a `position: relative` (para anclar el botón); nuevas clases `.mini-mapa-expand-btn`, `.lote-mapa-overlay`, `.lote-mapa-overlay-header`, `.lote-mapa-overlay-body`, `.mini-mapa-lote--expandido`. Reutiliza `.mapa-expand-backdrop`, ya existente.
+
+**Decisiones tomadas:**
+- El overlay expandido es un componente propio (`.lote-mapa-overlay`), no reutiliza `.card--mapa-expandido` de Dashboard — ese tiene header con selector de índice y lógica propia de "Vista geoespacial" que no aplica acá; más simple mantener uno separado que forzar un componente compartido prematuramente.
+- Sin botón de expandir cuando el lote no tiene `geometry` — no hay nada que mostrar más grande.
+
+**Error encontrado — botón tapado por el propio mapa**
+Reportado por el usuario con captura: el botón aparecía casi invisible, solo un borde asomando arriba de la card. Causa: Leaflet asigna z-index internos altos a sus panes (`tilePane` 200 … `popupPane` 700); el botón estaba en `z-index: 2`, muy por debajo. Se subió a `z-index: 800` en `.mini-mapa-expand-btn`.
+
+---
+
+#### Ubicación (departamento/localidad) opcional al crear un lote
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+Hasta ahora `ubicacion_id` solo se completaba indirectamente al subir un vuelo (`departamento` era obligatorio en ese formulario). El usuario pidió poder cargarla directamente al crear el lote, opcional.
+
+**Cambios:**
+- `app/lotes/schemas.py::LoteCreate`: agrega `departamento`/`localidad` opcionales (`None` por defecto).
+- `app/lotes/service.py::crear_lote`: si viene `departamento`, reusa `obtener_o_crear_ubicacion` (mismo get-or-create case-insensitive que ya usaba la subida de vuelo) y setea `lote.ubicacion_id` antes del insert.
+- `frontend/src/components/ModalNuevoLote.jsx`: dos inputs opcionales (departamento/localidad) junto al selector de suelo.
+
+**Decisiones tomadas:**
+- No se tocó `POST /lotes/{id}/vuelos` — `departamento` ahí sigue siendo obligatorio y sigue sobreescribiendo `lote.ubicacion_id` (last-write-wins) si se carga uno distinto al subir un vuelo. Si en algún momento se quiere que ese campo pase a opcional (para no volver a pedirlo si el lote ya tiene ubicación), es un cambio aparte — no se asumió sin confirmarlo.
+- Se reusó `obtener_o_crear_ubicacion` tal cual (ya vivía en `app/lotes/service.py`) en lugar de duplicar la lógica de búsqueda/creación.
+
+**Verificación:** `test_crear_lote_con_ubicacion` (nuevo) — crea un lote con departamento/localidad, confirma que `ubicacion`/`ubicacion_id` vienen en la respuesta, y que un segundo lote con el mismo departamento/localidad (distinta capitalización) reusa la misma fila de `ubicaciones` en vez de duplicarla. 31/32 tests de `test_lotes.py`+`test_vuelos_estado.py` pasan (el único fallo sigue siendo el bug preexistente no relacionado de `test_listar_vuelos_de_lote`).
+
+---
+
+#### Sacar departamento/localidad de la subida de vuelo (queda solo en la creación del lote)
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+Complemento directo de la tarea anterior: el usuario no quería que `departamento`/`localidad` siguiera apareciendo (y siendo obligatorio) al subir un vuelo, ahora que se puede cargar la ubicación al crear el lote.
+
+**Cambios:**
+- `frontend/src/components/ModalCargaGeoTIFF.jsx`: se sacaron los inputs de departamento/localidad de la sección "Ciclo de cultivo" y su validación (ya no bloquean el botón "Iniciar Análisis").
+- `app/ingesta/router.py::subir_vuelo`: `POST /lotes/{id}/vuelos` deja de aceptar `departamento`/`localidad` como Form fields.
+- `app/ingesta/service.py::crear_vuelo_desde_upload`: se sacaron los parámetros y la llamada a `obtener_o_crear_ubicacion` / `lote.ubicacion_id = ...` — un vuelo ya no toca la ubicación del lote, solo su ciclo de cultivo (`crear_ciclo_cultivo`).
+
+**Efecto:** la ubicación del lote ahora se define una sola vez, opcionalmente, al crearlo (`POST /lotes`) — no se vuelve a pedir ni se puede pisar accidentalmente subiendo un vuelo nuevo. Si un lote se creó sin ubicación, queda `null` hasta que alguien la cargue a mano vía `PUT /lotes/{id}` (`ubicacion_id`, todavía sin UI propia).
+
+**Verificación:** 30/31 tests de `test_lotes.py`+`test_vuelos_estado.py` pasan (el único fallo sigue siendo el bug preexistente no relacionado); `npm run build` sin errores; `inspect.signature(subir_vuelo)` confirmado sin `departamento`/`localidad`.
+
+---
+
+#### Ubicación con Provincia + Departamento + Localidad (provincia como enum de Argentina)
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+`ubicaciones` solo tenía departamento/localidad (texto libre) — ambiguo sin saber la provincia (ej. "Chaco" es a la vez nombre de provincia y de localidad; se vio en los propios datos de prueba del usuario, cargados con esa confusión). Se agregó `provincia` como tercer campo, con las 24 jurisdicciones de Argentina como enum cerrado (no texto libre, a diferencia de departamento/localidad).
+
+**Cambios:**
+- `app/lotes/models.py`: `ProvinciaEnum` (24 valores — 23 provincias + CABA). `Ubicacion.provincia` nuevo campo `NOT NULL`.
+- Migración `0016`: crea el tipo `provinciaenum`, agrega la columna nullable, **backfillea las 4 filas reales que ya existían en la base a `'chaco'`** (los datos de prueba cargados hasta ahora — Resistencia, Sáenz Peña, Presidencia Roque Sáenz Peña — son todos del Chaco) y recién ahí la vuelve `NOT NULL`.
+- `app/lotes/schemas.py::LoteCreate`: agrega `provincia: ProvinciaEnum | None`. Nuevo `model_validator`: si se carga cualquiera de los tres campos de ubicación, `provincia` y `departamento` pasan a ser obligatorios (`localidad` sigue opcional) — evita guardar un departamento "flotando" sin saber de qué provincia es.
+- `app/lotes/service.py::obtener_o_crear_ubicacion`: ahora matchea/crea por `(provincia, departamento, localidad)` en lugar de solo `(departamento, localidad)`.
+- `frontend/src/components/ModalNuevoLote.jsx`: selector `<select>` de Provincia (las 24 de Argentina, con tildes en el label) antes de los inputs de departamento/localidad; validación de consistencia espejada en el cliente antes de pegarle a la API.
+
+**Decisiones tomadas:**
+- Provincia es un enum cerrado (como `CultivoEnum`/`SensorEnum`) — a diferencia de departamento/localidad (texto libre, hay miles y varían de nombre/escritura). No tiene sentido dejarlo como texto libre cuando el universo de provincias argentinas es fijo y conocido.
+- El backfill a `'chaco'` es específico de los datos de prueba existentes en este momento, no una regla de negocio — si en otro entorno hay datos reales de otras provincias, no debería reusarse esta migración tal cual.
+
+**Verificación:** `test_crear_lote_con_ubicacion` actualizado (ahora manda `provincia`, verifica que se reusa la misma fila con provincia/departamento/localidad iguales case-insensitive) + nuevo `test_crear_lote_ubicacion_incompleta` (departamento sin provincia → 422). 32/33 tests pasan (el fallo restante sigue siendo el bug preexistente no relacionado). Smoke test manual contra la API real: lote con provincia="formosa" válida → 201 con `ubicacion` completa; provincia inventada ("texas") → 422. `npm run build` sin errores.
+
+---
+
+#### Fix: departamento pasa a opcional en ubicación (solo provincia es obligatoria)
+**Fecha:** 2026-08-11
+**Rama:** `Amilcar`
+
+Reportado por el usuario con captura: al crear un lote con Provincia="Chaco" y Localidad="Resistencia" (sin Departamento), la API rechazaba con 422 ("completá al menos provincia y departamento"). La regla de la tarea anterior era poco realista — la mayoría de los usuarios sabe su provincia y localidad/ciudad, no el departamento administrativo oficial (Resistencia, la localidad, pertenece al departamento "San Fernando", algo que no es de conocimiento común).
+
+**Cambios:**
+- `app/lotes/models.py`: `Ubicacion.departamento` pasa a `nullable=True` (antes `NOT NULL`).
+- Migración `0017`: `ALTER TABLE ubicaciones ALTER COLUMN departamento DROP NOT NULL`.
+- `app/lotes/schemas.py`: `LoteCreate.ubicacion_consistente` ahora solo exige `provincia` cuando se carga algo de ubicación — `departamento` y `localidad` quedan ambos opcionales. `UbicacionResponse.departamento` pasa a `str | None`.
+- `app/lotes/service.py::obtener_o_crear_ubicacion`: `departamento` pasa a parámetro opcional; el matching/creación maneja `departamento is None` igual que ya hacía con `localidad`.
+- `frontend/src/components/ModalNuevoLote.jsx`: validación de consistencia actualizada — solo pide provincia.
+
+**Verificación:** nuevo test `test_crear_lote_provincia_y_localidad_sin_departamento` (201, `departamento` queda `None` en la respuesta). Reproducido el caso exacto de la captura del usuario contra la API real (provincia="chaco", departamento=None, localidad="Resistencia") → 201. 33/34 tests pasan (el fallo restante sigue siendo el bug preexistente no relacionado). `npm run build` sin errores.
+
 ## Problemas abiertos
 
 _Problemas conocidos sin solución todavía. Borrar cuando se resuelvan._

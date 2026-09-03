@@ -21,16 +21,6 @@ from app.main import app
 
 _EMAIL = f"vuelos_{uuid.uuid4().hex[:8]}@agronexo-test.com"
 _PASS = "vuelos_pass_789"
-_GEOM = {
-    "type": "Polygon",
-    "coordinates": [[
-        [-60.6753, -27.4693],
-        [-60.6701, -27.4693],
-        [-60.6701, -27.4741],
-        [-60.6753, -27.4741],
-        [-60.6753, -27.4693],
-    ]],
-}
 
 # El TestClient se abre en setup_module y se cierra en teardown_module para
 # mantener el mismo event loop de anyio en todas las llamadas del módulo.
@@ -51,10 +41,13 @@ def setup_module(module):
     assert r.status_code == 200, f"setup_module login falló: {r.status_code} {r.text}"
     _token = r.json()["access_token"]
 
+    suelos = _tc.get("/api/v1/lotes/suelos", headers={"Authorization": f"Bearer {_token}"}).json()
+    assert suelos, "setup_module: catálogo de suelos vacío (falta correr migración 0014)"
+    suelo_id = suelos[0]["id"]
+
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Para Tests de Vuelos",
-        "cultivo": "soja",
-        "geometry": _GEOM,
+        "suelo_id": suelo_id,
     }, headers={"Authorization": f"Bearer {_token}"})
     assert r.status_code == 201, f"setup_module crear lote falló: {r.text}"
     _lote_id = r.json()["id"]

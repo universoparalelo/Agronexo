@@ -1,104 +1,69 @@
-import { useState, useCallback, useEffect } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { useState, useEffect } from 'react'
 import client from '../api/client'
 
-const CULTIVOS = [
-  { value: 'soja', label: 'Soja' },
-  { value: 'maiz', label: 'Maíz' },
-  { value: 'algodon', label: 'Algodón' },
-  { value: 'sorgo', label: 'Sorgo' },
+const PROVINCIAS = [
+  { value: 'buenos_aires', label: 'Buenos Aires' },
+  { value: 'catamarca', label: 'Catamarca' },
+  { value: 'chaco', label: 'Chaco' },
+  { value: 'chubut', label: 'Chubut' },
+  { value: 'cordoba', label: 'Córdoba' },
+  { value: 'corrientes', label: 'Corrientes' },
+  { value: 'entre_rios', label: 'Entre Ríos' },
+  { value: 'formosa', label: 'Formosa' },
+  { value: 'jujuy', label: 'Jujuy' },
+  { value: 'la_pampa', label: 'La Pampa' },
+  { value: 'la_rioja', label: 'La Rioja' },
+  { value: 'mendoza', label: 'Mendoza' },
+  { value: 'misiones', label: 'Misiones' },
+  { value: 'neuquen', label: 'Neuquén' },
+  { value: 'rio_negro', label: 'Río Negro' },
+  { value: 'salta', label: 'Salta' },
+  { value: 'san_juan', label: 'San Juan' },
+  { value: 'san_luis', label: 'San Luis' },
+  { value: 'santa_cruz', label: 'Santa Cruz' },
+  { value: 'santa_fe', label: 'Santa Fe' },
+  { value: 'santiago_del_estero', label: 'Santiago del Estero' },
+  { value: 'tierra_del_fuego', label: 'Tierra del Fuego, Antártida e Islas del Atlántico Sur' },
+  { value: 'tucuman', label: 'Tucumán' },
+  { value: 'caba', label: 'Ciudad Autónoma de Buenos Aires' },
 ]
 
-function FitBounds({ bounds }) {
-  const map = useMap()
-  useEffect(() => {
-    if (bounds) map.fitBounds(bounds, { padding: [20, 20] })
-  }, [bounds, map])
-  return null
-}
-
-function boundsDesdePoligono(coordinates) {
-  const coords = coordinates[0]
-  const lngs = coords.map((c) => c[0])
-  const lats = coords.map((c) => c[1])
-  return [
-    [Math.min(...lats), Math.min(...lngs)],
-    [Math.max(...lats), Math.max(...lngs)],
-  ]
-}
-
-function extraerPoligono(geojson) {
-  if (geojson.type === 'Polygon') return geojson
-  if (geojson.type === 'Feature' && geojson.geometry?.type === 'Polygon')
-    return geojson.geometry
-  if (geojson.type === 'FeatureCollection') {
-    const feat = geojson.features?.find((f) => f.geometry?.type === 'Polygon')
-    if (feat) return feat.geometry
-  }
-  return null
-}
-
 export default function ModalNuevoLote({ onSuccess, onClose }) {
-  const [form, setForm] = useState({ nombre: '', cultivo: 'soja', estadio_fenologico: '' })
-  const [poligono, setPoligono] = useState(null)
-  const [bounds, setBounds] = useState(null)
-  const [archivoNombre, setArchivoNombre] = useState('')
-  const [dragActivo, setDragActivo] = useState(false)
+  const [form, setForm] = useState({ nombre: '', suelo_id: '', provincia: '', departamento: '', localidad: '' })
+  const [suelos, setSuelos] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    client.get('/lotes/suelos').then(({ data }) => {
+      setSuelos(data)
+      if (data.length > 0) setForm((f) => ({ ...f, suelo_id: f.suelo_id || data[0].id }))
+    }).catch(() => setError('No se pudo cargar el catálogo de suelos.'))
+  }, [])
 
   function handleField(e) {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
   }
 
-  function procesarArchivo(file) {
-    setError('')
-    setPoligono(null)
-    setBounds(null)
-    setArchivoNombre(file.name)
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const json = JSON.parse(e.target.result)
-        const poly = extraerPoligono(json)
-        if (!poly) {
-          setError('El archivo no contiene un Polygon GeoJSON válido.')
-          return
-        }
-        setPoligono(poly)
-        setBounds(boundsDesdePoligono(poly.coordinates))
-      } catch {
-        setError('El archivo no es un JSON válido.')
-      }
-    }
-    reader.readAsText(file)
-  }
-
-  const onDrop = useCallback((e) => {
-    e.preventDefault()
-    setDragActivo(false)
-    const file = e.dataTransfer.files[0]
-    if (file) procesarArchivo(file)
-  }, [])
-
-  function onFileChange(e) {
-    const file = e.target.files[0]
-    if (file) procesarArchivo(file)
-  }
-
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.nombre.trim()) { setError('El nombre del lote es requerido.'); return }
+    if (!form.suelo_id) { setError('Seleccioná el tipo de suelo.'); return }
+    const algunUbicacion = form.provincia || form.departamento.trim() || form.localidad.trim()
+    if (algunUbicacion && !form.provincia) {
+      setError('Si cargás la ubicación, seleccioná al menos la provincia.')
+      return
+    }
 
     setLoading(true)
     setError('')
     try {
       const { data } = await client.post('/lotes', {
         nombre: form.nombre.trim(),
-        cultivo: form.cultivo,
-        estadio_fenologico: form.estadio_fenologico.trim() || null,
-        geometry: poligono,
+        suelo_id: form.suelo_id,
+        provincia: form.provincia || null,
+        departamento: form.departamento.trim() || null,
+        localidad: form.localidad.trim() || null,
       })
       onSuccess(data.id)
     } catch (err) {
@@ -135,23 +100,58 @@ export default function ModalNuevoLote({ onSuccess, onClose }) {
             />
           </div>
 
+          <div className="form-group">
+            <label htmlFor="suelo_id">Tipo de suelo</label>
+            <select
+              id="suelo_id"
+              name="suelo_id"
+              value={form.suelo_id}
+              onChange={handleField}
+              disabled={loading || suelos.length === 0}
+            >
+              {suelos.length === 0 && <option value="">Cargando...</option>}
+              {suelos.map((s) => (
+                <option key={s.id} value={s.id}>{s.serie ? `${s.tipo} — ${s.serie}` : s.tipo}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="provincia">Provincia <span className="label-opcional">(opcional)</span></label>
+            <select
+              id="provincia"
+              name="provincia"
+              value={form.provincia}
+              onChange={handleField}
+              disabled={loading}
+            >
+              <option value="">Seleccionar...</option>
+              {PROVINCIAS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </div>
+
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="cultivo">Cultivo</label>
-              <select id="cultivo" name="cultivo" value={form.cultivo} onChange={handleField} disabled={loading}>
-                {CULTIVOS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="estadio">Estadio fenológico <span className="label-opcional">(opcional)</span></label>
+              <label htmlFor="departamento">Departamento <span className="label-opcional">(opcional)</span></label>
               <input
-                id="estadio"
-                name="estadio_fenologico"
+                id="departamento"
+                name="departamento"
                 type="text"
-                placeholder="Ej: R3"
-                maxLength={10}
-                value={form.estadio_fenologico}
+                placeholder="Ej: Presidencia Roque Sáenz Peña"
+                maxLength={100}
+                value={form.departamento}
+                onChange={handleField}
+                disabled={loading}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="localidad">Localidad <span className="label-opcional">(opcional)</span></label>
+              <input
+                id="localidad"
+                name="localidad"
+                type="text"
+                maxLength={100}
+                value={form.localidad}
                 onChange={handleField}
                 disabled={loading}
               />
@@ -159,54 +159,8 @@ export default function ModalNuevoLote({ onSuccess, onClose }) {
           </div>
 
           <p className="limites-hint">
-            Límite del lote <span className="label-opcional">(opcional)</span> — subí un archivo <strong>.geojson</strong> si ya lo tenés. Podés cargarlo más adelante desde "Límites".
+            El límite geográfico del lote se calcula automáticamente a partir del primer ortomosaico (GeoTIFF) que subas — no hace falta cargarlo acá.
           </p>
-
-          <div
-            className={`dropzone${dragActivo ? ' dropzone--activo' : ''}${poligono ? ' dropzone--ok' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragActivo(true) }}
-            onDragLeave={() => setDragActivo(false)}
-            onDrop={onDrop}
-            onClick={() => document.getElementById('input-geojson-nuevo-lote').click()}
-          >
-            <input
-              id="input-geojson-nuevo-lote"
-              type="file"
-              accept=".geojson,.json"
-              style={{ display: 'none' }}
-              onChange={onFileChange}
-            />
-            {poligono ? (
-              <span className="dropzone-archivo">✓ {archivoNombre}</span>
-            ) : (
-              <>
-                <span className="dropzone-icono">📍</span>
-                <span className="dropzone-hint">Arrastrá o hacé clic para seleccionar</span>
-                <span className="dropzone-ext">.geojson / .json</span>
-              </>
-            )}
-          </div>
-
-          {poligono && bounds && (
-            <div className="limites-preview-map">
-              <MapContainer
-                bounds={bounds}
-                style={{ height: '220px', width: '100%', borderRadius: '8px' }}
-                zoomControl={true}
-                scrollWheelZoom={false}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution="© OpenStreetMap contributors"
-                />
-                <GeoJSON
-                  data={poligono}
-                  style={{ color: '#2ecc71', weight: 2, fillOpacity: 0.15 }}
-                />
-                <FitBounds bounds={bounds} />
-              </MapContainer>
-            </div>
-          )}
 
           {error && <div className="error-message">{error}</div>}
 
@@ -214,7 +168,7 @@ export default function ModalNuevoLote({ onSuccess, onClose }) {
             <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
               Cancelar
             </button>
-            <button type="submit" className="btn-primary" disabled={loading || !form.nombre.trim()}>
+            <button type="submit" className="btn-primary" disabled={loading || !form.nombre.trim() || !form.suelo_id}>
               {loading ? 'Creando...' : 'Crear lote'}
             </button>
           </div>

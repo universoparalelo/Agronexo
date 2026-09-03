@@ -57,11 +57,45 @@ def calcular_exg(green: np.ndarray, red: np.ndarray, blue: np.ndarray, nodata: f
     return resultado.astype(np.float32)
 
 
+def calcular_gndvi(nir: np.ndarray, green: np.ndarray, nodata: float | None = None) -> np.ndarray:
+    """GNDVI = (NIR - GREEN) / (NIR + GREEN)  — rango [-1, 1].
+    Reemplaza RED por GREEN respecto al NDVI: no satura tan rápido en fases
+    reproductivas, útil cuando NDVI > 0.75.
+    """
+    resultado = _division_segura(nir - green, nir + green)
+    resultado[_mascara_nodata(nodata, nir, green)] = np.nan
+    return resultado.astype(np.float32)
+
+
+def calcular_msavi(nir: np.ndarray, red: np.ndarray, nodata: float | None = None) -> np.ndarray:
+    """MSAVI2 = (2*NIR + 1 - sqrt((2*NIR + 1)² - 8*(NIR - RED))) / 2  — rango ~[-1, 1].
+    Versión auto-ajustada de SAVI (no requiere calibrar L a mano). Recomendado
+    al inicio de campaña con suelo muy expuesto.
+    """
+    termino = (2.0 * nir + 1.0) ** 2 - 8.0 * (nir - red)
+    resultado = (2.0 * nir + 1.0 - np.sqrt(np.maximum(termino, 0.0))) / 2.0
+    resultado[_mascara_nodata(nodata, nir, red)] = np.nan
+    return resultado.astype(np.float32)
+
+
+def calcular_ndwi(green: np.ndarray, nir: np.ndarray, nodata: float | None = None) -> np.ndarray:
+    """NDWI (McFeeters) = (GREEN - NIR) / (GREEN + NIR)  — rango [-1, 1].
+    Proxy de agua superficial: sensores sin banda SWIR (DJI Mavic 3
+    Multispectral) no pueden calcular el NDWI convencional (NIR-SWIR).
+    """
+    resultado = _division_segura(green - nir, green + nir)
+    resultado[_mascara_nodata(nodata, green, nir)] = np.nan
+    return resultado.astype(np.float32)
+
+
 CALCULADORES = {
-    "ndvi": calcular_ndvi,
-    "ndre": calcular_ndre,
-    "savi": calcular_savi,
-    "exg":  calcular_exg,
+    "ndvi":  calcular_ndvi,
+    "ndre":  calcular_ndre,
+    "savi":  calcular_savi,
+    "exg":   calcular_exg,
+    "gndvi": calcular_gndvi,
+    "msavi": calcular_msavi,
+    "ndwi":  calcular_ndwi,
 }
 
 
@@ -78,4 +112,10 @@ def calcular_indice(indice: str, bandas: dict[str, np.ndarray], nodata: float | 
         return calcular_savi(bandas["NIR"], bandas["RED"], nodata)
     if indice == "exg":
         return calcular_exg(bandas["GREEN"], bandas["RED"], bandas["BLUE"], nodata)
+    if indice == "gndvi":
+        return calcular_gndvi(bandas["NIR"], bandas["GREEN"], nodata)
+    if indice == "msavi":
+        return calcular_msavi(bandas["NIR"], bandas["RED"], nodata)
+    if indice == "ndwi":
+        return calcular_ndwi(bandas["GREEN"], bandas["NIR"], nodata)
     raise ValueError(f"Índice '{indice}' no soportado. Válidos: {list(CALCULADORES)}")
