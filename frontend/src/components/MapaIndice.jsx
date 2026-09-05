@@ -22,11 +22,33 @@ const COLORES_CLASE = {
   vigorosa:   '#27ae60',
 }
 
-const ETIQUETAS_CLASE = {
-  critica:    'Crítica (NDVI < 0.2)',
-  deficiente: 'Deficiente (0.2–0.4)',
-  normal:     'Normal (0.4–0.7)',
-  vigorosa:   'Vigorosa (> 0.7)',
+// Umbrales "fijo" por índice — deben coincidir con
+// workers/gis/clasificacion.py::_UMBRALES_POR_INDICE. Cada índice tiene su
+// propio rango agronómico típico (NDRE ronda 0.1-0.4 para el mismo canopeo
+// donde NDVI ronda 0.4-0.8), por eso no se reutilizan los umbrales de NDVI
+// para los demás. ExG no tiene umbral fijo — siempre se clasifica con
+// método adaptativo (otsu), así que su leyenda no muestra rangos numéricos.
+const ETIQUETAS_CLASE_POR_INDICE = {
+  ndvi: {
+    critica: 'Crítica (< 0.20)', deficiente: 'Deficiente (0.20–0.40)',
+    normal: 'Normal (0.40–0.70)', vigorosa: 'Vigorosa (> 0.70)',
+  },
+  gndvi: {
+    critica: 'Crítica (< 0.20)', deficiente: 'Deficiente (0.20–0.40)',
+    normal: 'Normal (0.40–0.70)', vigorosa: 'Vigorosa (> 0.70)',
+  },
+  ndre: {
+    critica: 'Crítica (< 0.10)', deficiente: 'Deficiente (0.10–0.20)',
+    normal: 'Normal (0.20–0.35)', vigorosa: 'Vigorosa (> 0.35)',
+  },
+  savi: {
+    critica: 'Crítica (< 0.15)', deficiente: 'Deficiente (0.15–0.30)',
+    normal: 'Normal (0.30–0.50)', vigorosa: 'Vigorosa (> 0.50)',
+  },
+  exg: {
+    critica: 'Crítica', deficiente: 'Deficiente',
+    normal: 'Normal', vigorosa: 'Vigorosa (umbral adaptativo por vuelo)',
+  },
 }
 
 function styleFeature(feature) {
@@ -39,19 +61,21 @@ function styleFeature(feature) {
   }
 }
 
-function onEachFeature(feature, layer) {
-  const p = feature?.properties
-  if (!p) return
-  const ndvi = p.ndvi_promedio != null ? p.ndvi_promedio.toFixed(3) : '–'
-  const area = p.area_ha != null
-    ? p.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })
-    : '–'
-  layer.bindTooltip(
-    `<strong style="text-transform:capitalize">${p.clase ?? 'zona'}</strong>` +
-    `<br/>NDVI prom.: ${ndvi}` +
-    `<br/>Área: ${area} ha`,
-    { sticky: true, className: 'mapa-tooltip' }
-  )
+function crearOnEachFeature(indiceLabel) {
+  return function onEachFeature(feature, layer) {
+    const p = feature?.properties
+    if (!p) return
+    const valor = p.ndvi_promedio != null ? p.ndvi_promedio.toFixed(3) : '–'
+    const area = p.area_ha != null
+      ? p.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+      : '–'
+    layer.bindTooltip(
+      `<strong style="text-transform:capitalize">${p.clase ?? 'zona'}</strong>` +
+      `<br/>${indiceLabel} prom.: ${valor}` +
+      `<br/>Área: ${area} ha`,
+      { sticky: true, className: 'mapa-tooltip' }
+    )
+  }
 }
 
 // Límite de seguridad: más de 1 500 polígonos causa lentitud extrema o crash en
@@ -81,8 +105,13 @@ class MapaBoundary extends Component {
   }
 }
 
-export default function MapaIndice({ geojson }) {
+const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
+
+export default function MapaIndice({ geojson, indice = 'ndvi' }) {
   const nFeatures = geojson?.features?.length ?? 0
+  const indiceLabel = INDICE_LABEL[indice] ?? indice.toUpperCase()
+  const etiquetasClase = ETIQUETAS_CLASE_POR_INDICE[indice] ?? ETIQUETAS_CLASE_POR_INDICE.ndvi
+  const onEachFeature = useMemo(() => crearOnEachFeature(indiceLabel), [indiceLabel])
 
   const bounds = useMemo(() => {
     if (!nFeatures) return null
@@ -146,10 +175,11 @@ export default function MapaIndice({ geojson }) {
         </MapContainer>
 
         <div className="mapa-leyenda">
+          <span className="leyenda-titulo">{indiceLabel}</span>
           {Object.entries(COLORES_CLASE).map(([clase, color]) => (
             <div key={clase} className="leyenda-item">
               <span className="leyenda-color" style={{ background: color }} />
-              <span className="leyenda-label">{ETIQUETAS_CLASE[clase]}</span>
+              <span className="leyenda-label">{etiquetasClase[clase]}</span>
             </div>
           ))}
         </div>

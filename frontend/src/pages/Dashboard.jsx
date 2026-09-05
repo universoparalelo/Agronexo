@@ -186,7 +186,7 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
 }
 
 /* ──────── Mapa de análisis (panel inferior) ──────── */
-const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', exg: 'ExG' }
+const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
 function AnalisisMap({ loteId, vueloId, indice }) {
   const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
@@ -194,7 +194,7 @@ function AnalisisMap({ loteId, vueloId, indice }) {
   if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
   const estadoActual = estado.estado
-  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} />
+  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} />
   if (estadoActual === 'error' || errorMsg) {
     return (
       <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>

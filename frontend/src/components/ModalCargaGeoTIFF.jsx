@@ -27,10 +27,20 @@ const INDICES = [
     desc: 'Índice Ajustado al Suelo. Recomendado en las primeras 3 semanas post-siembra, cuando la cobertura vegetal es menor al 30% y el suelo está expuesto.',
   },
   {
+    value: 'gndvi', label: 'GNDVI', sub: 'NIR / GREEN', bandas: ['NIR', 'GREEN'],
+    desc: 'Índice Verde Normalizado. Más sensible que el NDVI cuando este ya satura (> 0.75), útil en floración/llenado de grano.',
+  },
+  {
     value: 'exg', label: 'ExG', sub: 'RGB', bandas: ['GREEN', 'RED', 'BLUE'],
-    desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR.',
+    desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR. No se calcula automáticamente: hay que seleccionarlo a mano.',
   },
 ]
+
+// Todos los índices disponibles para el sensor, salvo ExG — se calculan
+// automáticamente al subir el vuelo sin que el usuario tenga que tildarlos.
+function indicesAutomaticos(sensor) {
+  return indicesDisponibles(sensor).filter((i) => i.value !== 'exg').map((i) => i.value)
+}
 
 // Bandas disponibles por sensor (workers/gis/band_mapping.py::MAPEO_SENSORES).
 // El DJI Mavic 3 Multispectral real no tiene banda Blue.
@@ -83,7 +93,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [step, setStep] = useState('carga') // 'carga' | 'analisis'
   const [loteId, setLoteId] = useState(loteIdInicial ?? lotes?.[0]?.id ?? '')
   const [sensor, setSensor] = useState('sentinel2')
-  const [indices, setIndices] = useState(['ndvi'])
+  const [indices, setIndices] = useState(() => indicesAutomaticos('sentinel2'))
   const [indiceMostrado, setIndiceMostrado] = useState('ndvi')
   const [archivo, setArchivo] = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -100,11 +110,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const indicesParaSensor = indicesDisponibles(sensor)
 
   useEffect(() => {
-    // si el índice mostrado deja de estar disponible al cambiar de sensor
-    // (ej: ExG con dji_mavic3, que no tiene Blue), volvemos a NDVI
-    if (!indicesParaSensor.some((i) => i.value === indiceMostrado)) {
-      setIndiceMostrado('ndvi')
-      setIndices(['ndvi'])
+    // al cambiar de sensor, recalculamos qué índices se calculan por
+    // defecto (ej: ExG queda afuera con dji_mavic3, que no tiene Blue)
+    const automaticos = indicesAutomaticos(sensor)
+    setIndices(automaticos)
+    if (!automaticos.includes(indiceMostrado)) {
+      setIndiceMostrado(automaticos[0] ?? 'ndvi')
     }
   }, [sensor]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -337,7 +348,9 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
 
             <div className="config-analisis-header">
               <p className="config-analisis-titulo">Configuración de análisis</p>
-              <p className="config-analisis-sub">Seleccioná uno o más índices de vegetación:</p>
+              <p className="config-analisis-sub">
+                NDVI, NDRE, SAVI y GNDVI se calculan automáticamente. Destildá los que no necesites o sumá ExG.
+              </p>
             </div>
 
             <div className="indice-grid" style={{ gridTemplateColumns: `repeat(${indicesParaSensor.length}, 1fr)` }}>

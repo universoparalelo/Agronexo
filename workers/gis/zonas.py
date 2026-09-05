@@ -76,14 +76,18 @@ def suavizar_indice(valores: np.ndarray, sigma: float = 1.0) -> np.ndarray:
     return suavizado.astype(np.float32)
 
 
-def clasificar_ndvi(ndvi: np.ndarray, metodo: str = "fijo") -> np.ndarray:
+def clasificar_ndvi(ndvi: np.ndarray, metodo: str = "fijo", indice: str = "ndvi") -> np.ndarray:
     """
     Asigna un código entero a cada píxel según su clase.
     0 = nodata/nan, 1 = critica, 2 = deficiente, 3 = normal, 4 = vigorosa
 
-    metodo: "fijo" (umbrales agronómicos estándar) | "otsu" | "percentil"
+    metodo: "fijo" (umbrales agronómicos estándar por índice) | "otsu" | "percentil"
+    indice: qué índice se está clasificando — determina los umbrales "fijo"
+    (ver workers/gis/clasificacion.py::_UMBRALES_POR_INDICE). El nombre de la
+    función quedó de cuando solo existía NDVI; ahora clasifica cualquier
+    índice razón (NDVI/NDRE/SAVI/GNDVI).
     """
-    umbrales = calcular_umbrales(ndvi, metodo)
+    umbrales = calcular_umbrales(ndvi, metodo, indice)
     return clasificar_con_umbrales(ndvi, umbrales)
 
 

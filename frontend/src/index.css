@@ -1139,6 +1139,15 @@ body {
   pointer-events: none;
 }
 
+.leyenda-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 0.1rem;
+}
+
 .leyenda-item {
   display: flex;
   align-items: center;

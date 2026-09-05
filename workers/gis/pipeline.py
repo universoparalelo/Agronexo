@@ -50,13 +50,16 @@ from workers.gis.reproyeccion import reproyectar_a_4326
 from workers.gis.zonas import clasificar_ndvi, exportar_geojson, suavizar_indice, vectorizar_zonas
 
 # Umbrales de clasificación reutilizados del módulo de zonificación.
-# NDVI, NDRE y SAVI son índices "razón" (diferencia sobre suma) — su rango
-# es siempre ~[-1,1] sin importar la escala de las bandas de entrada
-# (reflectancia 0-1 o DN crudo), así que el umbral fijo aplica directamente.
+# NDVI, NDRE, SAVI y GNDVI son índices "razón" (diferencia sobre suma) — su
+# rango matemático es siempre ~[-1,1] sin importar la escala de las bandas de
+# entrada, pero su rango *agronómico típico* difiere mucho entre sí (NDRE
+# ronda 0.1-0.4 para el mismo canopeo donde NDVI ronda 0.4-0.8), así que cada
+# uno usa su propia tabla de umbrales "fijo" — ver
+# workers/gis/clasificacion.py::_UMBRALES_POR_INDICE.
 # ExG (2*GREEN-RED-BLUE) NO es una razón — es una resta lineal absoluta cuya
 # escala depende de las unidades crudas de la cámara (reflectancia 0-1 da
-# valores ~[-2,2]; DN 8-bit sin calibrar da valores de cientos). El umbral
-# fijo pensado para NDVI no tiene sentido ahí — ver _metodo_umbral_efectivo().
+# valores ~[-2,2]; DN 8-bit sin calibrar da valores de cientos). Ningún
+# umbral fijo tiene sentido ahí — ver _metodo_umbral_efectivo().
 
 
 def _metodo_umbral_efectivo(indice: str, metodo_umbral: str) -> str:
@@ -162,7 +165,7 @@ def _procesar_indice_desde_bandas(
     metodo_efectivo = _metodo_umbral_efectivo(indice, metodo_umbral)
 
     t4 = time.perf_counter()
-    clase = clasificar_ndvi(valores_suavizados, metodo=metodo_efectivo)
+    clase = clasificar_ndvi(valores_suavizados, metodo=metodo_efectivo, indice=indice)
     logger.info("[pipeline] clasificacion (%s): %.2fs", metodo_efectivo, time.perf_counter() - t4)
 
     t5 = time.perf_counter()
