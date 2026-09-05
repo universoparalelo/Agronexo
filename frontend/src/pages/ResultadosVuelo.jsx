@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import client from '../api/client'
-import { obtenerDiagnostico, obtenerZonas } from '../api/analisis'
+import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
 import MapaZonas from '../components/MapaZonas'
 import TablaDiagnostico from '../components/TablaDiagnostico'
 import TablaZonas from '../components/TablaZonas'
@@ -28,6 +28,7 @@ export default function ResultadosVuelo() {
   const [diagnostico, setDiagnostico] = useState(null)
   const [diagnosticoLoading, setDiagnosticoLoading] = useState(false)
   const [diagnosticoError, setDiagnosticoError] = useState('')
+  const [recalculando, setRecalculando] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -53,6 +54,15 @@ export default function ResultadosVuelo() {
       .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
       .finally(() => setDiagnosticoLoading(false))
   }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
+
+  function handleRecalcular() {
+    setRecalculando(true)
+    setDiagnosticoError('')
+    recalcularDiagnostico(loteId, vueloId)
+      .then(setDiagnostico)
+      .catch(() => setDiagnosticoError('No se pudo recalcular el diagnóstico.'))
+      .finally(() => setRecalculando(false))
+  }
 
   if (loading) return <div className="page-loading">Cargando resultados...</div>
 
@@ -142,7 +152,13 @@ export default function ResultadosVuelo() {
                 </div>
               )}
               {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
-              {diagnostico && <TablaDiagnostico diagnostico={diagnostico} />}
+              {diagnostico && (
+                <TablaDiagnostico
+                  diagnostico={diagnostico}
+                  onRecalcular={handleRecalcular}
+                  recalculando={recalculando}
+                />
+              )}
             </>
           )}
         </div>

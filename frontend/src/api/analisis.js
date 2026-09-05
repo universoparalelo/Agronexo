@@ -41,5 +41,11 @@ export const obtenerEstadoIndice = (loteId, vueloId, indice) =>
 export const obtenerResultadoIndice = (loteId, vueloId, indice) =>
   client.get(`/lotes/${loteId}/vuelos/${vueloId}/indices/${indice}/resultado`).then(r => r.data)
 
+// Devuelve el diagnóstico guardado del vuelo; si es la primera vez que se
+// pide, el backend lo calcula y lo guarda antes de responder.
 export const obtenerDiagnostico = (loteId, vueloId) =>
   client.get(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico`).then(r => r.data)
+
+// Fuerza el recálculo y sobrescribe el diagnóstico guardado del vuelo.
+export const recalcularDiagnostico = (loteId, vueloId) =>
+  client.post(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/recalcular`).then(r => r.data)

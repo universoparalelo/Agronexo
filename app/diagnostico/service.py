@@ -9,8 +9,13 @@ proceso FastAPI, que no tiene esas dependencias GIS instaladas (ver
 app/diagnostico/forma.py para el detalle de por qué). Solo Shapely, ya
 presente en docker/requirements.api.txt.
 
-Sin persistencia (decisión de alcance de esta release, ver
-docs/release-v1.0.0.md "Problemas abiertos") — se recalcula en cada request.
+Persistido desde 0016_crear_tabla_diagnosticos — un vuelo tiene a lo sumo un
+diagnóstico guardado (tabla `diagnosticos`, UNIQUE en vuelo_id). La primera
+vez que se pide se calcula y se guarda; las siguientes veces se devuelve lo
+guardado sin recalcular, salvo que se pida explícitamente recalcular (ver
+generar_diagnostico(forzar_recalculo=True)), que sobrescribe la fila. No es
+historial multi-versión — eso sigue siendo alcance de release 4 (RFGL-03,
+ver docs/release-v1.0.0.md "Problemas abiertos").
 """
 
 from __future__ import annotations
@@ -18,10 +23,12 @@ from __future__ import annotations
 import logging
 import math
 import uuid
+from datetime import datetime, timezone
 
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 from geoalchemy2.shape import to_shape
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -30,7 +37,7 @@ from sqlalchemy import select
 from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
-from app.diagnostico.models import CausaIndiceEnum, ProductoFitosanitario, TipoProductoEnum
+from app.diagnostico.models import CausaIndiceEnum, Diagnostico, ProductoFitosanitario, TipoProductoEnum
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
 from app.diagnostico.zonificacion import generar_unidades_manejo
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
@@ -124,7 +131,30 @@ def enriquecer_con_indice(
     return resultado
 
 
-async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID) -> dict | None:
+async def obtener_diagnostico_guardado(db: AsyncSession, vuelo_id: uuid.UUID) -> Diagnostico | None:
+    stmt = select(Diagnostico).where(Diagnostico.vuelo_id == vuelo_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def guardar_diagnostico(db: AsyncSession, vuelo_id: uuid.UUID, resultado: dict, calculado_en: datetime) -> None:
+    """
+    Upsert — un vuelo tiene a lo sumo un diagnóstico guardado (vuelo_id
+    UNIQUE en la tabla). Recalcular sobrescribe la fila existente, no
+    acumula historial (ver docstring del módulo).
+    """
+    stmt = pg_insert(Diagnostico).values(vuelo_id=vuelo_id, resultado=resultado, calculado_en=calculado_en)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Diagnostico.vuelo_id],
+        set_={"resultado": resultado, "calculado_en": calculado_en},
+    )
+    await db.execute(stmt)
+    await db.flush()
+
+
+async def generar_diagnostico(
+    db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID, *, forzar_recalculo: bool = False,
+) -> dict | None:
     """
     Devuelve el GeoJSON de zonas NDVI del vuelo, enriquecido por zona con:
     patrón espacial, regla que matcheó, causa, confianza, acción
@@ -132,6 +162,11 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
 
     Devuelve None si el vuelo no existe, no está 'completado' o no tiene
     NDVI calculado — el router lo traduce a 404.
+
+    Primera llamada para un vuelo: calcula y guarda en `diagnosticos`. Las
+    siguientes devuelven lo guardado sin recalcular, salvo
+    forzar_recalculo=True (botón "Recalcular" del frontend), que vuelve a
+    calcular todo y sobrescribe la fila guardada.
 
     Solo la parte async (DB + descarga de GeoJSON de MinIO, esta última ya
     corre en threadpool dentro de obtener_resultado_geojson*) toca el event
@@ -145,6 +180,11 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
     vuelo = await obtener_vuelo(db, lote.id, vuelo_id)
     if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
         return None
+
+    if not forzar_recalculo:
+        guardado = await obtener_diagnostico_guardado(db, vuelo_id)
+        if guardado is not None:
+            return guardado.resultado
 
     ndvi_geojson = await obtener_resultado_geojson(db, lote.id, vuelo_id)
     if ndvi_geojson is None:
@@ -172,7 +212,7 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
 
     catalogo = await _cargar_catalogo_productos(db)
 
-    return await run_in_threadpool(
+    resultado = await run_in_threadpool(
         _calcular_diagnostico,
         ndvi_geojson, geojson_por_indice, lote_geom_4326,
         lote.cultivo, lote.estadio_fenologico, catalogo,
@@ -181,6 +221,12 @@ async def generar_diagnostico(db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID)
         vuelo_id=str(vuelo_id),
         fecha_vuelo=str(vuelo.fecha_vuelo) if vuelo.fecha_vuelo else None,
     )
+
+    calculado_en = datetime.now(timezone.utc)
+    resultado["metadata"]["calculado_en"] = calculado_en.isoformat()
+    await guardar_diagnostico(db, vuelo_id, resultado, calculado_en)
+
+    return resultado
 
 
 def _calcular_diagnostico(

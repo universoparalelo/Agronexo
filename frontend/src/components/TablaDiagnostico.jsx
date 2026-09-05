@@ -41,7 +41,7 @@ const CAUSA_LABELS = {
   vigor_excesivo: 'Vigor excesivo',
 }
 
-export default function TablaDiagnostico({ diagnostico }) {
+export default function TablaDiagnostico({ diagnostico, onRecalcular, recalculando }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
   const [vista, setVista] = useState('tabla')
@@ -60,21 +60,32 @@ export default function TablaDiagnostico({ diagnostico }) {
     <div className="tabla-diagnostico-wrapper">
       <div className="diagnostico-title-row">
         <h3 className="tabla-zonas-title">Diagnóstico agronómico</h3>
-        <div className="diagnostico-vista-toggle">
+        <div className="diagnostico-title-row-controles">
           <button
-            className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}
-            onClick={() => setVista('tabla')}
-            title="Vista tabla"
+            type="button"
+            className="btn-recalcular-diagnostico"
+            onClick={onRecalcular}
+            disabled={recalculando}
+            title="Vuelve a calcular el diagnóstico desde cero y reemplaza el guardado"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="3" rx="0.5" fill="currentColor"/><rect x="1" y="5.5" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="1" y="10" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.35"/></svg>
+            {recalculando ? 'Recalculando...' : '↻ Recalcular'}
           </button>
-          <button
-            className={`vista-btn ${vista === 'cards' ? 'vista-btn--active' : ''}`}
-            onClick={() => setVista('cards')}
-            title="Vista detalle"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
-          </button>
+          <div className="diagnostico-vista-toggle">
+            <button
+              className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}
+              onClick={() => setVista('tabla')}
+              title="Vista tabla"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="3" rx="0.5" fill="currentColor"/><rect x="1" y="5.5" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="1" y="10" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.35"/></svg>
+            </button>
+            <button
+              className={`vista-btn ${vista === 'cards' ? 'vista-btn--active' : ''}`}
+              onClick={() => setVista('cards')}
+              title="Vista detalle"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -86,6 +97,13 @@ export default function TablaDiagnostico({ diagnostico }) {
             {metadata.cultivo} · estadio {metadata.estadio_fenologico || 'sin cargar'}
             {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
             {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
+            {metadata.calculado_en && (
+              <span className="diagnostico-calculado-en">
+                {' · '}calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
+                  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
+            )}
           </p>
           {metadata.resumen_general && (
             <p className="diagnostico-resumen">{metadata.resumen_general}</p>
