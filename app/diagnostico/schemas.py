@@ -54,6 +54,7 @@ class DiagnosticoMetadata(BaseModel):
     estadio_fenologico: str | None
     ndvi_promedio_lote: float
     indices_disponibles: list[str]
+    calculado_en: str | None = None
 
 
 class DiagnosticoLoteResponse(BaseModel):

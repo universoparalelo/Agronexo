@@ -1,8 +1,9 @@
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Enum, Float, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -58,3 +59,23 @@ class ProductoFitosanitario(Base):
     causa_indice: Mapped[CausaIndiceEnum] = mapped_column(Enum(CausaIndiceEnum), nullable=False)
     dosis_referencia: Mapped[float | None] = mapped_column(Float, nullable=True)
     unidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+
+class Diagnostico(Base):
+    """
+    Diagnóstico guardado de un vuelo — a lo sumo uno por vuelo (vuelo_id
+    UNIQUE). "Recalcular" sobrescribe esta fila en vez de crear otra; no es
+    historial multi-versión (eso es alcance de release 4, ver
+    docs/release-v1.0.0.md "Problemas abiertos" #2).
+    """
+
+    __tablename__ = "diagnosticos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    vuelo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vuelos.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    resultado: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    calculado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

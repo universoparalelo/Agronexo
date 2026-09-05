@@ -2372,12 +2372,47 @@ body {
   gap: 0.5rem;
 }
 
+.diagnostico-title-row-controles {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .diagnostico-vista-toggle {
   display: flex;
   gap: 0.2rem;
   background: #f0f4f0;
   border-radius: 6px;
   padding: 2px;
+}
+
+.btn-recalcular-diagnostico {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #27500a;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-recalcular-diagnostico:hover:not(:disabled) {
+  background: #f0f4f0;
+  border-color: #27500a;
+}
+
+.btn-recalcular-diagnostico:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.diagnostico-calculado-en {
+  color: #9ca3af;
 }
 
 .vista-btn {
