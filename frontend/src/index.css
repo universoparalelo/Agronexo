@@ -1587,6 +1587,15 @@ body {
 
 .indice-btn--active .indice-btn-label { color: #27500a; }
 
+.indice-btn--locked {
+  cursor: default;
+}
+
+.indice-btn--locked .indice-btn-sub {
+  color: #27500a;
+  font-weight: 600;
+}
+
 .indice-desc-box {
   display: flex;
   gap: 0.6rem;

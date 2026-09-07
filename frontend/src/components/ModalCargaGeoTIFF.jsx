@@ -131,6 +131,10 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   function toggleIndice(value) {
     // cada clic (prenda o apague el índice) siempre actualiza la info mostrada
     setIndiceMostrado(value)
+    // NDVI se calcula siempre al subir el vuelo (crear_vuelo_desde_upload lo
+    // encola sin mirar esta selección) — no es opcional, así que no se puede
+    // destildar. Ver app/ingesta/service.py.
+    if (value === 'ndvi') return
     setIndices((prev) =>
       prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
     )
@@ -349,7 +353,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             <div className="config-analisis-header">
               <p className="config-analisis-titulo">Configuración de análisis</p>
               <p className="config-analisis-sub">
-                NDVI, NDRE, SAVI y GNDVI se calculan automáticamente. Destildá los que no necesites o sumá ExG.
+                NDVI se calcula siempre (es la base del diagnóstico). NDRE, SAVI y GNDVI vienen tildados por defecto — destildá los que no necesites o sumá ExG.
               </p>
             </div>
 
@@ -358,12 +362,13 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 <button
                   type="button"
                   key={i.value}
-                  className={`indice-btn${indices.includes(i.value) ? ' indice-btn--active' : ''}`}
+                  className={`indice-btn${indices.includes(i.value) ? ' indice-btn--active' : ''}${i.value === 'ndvi' ? ' indice-btn--locked' : ''}`}
                   onClick={() => toggleIndice(i.value)}
                   aria-pressed={indices.includes(i.value)}
+                  title={i.value === 'ndvi' ? 'NDVI se calcula siempre al subir el vuelo — es la base del diagnóstico y no se puede destildar.' : undefined}
                 >
                   <span className="indice-btn-label">{i.label}</span>
-                  <span className="indice-btn-sub">{i.sub}</span>
+                  <span className="indice-btn-sub">{i.value === 'ndvi' ? 'Siempre incluido' : i.sub}</span>
                 </button>
               ))}
             </div>
