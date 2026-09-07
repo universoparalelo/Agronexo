@@ -16,6 +16,7 @@ class VueloListItem(BaseModel):
     hora_fin: time | None
     task_id: str | None
     created_at: datetime
+    estadio_fenologico: str | None = None
 
 
 class VueloUploadResponse(BaseModel):
@@ -25,6 +26,7 @@ class VueloUploadResponse(BaseModel):
     estado: EstadoVueloEnum
     task_id: str
     created_at: datetime
+    estadio_fenologico: str | None = None
     mensaje: str = "GeoTIFF recibido. Validación y procesamiento iniciados."
 
 

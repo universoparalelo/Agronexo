@@ -87,11 +87,13 @@ async def crear_vuelo_desde_upload(
     fecha_vuelo: datetime,
     file_stream,
     file_size: int = -1,
+    estadio_fenologico: str | None = None,
 ) -> Vuelo:
     vuelo = Vuelo(
         lote_id=lote_id,
         sensor=sensor,
         fecha_vuelo=fecha_vuelo,
+        estadio_fenologico=estadio_fenologico,
         estado=EstadoVueloEnum.pendiente,
     )
     db.add(vuelo)
