@@ -1619,6 +1619,44 @@ body {
   margin: 0;
 }
 
+.elegir-lote-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.elegir-lote-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.7rem 0.9rem;
+  border: 1.5px solid #e5e8df;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.elegir-lote-item:hover {
+  border-color: #27500a;
+  background: #eaf2e4;
+}
+
+.elegir-lote-nombre {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.elegir-lote-meta {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
 /* ── Login — dark glass + animaciones ── */
 
 /* Página entra igual que Landing */

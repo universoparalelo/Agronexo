@@ -10,6 +10,7 @@ import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
+import ModalElegirLote from '../components/ModalElegirLote'
 import SidebarNav from '../components/SidebarNav'
 
 /* ──────── Icons ──────── */
@@ -218,6 +219,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
+  const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaLimites, setLoteParaLimites] = useState(null)
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
   const [reintentandoId, setReintentandoId] = useState(null)
@@ -282,6 +284,15 @@ export default function Dashboard() {
     cargarDatos()
   }
 
+  function handleVerDiagnosticos() {
+    // con un solo lote no tiene sentido preguntar — vamos directo a sus vuelos
+    if (loteRows.length === 1) {
+      navigate(`/lotes/${loteRows[0].id}`)
+      return
+    }
+    setShowModalElegirLote(true)
+  }
+
   async function handleEliminarAnalisis() {
     const { loteId, vueloId } = analisisParaEliminar
     await eliminarVuelo(loteId, vueloId)
@@ -339,8 +350,15 @@ export default function Dashboard() {
           onClose={() => setAnalisisParaEliminar(null)}
         />
       )}
+      {showModalElegirLote && (
+        <ModalElegirLote
+          lotes={loteRows}
+          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onClose={() => setShowModalElegirLote(false)}
+        />
+      )}
 
-      <SidebarNav user={user} />
+      <SidebarNav user={user} onVerDiagnosticos={handleVerDiagnosticos} />
 
       <div className="dashboard-body">
         {/* Topbar */}
@@ -477,6 +495,15 @@ export default function Dashboard() {
                                     >
                                       <IconZoom />
                                     </button>
+                                    {v.estado === 'completado' && (
+                                      <button
+                                        className="tbl-btn"
+                                        title="Ver diagnóstico"
+                                        onClick={() => navigate(`/lotes/${v.lote.id}/vuelos/${v.vueloId}`)}
+                                      >
+                                        <IconDiagnostico />
+                                      </button>
+                                    )}
                                     <button
                                       className="tbl-btn"
                                       title="Límites"
@@ -621,10 +648,7 @@ export default function Dashboard() {
                   <button
                     className="accion-item"
                     disabled={!vueloRows.some(v => v.estado === 'completado')}
-                    onClick={() => {
-                      const ultimo = vueloRows.find(v => v.estado === 'completado')
-                      if (ultimo) navigate(`/lotes/${ultimo.lote.id}/vuelos/${ultimo.vueloId}`)
-                    }}
+                    onClick={handleVerDiagnosticos}
                   >
                     <div className="accion-icon">
                       <IconDiagnostico />
@@ -633,7 +657,7 @@ export default function Dashboard() {
                       <span className="accion-label">Ver Diagnósticos</span>
                       <span className="accion-sub">
                         {vueloRows.some(v => v.estado === 'completado')
-                          ? 'Resultados del último análisis'
+                          ? 'Elegí de qué lote ver los análisis'
                           : 'Cargá un ortomosaico primero'}
                       </span>
                     </div>

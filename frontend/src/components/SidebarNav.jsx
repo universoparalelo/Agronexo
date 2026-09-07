@@ -32,7 +32,7 @@ const IconConfig = () => (
   </svg>
 )
 
-export default function SidebarNav({ user }) {
+export default function SidebarNav({ user, onVerDiagnosticos }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
@@ -51,7 +51,7 @@ export default function SidebarNav({ user }) {
     {
       label: 'RESULTADOS',
       items: [
-        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', proximamente: true },
+        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', onClick: () => onVerDiagnosticos?.() },
         { id: 'informes',    icon: <IconInformes />,    label: 'Informes',     proximamente: true },
       ],
     },
