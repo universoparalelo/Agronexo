@@ -6,6 +6,17 @@ from pydantic import BaseModel
 from app.lotes.models import EstadoVueloEnum, IndiceEnum, SensorEnum
 
 
+class IndiceAnalisisItem(BaseModel):
+    """Un índice ya calculado (o en curso) para un vuelo — incluye el NDVI
+    "primario" sintetizado desde el propio vuelo, y cualquier adicional
+    (NDRE/SAVI/ExG) que viva en la tabla analisis_indices."""
+    indice: IndiceEnum
+    estado: EstadoVueloEnum
+    task_id: str | None
+    error: str | None
+    es_primario: bool  # True solo para el NDVI calculado al subir el vuelo
+
+
 class VueloListItem(BaseModel):
     vuelo_id: uuid.UUID
     lote_id: uuid.UUID
@@ -16,6 +27,8 @@ class VueloListItem(BaseModel):
     hora_fin: time | None
     task_id: str | None
     created_at: datetime
+    estadio_fenologico: str | None = None
+    indices: list[IndiceAnalisisItem] = []
 
 
 class VueloUploadResponse(BaseModel):
@@ -25,6 +38,7 @@ class VueloUploadResponse(BaseModel):
     estado: EstadoVueloEnum
     task_id: str
     created_at: datetime
+    estadio_fenologico: str | None = None
     mensaje: str = "GeoTIFF recibido. Validación y procesamiento iniciados."
 
 
@@ -62,17 +76,6 @@ class InspeccionGeotiffResponse(BaseModel):
     bandas_requeridas: int
     compatible: bool
     mensaje: str | None
-
-
-class IndiceAnalisisItem(BaseModel):
-    """Un índice ya calculado (o en curso) para un vuelo — incluye el NDVI
-    "primario" sintetizado desde el propio vuelo, y cualquier adicional
-    (NDRE/SAVI/ExG) que viva en la tabla analisis_indices."""
-    indice: IndiceEnum
-    estado: EstadoVueloEnum
-    task_id: str | None
-    error: str | None
-    es_primario: bool  # True solo para el NDVI calculado al subir el vuelo
 
 
 class IndiceAnalisisRequest(BaseModel):

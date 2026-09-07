@@ -41,7 +41,7 @@ from app.diagnostico.models import CausaIndiceEnum, Diagnostico, ProductoFitosan
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
 from app.diagnostico.zonificacion import generar_unidades_manejo
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
-from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote
+from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote, Vuelo
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,15 @@ async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[st
             "tipo": prod.tipo.value,
         })
     return catalogo
+
+
+def _resolver_estadio(lote: Lote, vuelo: Vuelo) -> str | None:
+    """
+    El estadio fenológico del vuelo puntual tiene prioridad — el del lote
+    es solo el valor cargado al crear el lote (ver migración 0017) y puede
+    haber quedado desactualizado para vuelos posteriores.
+    """
+    return vuelo.estadio_fenologico or lote.estadio_fenologico
 
 
 def _features_a_zonas(geojson: dict) -> list[ZonaInput]:
@@ -215,7 +224,7 @@ async def generar_diagnostico(
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
         ndvi_geojson, geojson_por_indice, lote_geom_4326,
-        lote.cultivo, lote.estadio_fenologico, catalogo,
+        lote.cultivo, _resolver_estadio(lote, vuelo), catalogo,
         lote_id=str(lote.id),
         lote_nombre=lote.nombre,
         vuelo_id=str(vuelo_id),

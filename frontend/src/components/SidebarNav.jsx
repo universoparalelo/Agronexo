@@ -14,12 +14,6 @@ const IconLotes = () => (
     <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
   </svg>
 )
-const IconCargar = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-  </svg>
-)
 const IconDiagnostico = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
@@ -38,7 +32,7 @@ const IconConfig = () => (
   </svg>
 )
 
-export default function SidebarNav({ user, onCargarOrtomosaico }) {
+export default function SidebarNav({ user, onVerDiagnosticos }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
@@ -52,13 +46,12 @@ export default function SidebarNav({ user, onCargarOrtomosaico }) {
       items: [
         { id: 'dashboard', icon: <IconDashboard />, label: 'Dashboard', onClick: () => navigate('/dashboard') },
         { id: 'lotes',     icon: <IconLotes />,     label: 'Lotes',     onClick: () => navigate('/lotes') },
-        { id: 'cargar',    icon: <IconCargar />,    label: 'Cargar Ortomosaico', onClick: () => onCargarOrtomosaico?.() },
       ],
     },
     {
       label: 'RESULTADOS',
       items: [
-        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', proximamente: true },
+        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', onClick: () => onVerDiagnosticos?.() },
         { id: 'informes',    icon: <IconInformes />,    label: 'Informes',     proximamente: true },
       ],
     },

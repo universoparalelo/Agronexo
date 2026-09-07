@@ -122,6 +122,9 @@ export default function DetalleLote() {
                     })}
                   </p>
                   <p className="vuelo-sensor">{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</p>
+                  {vuelo.estadio_fenologico && (
+                    <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span>
+                  )}
                 </div>
 
                 <div className="vuelo-card-estado">

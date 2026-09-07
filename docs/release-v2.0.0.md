@@ -169,6 +169,7 @@ _(sin problemas reportados)_
 | Tabla de estadísticas por zona: área, índice promedio, causa, confianza, producto sugerido | Completada |
 | Pulido de UX y mensajes de estado | Completada |
 | Testing integral — tests unitarios del motor de diagnóstico | Completada |
+| Estadio fenológico por vuelo (en vez de solo por lote) + fecha real del vuelo | Completada |
 
 #### Tabla de estadísticas por zona
 **Fecha:** 2026-09-02
@@ -201,6 +202,17 @@ Dos archivos nuevos de tests puros (sin DB, sin I/O):
 - `test_zonificacion.py` (15 tests) — BFS de componentes conexos, filtros (R99/R00/normal), agrupación por contigüidad espacial, separación por causa y severidad, NDVI ponderado, área acumulada, ordenamiento por criticidad, validez GeoJSON
 
 Total: 84 tests del motor de diagnóstico pasan (engine 14 + forma 12 + texto 26 + zonificación 15 + API 8 + clasificación existentes 9).
+
+#### Estadio fenológico por vuelo + fecha real del vuelo
+**Fecha:** 2026-09-07
+**Rama:** `feat/estadio-fenologico-por-vuelo`
+
+`estadio_fenologico` vivía solo en `lotes`, cargado una única vez al crear el lote y sin ninguna pantalla para actualizarlo — el motor de diagnóstico reutilizaba ese mismo valor congelado para todos los vuelos futuros del lote, aunque el estadio real cambia semana a semana y `reglas.py` filtra reglas por estadio. Se agregó la misma columna (nullable) a `vuelos` (migración 0017) para poder cargarlo por análisis puntual, con fallback al valor del lote cuando el vuelo no lo especifica. De paso se agregó el input de "Fecha del vuelo" en el modal de carga — el backend ya lo aceptaba (`fecha_vuelo` en `POST /lotes/{id}/vuelos`), pero el frontend nunca lo mandaba.
+
+**Decisiones tomadas:**
+- Opcional, no obligatorio: si no se completa en el vuelo puntual, se usa el del lote como hasta ahora (`app/diagnostico/service.py::_resolver_estadio`) — cero fricción, no rompe nada existente.
+- El campo se mantiene también en "Nuevo Lote" (sirve como valor inicial / sugerido al elegir ese lote en "Cargar Ortomosaico").
+- `_resolver_estadio` extraída como función pura para poder testearla sin DB (`tests/test_diagnostico_service.py`).
 
 ### Tareas pendientes
 

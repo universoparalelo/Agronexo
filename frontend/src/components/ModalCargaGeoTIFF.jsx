@@ -96,6 +96,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [indices, setIndices] = useState(() => indicesAutomaticos('sentinel2'))
   const [indiceMostrado, setIndiceMostrado] = useState('ndvi')
   const [archivo, setArchivo] = useState(null)
+  const [estadioFenologico, setEstadioFenologico] = useState('')
+  const [fechaVuelo, setFechaVuelo] = useState('')
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -128,9 +130,20 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     return () => { cancelado = true }
   }, [archivo, sensor])
 
+  useEffect(() => {
+    // al cambiar de lote, sugerimos su estadio como punto de partida — pero
+    // sigue siendo editable, es el estadio de ESTE vuelo puntual, no el del
+    // lote (ver app/diagnostico/service.py::_resolver_estadio).
+    setEstadioFenologico(loteSeleccionado?.estadio_fenologico ?? '')
+  }, [loteId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function toggleIndice(value) {
     // cada clic (prenda o apague el índice) siempre actualiza la info mostrada
     setIndiceMostrado(value)
+    // NDVI se calcula siempre al subir el vuelo (crear_vuelo_desde_upload lo
+    // encola sin mirar esta selección) — no es opcional, así que no se puede
+    // destildar. Ver app/ingesta/service.py.
+    if (value === 'ndvi') return
     setIndices((prev) =>
       prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
     )
@@ -174,6 +187,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     const fd = new FormData()
     fd.append('archivo', archivo)
     fd.append('sensor', sensor)
+    if (estadioFenologico.trim()) fd.append('estadio_fenologico', estadioFenologico.trim())
+    if (fechaVuelo) fd.append('fecha_vuelo', new Date(fechaVuelo).toISOString())
 
     setLoading(true)
     setError('')
@@ -349,7 +364,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             <div className="config-analisis-header">
               <p className="config-analisis-titulo">Configuración de análisis</p>
               <p className="config-analisis-sub">
-                NDVI, NDRE, SAVI y GNDVI se calculan automáticamente. Destildá los que no necesites o sumá ExG.
+                NDVI se calcula siempre (es la base del diagnóstico). NDRE, SAVI y GNDVI vienen tildados por defecto — destildá los que no necesites o sumá ExG.
               </p>
             </div>
 
@@ -358,12 +373,13 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 <button
                   type="button"
                   key={i.value}
-                  className={`indice-btn${indices.includes(i.value) ? ' indice-btn--active' : ''}`}
+                  className={`indice-btn${indices.includes(i.value) ? ' indice-btn--active' : ''}${i.value === 'ndvi' ? ' indice-btn--locked' : ''}`}
                   onClick={() => toggleIndice(i.value)}
                   aria-pressed={indices.includes(i.value)}
+                  title={i.value === 'ndvi' ? 'NDVI se calcula siempre al subir el vuelo — es la base del diagnóstico y no se puede destildar.' : undefined}
                 >
                   <span className="indice-btn-label">{i.label}</span>
-                  <span className="indice-btn-sub">{i.sub}</span>
+                  <span className="indice-btn-sub">{i.value === 'ndvi' ? 'Siempre incluido' : i.sub}</span>
                 </button>
               ))}
             </div>
@@ -374,6 +390,32 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 <p><strong>{indiceInfo.label}</strong> — {indiceInfo.desc}</p>
               </div>
             )}
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="estadio_vuelo">Estadio fenológico <span className="label-opcional">(opcional)</span></label>
+                <input
+                  id="estadio_vuelo"
+                  type="text"
+                  placeholder="Ej: R3"
+                  maxLength={30}
+                  value={estadioFenologico}
+                  onChange={(e) => setEstadioFenologico(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="fecha_vuelo">Fecha del vuelo <span className="label-opcional">(opcional)</span></label>
+                <input
+                  id="fecha_vuelo"
+                  type="date"
+                  value={fechaVuelo}
+                  onChange={(e) => setFechaVuelo(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
 
             {error && <p className="error-message">{error}</p>}
 

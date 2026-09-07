@@ -120,6 +120,11 @@ async def subir_vuelo(
         default=None,
         description="Fecha y hora del vuelo (ISO 8601). Por defecto: ahora.",
     ),
+    estadio_fenologico: str | None = Form(
+        default=None,
+        max_length=30,
+        description="Estadio fenológico del cultivo en este vuelo puntual. Si no se manda, el diagnóstico usa el del lote.",
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -144,6 +149,7 @@ async def subir_vuelo(
         fecha_vuelo=fecha_vuelo,
         file_stream=archivo.file,
         file_size=file_size,
+        estadio_fenologico=estadio_fenologico,
     )
     await db.commit()
 
@@ -154,6 +160,7 @@ async def subir_vuelo(
         estado=vuelo.estado,
         task_id=vuelo.task_id,
         created_at=vuelo.created_at,
+        estadio_fenologico=vuelo.estadio_fenologico,
     )
 
 
@@ -182,6 +189,8 @@ async def listar_vuelos_lote(
             hora_fin=v.hora_fin,
             task_id=v.task_id,
             created_at=v.created_at,
+            estadio_fenologico=v.estadio_fenologico,
+            indices=await service.listar_analisis_indices(db, v),
         )
         for v in vuelos
     ]

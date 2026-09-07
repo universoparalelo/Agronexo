@@ -7,6 +7,7 @@ import SidebarNav from '../components/SidebarNav'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
+import ModalElegirLote from '../components/ModalElegirLote'
 
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
@@ -52,6 +53,7 @@ export default function Lotes() {
   const [loading, setLoading] = useState(true)
   const [showModalCarga, setShowModalCarga] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
+  const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
 
   const cargarLotes = useCallback(async () => {
@@ -81,6 +83,14 @@ export default function Lotes() {
     cargarLotes()
   }
 
+  function handleVerDiagnosticos() {
+    if (lotes.length === 1) {
+      navigate(`/lotes/${lotes[0].id}`)
+      return
+    }
+    setShowModalElegirLote(true)
+  }
+
   return (
     <div className="dashboard">
       {showModalCarga && (
@@ -104,8 +114,15 @@ export default function Lotes() {
           onClose={() => setLoteParaEliminar(null)}
         />
       )}
+      {showModalElegirLote && (
+        <ModalElegirLote
+          lotes={lotes}
+          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onClose={() => setShowModalElegirLote(false)}
+        />
+      )}
 
-      <SidebarNav user={user} onCargarOrtomosaico={() => setShowModalCarga(true)} />
+      <SidebarNav user={user} onVerDiagnosticos={handleVerDiagnosticos} />
 
       <div className="dashboard-body">
         <header className="topbar">

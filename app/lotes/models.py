@@ -91,6 +91,7 @@ class Vuelo(Base):
     hora_inicio: Mapped[time | None] = mapped_column(Time(), nullable=True)
     hora_fin: Mapped[time | None] = mapped_column(Time(), nullable=True)
     sensor: Mapped[SensorEnum] = mapped_column(Enum(SensorEnum), nullable=False)
+    estadio_fenologico: Mapped[str | None] = mapped_column(String(30), nullable=True)
     archivo_original: Mapped[str | None] = mapped_column(String(500), nullable=True)
     estado: Mapped[EstadoVueloEnum] = mapped_column(
         Enum(EstadoVueloEnum), nullable=False, default=EstadoVueloEnum.pendiente
