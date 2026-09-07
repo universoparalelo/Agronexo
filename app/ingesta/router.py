@@ -190,6 +190,7 @@ async def listar_vuelos_lote(
             task_id=v.task_id,
             created_at=v.created_at,
             estadio_fenologico=v.estadio_fenologico,
+            indices=await service.listar_analisis_indices(db, v),
         )
         for v in vuelos
     ]

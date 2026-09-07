@@ -761,6 +761,26 @@ body {
 .badge-critico   { background: #fee2e2; color: #b91c1c; }
 .badge-none      { background: #f3f4f6; color: #9ca3af; }
 
+.td-vacio { color: #b0b5ac; font-size: 0.78rem; }
+
+.td-indices-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 160px;
+}
+
+.indice-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
 .table-footer {
   display: flex;
   align-items: center;

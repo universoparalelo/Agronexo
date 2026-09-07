@@ -466,6 +466,8 @@ export default function Dashboard() {
                           <tr>
                             <th>LOTE</th>
                             <th>FECHA</th>
+                            <th>ESTADIO</th>
+                            <th>ÍNDICES</th>
                             <th>ESTADO</th>
                             <th>ACCIÓN</th>
                           </tr>
@@ -483,6 +485,29 @@ export default function Dashboard() {
                                   </div>
                                 </td>
                                 <td className="td-fecha">{fmtFecha(v.created_at)}</td>
+                                <td>
+                                  {v.estadio_fenologico
+                                    ? <span className="vuelo-estadio-tag">{v.estadio_fenologico}</span>
+                                    : <span className="td-vacio">—</span>}
+                                </td>
+                                <td>
+                                  {v.indices && v.indices.length > 0 ? (
+                                    <div className="td-indices-chips">
+                                      {v.indices.map((ix) => {
+                                        const ib = ESTADO_BADGE[ix.estado] ?? { label: ix.estado, cls: 'badge-procesando' }
+                                        return (
+                                          <span
+                                            key={ix.indice}
+                                            className={`indice-chip ${ib.cls}`}
+                                            title={`${ix.indice.toUpperCase()} — ${ib.label}`}
+                                          >
+                                            {ix.indice.toUpperCase()}
+                                          </span>
+                                        )
+                                      })}
+                                    </div>
+                                  ) : <span className="td-vacio">—</span>}
+                                </td>
                                 <td>
                                   <span className={`table-badge ${badge.cls}`}>{badge.label}</span>
                                 </td>
