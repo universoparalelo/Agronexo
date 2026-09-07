@@ -105,7 +105,7 @@ export default function Lotes() {
         />
       )}
 
-      <SidebarNav user={user} onCargarOrtomosaico={() => setShowModalCarga(true)} />
+      <SidebarNav user={user} />
 
       <div className="dashboard-body">
         <header className="topbar">

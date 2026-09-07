@@ -340,7 +340,7 @@ export default function Dashboard() {
         />
       )}
 
-      <SidebarNav user={user} onCargarOrtomosaico={() => setShowModal(true)} />
+      <SidebarNav user={user} />
 
       <div className="dashboard-body">
         {/* Topbar */}
