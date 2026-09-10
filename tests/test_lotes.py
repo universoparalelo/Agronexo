@@ -26,6 +26,42 @@ _GEOM = {
     ]],
 }
 
+# "Bowtie" — las aristas A-B y C-D cruzan por el centro del rectángulo.
+_GEOM_AUTOINTERSECTADA = {
+    "type": "Polygon",
+    "coordinates": [[
+        [-60.70, -27.45],
+        [-60.65, -27.50],
+        [-60.70, -27.50],
+        [-60.65, -27.45],
+        [-60.70, -27.45],
+    ]],
+}
+
+# ~0.01 ha — por debajo del mínimo (0.5 ha) esperado para un lote agrícola.
+_GEOM_MUY_CHICA = {
+    "type": "Polygon",
+    "coordinates": [[
+        [-60.6753, -27.4693],
+        [-60.67520, -27.4693],
+        [-60.67520, -27.46940],
+        [-60.6753, -27.46940],
+        [-60.6753, -27.4693],
+    ]],
+}
+
+# ~1.000.000 ha — muy por encima del máximo (5000 ha) esperado para un lote agrícola.
+_GEOM_MUY_GRANDE = {
+    "type": "Polygon",
+    "coordinates": [[
+        [-61.0, -27.0],
+        [-60.0, -27.0],
+        [-60.0, -28.0],
+        [-61.0, -28.0],
+        [-61.0, -27.0],
+    ]],
+}
+
 # El TestClient se abre en setup_module y se cierra en teardown_module para
 # mantener el mismo event loop de anyio en todas las llamadas del módulo.
 _tc = TestClient(app)
@@ -97,6 +133,30 @@ def test_crear_lote_geometry_invalida():
     print("✓ POST /lotes con geometry inválida → 422")
 
 
+def test_crear_lote_geometry_autointersectada():
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Bowtie", "cultivo": "soja", "geometry": _GEOM_AUTOINTERSECTADA,
+    }, headers=_auth())
+    assert r.status_code == 422
+    print("✓ POST /lotes con geometry autointersectada (bowtie) → 422")
+
+
+def test_crear_lote_area_muy_chica():
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Diminuto", "cultivo": "soja", "geometry": _GEOM_MUY_CHICA,
+    }, headers=_auth())
+    assert r.status_code == 400
+    print(f"✓ POST /lotes con área < 0.5 ha → 400 ({r.json()['detail']})")
+
+
+def test_crear_lote_area_muy_grande():
+    r = _tc.post("/api/v1/lotes", json={
+        "nombre": "Lote Gigante", "cultivo": "soja", "geometry": _GEOM_MUY_GRANDE,
+    }, headers=_auth())
+    assert r.status_code == 400
+    print(f"✓ POST /lotes con área > 5000 ha → 400 ({r.json()['detail']})")
+
+
 def test_crear_lote_cultivo_invalido():
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Cultivo Raro",
@@ -159,6 +219,27 @@ def test_actualizar_lote_nombre_y_cultivo():
     assert body["nombre"] == "Lote Actualizado"
     assert body["cultivo"] == "maiz"
     print("✓ PUT /lotes/{id} → 200 con nombre y cultivo actualizados")
+
+
+def test_actualizar_lote_agrega_geometry():
+    lote = _crear_lote("Lote Sin Límites")
+    r = _tc.put(f"/api/v1/lotes/{lote['id']}", json={
+        "geometry": _GEOM,
+    }, headers=_auth())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["geometry"] is not None
+    assert body["area_ha"] is not None and body["area_ha"] > 0
+    print(f"✓ PUT /lotes/{{id}} agrega límites → 200, área={body['area_ha']:.2f} ha")
+
+
+def test_actualizar_lote_geometry_area_fuera_de_rango():
+    lote = _crear_lote("Lote Para Editar Mal")
+    r = _tc.put(f"/api/v1/lotes/{lote['id']}", json={
+        "geometry": _GEOM_MUY_GRANDE,
+    }, headers=_auth())
+    assert r.status_code == 400
+    print("✓ PUT /lotes/{id} con área fuera de rango → 400 (geometry original se mantiene)")
 
 
 def test_actualizar_lote_inexistente():
@@ -249,12 +330,17 @@ if __name__ == "__main__":
         test_crear_lote()
         test_crear_lote_sin_auth()
         test_crear_lote_geometry_invalida()
+        test_crear_lote_geometry_autointersectada()
+        test_crear_lote_area_muy_chica()
+        test_crear_lote_area_muy_grande()
         test_crear_lote_cultivo_invalido()
         test_listar_lotes()
         test_listar_lotes_sin_auth()
         test_obtener_lote_por_id()
         test_obtener_lote_inexistente()
         test_actualizar_lote_nombre_y_cultivo()
+        test_actualizar_lote_agrega_geometry()
+        test_actualizar_lote_geometry_area_fuera_de_rango()
         test_actualizar_lote_inexistente()
         test_soft_delete_devuelve_204()
         test_lote_borrado_no_accesible_por_get()

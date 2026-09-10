@@ -2,12 +2,24 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status
 from geoalchemy2.functions import ST_Area, ST_AsGeoJSON, ST_GeomFromGeoJSON, ST_Transform
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.lotes.models import Lote
-from app.lotes.schemas import LoteCreate, LoteUpdate
+from app.lotes.schemas import AREA_MAX_HA, AREA_MIN_HA, LoteCreate, LoteUpdate
+
+
+def _validar_rango_area(area_ha: float) -> None:
+    if area_ha < AREA_MIN_HA or area_ha > AREA_MAX_HA:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"El área del polígono ({area_ha:.2f} ha) está fuera del rango "
+                f"esperado para un lote agrícola ({AREA_MIN_HA}-{AREA_MAX_HA} ha)."
+            ),
+        )
 
 
 async def crear_lote(db: AsyncSession, data: LoteCreate, usuario_id: uuid.UUID | None = None) -> Lote:
@@ -23,6 +35,7 @@ async def crear_lote(db: AsyncSession, data: LoteCreate, usuario_id: uuid.UUID |
         )
         result = await db.execute(area_query)
         area_ha = round(result.scalar(), 4)
+        _validar_rango_area(area_ha)
         geometry = ST_GeomFromGeoJSON(geojson_str)
 
     lote = Lote(
@@ -73,12 +86,14 @@ async def actualizar_lote(db: AsyncSession, lote: Lote, data: LoteUpdate) -> Lot
         lote.fecha_siembra = data.fecha_siembra
     if data.geometry is not None:
         geojson_str = json.dumps(data.geometry)
-        lote.geometry = ST_GeomFromGeoJSON(geojson_str)
         area_query = select(
             ST_Area(ST_Transform(ST_GeomFromGeoJSON(geojson_str), 32721)) / 10000
         )
         result = await db.execute(area_query)
-        lote.area_ha = round(result.scalar(), 4)
+        area_ha = round(result.scalar(), 4)
+        _validar_rango_area(area_ha)
+        lote.geometry = ST_GeomFromGeoJSON(geojson_str)
+        lote.area_ha = area_ha
 
     lote.updated_at = datetime.now(timezone.utc)
     await db.flush()

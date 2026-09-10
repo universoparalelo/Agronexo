@@ -8,6 +8,11 @@ from shapely.geometry.polygon import Polygon
 
 from app.lotes.models import CultivoEnum, TipoSueloEnum
 
+# Rango de área razonable para un lote agrícola — mismo rango que valida el
+# frontend en frontend/src/components/MapaDibujoLote.jsx (AREA_MIN_HA/AREA_MAX_HA).
+AREA_MIN_HA = 0.5
+AREA_MAX_HA = 5000.0
+
 
 # ── Geometry helpers ────────────────────────────────────────────────
 

@@ -18,6 +18,7 @@
 | Diseñar el layout del reporte ejecutivo (header, mapa, estadísticas, diagnóstico) | Completada |
 | Generar imagen estática del mapa de zonas para incrustar en el PDF | Completada |
 | Endpoint de reporte ejecutivo PDF (`GET .../reporte/pdf`) | Completada |
+| Dibujo de lote sobre mapa satelital → GeoJSON (alta y edición de límites) | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -69,6 +70,26 @@ Verificado end-to-end contra vuelos reales (`lote_id=1611cafc-f36f-4498-82f7-630
 - Casos de error probados: sin token → `401`; lote inexistente → `404`; vuelo inexistente → `404`.
 - `tests/test_reportes_api.py` (7 tests, mismo criterio que `test_diagnostico_api.py`: vuelos insertados directo en BD, sin MinIO/Celery) — cubre 404 por estado del vuelo, geojson faltante, lote/vuelo inexistente, ownership (vuelo de otro lote) y 401 sin auth. Los 7 pasan. El camino feliz (PDF real) queda cubierto por la verificación manual de arriba, mismo criterio que `test_diagnostico_api.py` para su propio camino feliz.
 
+#### Dibujo de lote sobre mapa satelital → GeoJSON
+**Fecha:** 2026-09-10
+**Rama:** `feat/dibujo-lote-mapa`
+
+Reemplaza la carga manual de GeoJSON como único método para definir el límite de un lote: ahora se puede dibujar directamente sobre un mapa satelital (Leaflet + leaflet-geoman, tiles Esri World Imagery + capa de referencia de límites/toponimia con toggle). El upload manual de `.geojson` se mantiene como fallback. Integrado tanto en el alta de lote (`ModalNuevoLote`) como en la edición de límites de un lote existente (`ModalLimites`, con la geometría previa precargada para editar).
+
+**Decisiones tomadas:**
+- `leaflet-geoman-free` sobre `leaflet-draw`: mejor mantenido, compatible con React 18 / Leaflet 1.9.x ya usados en el proyecto.
+- Esri World Imagery + capa de referencia `World_Boundaries_and_Places` (mismo proveedor, sin API key) para una vista híbrida con límites político-administrativos y nombres de ciudades, con toggle para ocultarla al dibujar de cerca.
+- Un solo polígono activo por lote: la figura nueva reemplaza a la anterior en el mapa.
+- Área geodésica calculada en el cliente con la fórmula de exceso esférico (la misma que usa `Leaflet.draw`'s `GeometryUtil`) — `geoman-free` no expone un helper de área propio, y esto evita sumar una dependencia como turf solo para esto.
+- Rango de área razonable (0.5–5000 ha) validado en frontend (feedback inmediato) y en backend (`app/lotes/service.py`), reutilizando el área que ya calcula PostGIS (`ST_Area` sobre UTM 21S) en vez de duplicar lógica geodésica en Python.
+- Autointersección detectada en el cliente con un chequeo O(n²) de cruce de segmentos (`frontend/src/utils/geometria.js`), por la misma razón de no sumar turf. El backend igual la rechaza vía `Polygon.is_valid` de Shapely como red de seguridad ante geometría subida a mano o pegada directo a la API.
+- La lógica geométrica pura (área, autointersección) se separó del componente de mapa a `frontend/src/utils/geometria.js` específicamente para poder testearla con Vitest sin necesitar jsdom ni mockear Leaflet.
+
+**Verificación:**
+- Backend: 6 tests nuevos en `tests/test_lotes.py` (geometría autointersectada → 422; área muy chica/muy grande → 400 tanto al crear como al editar). 21/21 tests pasan.
+- Frontend: primer test suite del proyecto (`vitest`, `npm test` en `frontend/`) — `frontend/src/utils/geometria.test.js`, 5 tests (área geodésica vs. aproximación plana, autointersección en rectángulo/bowtie/triángulo).
+- Probado manualmente en el navegador: alta de lote dibujando el polígono (`POST /lotes` → 201 con la geometría correcta), edición de límites de un lote existente con la geometría precargada (`PUT /lotes/{id}` → 200), bloqueo del submit con polígono autointersectado y con área fuera de rango.
+
 ### Problemas encontrados
 
-_(ver errores documentados en la tarea de arriba — todos resueltos)_
+_(ver errores documentados en las tareas de arriba — todos resueltos)_
