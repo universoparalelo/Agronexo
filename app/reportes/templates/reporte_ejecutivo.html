@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reporte ejecutivo — {{ lote_nombre }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+    @bottom-right {
+      content: "Página " counter(page) " de " counter(pages);
+      font-size: 8pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    color: #1f2937;
+    font-size: 10.5pt;
+    line-height: 1.4;
+  }
+
+  h1, h2, h3 { margin: 0 0 4mm 0; color: #14532d; }
+  h1 { font-size: 18pt; }
+  h2 { font-size: 13pt; margin-top: 8mm; border-bottom: 1pt solid #d1d5db; padding-bottom: 2mm; }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2pt solid #16a34a;
+    padding-bottom: 4mm;
+    margin-bottom: 6mm;
+  }
+  .header .marca { font-size: 9pt; letter-spacing: 1pt; text-transform: uppercase; color: #16a34a; font-weight: bold; }
+  .header .meta { text-align: right; font-size: 9pt; color: #4b5563; }
+  .header .meta div { margin-bottom: 1mm; }
+
+  .mapa { text-align: center; margin: 4mm 0; }
+  .mapa img { max-width: 100%; border: 1pt solid #d1d5db; }
+
+  .resumen {
+    background: #f0fdf4;
+    border: 1pt solid #bbf7d0;
+    border-radius: 2mm;
+    padding: 3mm 4mm;
+    margin: 4mm 0;
+    font-size: 9.5pt;
+  }
+  .resumen table { width: 100%; border-collapse: collapse; }
+  .resumen td { padding: 1mm 2mm; }
+  .resumen .valor { font-weight: bold; font-size: 12pt; color: #16a34a; }
+  .resumen .etiqueta { color: #4b5563; font-size: 8.5pt; }
+
+  table.zonas {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-top: 2mm;
+  }
+  table.zonas th {
+    background: #16a34a;
+    color: #fff;
+    text-align: left;
+    padding: 2mm;
+    font-weight: 600;
+  }
+  table.zonas td {
+    padding: 1.8mm 2mm;
+    border-bottom: 0.5pt solid #e5e7eb;
+  }
+  table.zonas tr:nth-child(even) td { background: #f9fafb; }
+  table.zonas tr.sin-problema td { color: #9ca3af; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.5mm 2mm;
+    border-radius: 3mm;
+    font-size: 7.5pt;
+    font-weight: bold;
+    color: #fff;
+  }
+  .badge-critica  { background: #ef4444; }
+  .badge-moderada { background: #f59e0b; }
+  .badge-leve     { background: #fbbf24; color: #1f2937; }
+  .badge-normal   { background: #86efac; color: #14532d; }
+  .badge-vigorosa { background: #3b82f6; }
+
+  .zona-detalle {
+    margin-bottom: 4mm;
+    padding: 3mm 4mm;
+    border-left: 3pt solid #d1d5db;
+    page-break-inside: avoid;
+  }
+  .zona-detalle.critica  { border-left-color: #ef4444; }
+  .zona-detalle.moderada { border-left-color: #f59e0b; }
+  .zona-detalle.leve     { border-left-color: #fbbf24; }
+  .zona-detalle.normal   { border-left-color: #86efac; }
+  .zona-detalle.vigorosa { border-left-color: #3b82f6; }
+  .zona-detalle h3 { font-size: 10.5pt; margin-bottom: 1mm; }
+  .zona-detalle p { margin: 1mm 0; }
+  .zona-detalle .productos { font-size: 9pt; color: #4b5563; }
+
+  .footer-legal {
+    margin-top: 8mm;
+    font-size: 7.5pt;
+    color: #9ca3af;
+    border-top: 0.5pt solid #e5e7eb;
+    padding-top: 2mm;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <div class="marca">AgroNexo · Reporte ejecutivo</div>
+      <h1>{{ lote_nombre }}</h1>
+    </div>
+    <div class="meta">
+      <div><strong>Cultivo:</strong> {{ cultivo_label }}</div>
+      <div><strong>Fecha de vuelo:</strong> {{ fecha_vuelo }}</div>
+      <div><strong>Estadio fenológico:</strong> {{ estadio_fenologico or '—' }}</div>
+      <div><strong>Generado:</strong> {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <div class="mapa">
+    <img src="{{ mapa_base64 }}" alt="Mapa de zonas por severidad">
+  </div>
+
+  <div class="resumen">
+    <table>
+      <tr>
+        <td>
+          <div class="valor">{{ n_zonas_con_problema }} / {{ n_zonas }}</div>
+          <div class="etiqueta">zonas con problema detectado</div>
+        </td>
+        <td>
+          <div class="valor">{{ "%.1f"|format(area_afectada_ha) }} ha</div>
+          <div class="etiqueta">área afectada</div>
+        </td>
+        <td>
+          <div class="valor">{{ "%.2f"|format(ndvi_promedio_lote) }}</div>
+          <div class="etiqueta">NDVI promedio del lote</div>
+        </td>
+        <td>
+          <div class="valor">{{ n_unidades_manejo }}</div>
+          <div class="etiqueta">unidades de manejo</div>
+        </td>
+      </tr>
+    </table>
+    <p style="margin: 3mm 0 0 0; color: #14532d;">{{ resumen_texto }}</p>
+  </div>
+
+  <h2>Estadísticas por zona</h2>
+  <table class="zonas">
+    <thead>
+      <tr>
+        <th>Zona</th>
+        <th>Área (ha)</th>
+        <th>NDVI</th>
+        <th>Severidad</th>
+        <th>Causa probable</th>
+        <th>Confianza</th>
+        <th>Producto sugerido</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for zona in zonas %}
+      <tr class="{{ 'sin-problema' if (zona.excluida or zona.sin_problema) else '' }}">
+        <td>#{{ zona.zona_id }}</td>
+        <td>{{ "%.2f"|format(zona.area_ha) }}</td>
+        <td>{{ "%.2f"|format(zona.ndvi_promedio) }}</td>
+        <td><span class="badge badge-{{ zona.severidad }}">{{ zona.severidad_label }}</span></td>
+        <td>{{ zona.causa_label }}</td>
+        <td>{{ zona.confianza_corto }}</td>
+        <td>{{ zona.productos_texto }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Diagnóstico agronómico por zona</h2>
+  {% for zona in zonas %}
+    {% if not zona.excluida and not zona.sin_problema %}
+    <div class="zona-detalle {{ zona.severidad }}">
+      <h3>Zona #{{ zona.zona_id }} — {{ zona.severidad_label }} ({{ "%.2f"|format(zona.area_ha) }} ha)</h3>
+      <p>{{ zona.texto_explicativo }}</p>
+      {% if zona.productos_texto %}
+      <p class="productos"><strong>Productos sugeridos:</strong> {{ zona.productos_texto }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% if zonas | selectattr("sin_problema") | list | length == zonas | length %}
+  <p class="footer-legal">Todas las zonas del lote están dentro de rangos normales — sin causas para reportar.</p>
+  {% endif %}
+
+  <div class="footer-legal">
+    Reporte generado automáticamente por AgroNexo a partir de imágenes multiespectrales.
+    El diagnóstico es orientativo — la confirmación en campo queda a criterio del agrónomo responsable (RFDR-04).
+  </div>
+
+</body>
+</html>
