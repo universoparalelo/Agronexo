@@ -226,6 +226,9 @@ docker compose exec worker python3 tests/test_ndvi_pipeline.py
 # Correr tests del motor de diagnóstico (engine + forma + texto + zonificación + API)
 docker compose exec api python3 -m pytest tests/test_diagnostico_engine.py tests/test_forma.py tests/test_texto.py tests/test_zonificacion.py tests/test_diagnostico_api.py -v
 
+# Correr tests del frontend (vitest)
+cd frontend && npm test
+
 # Apagar todo (preserva los datos)
 docker compose down
 
