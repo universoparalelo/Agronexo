@@ -39,8 +39,8 @@
 | Mapa con color por severidad | ✅ | Toggle automático al activar tab Diagnóstico + contornos de unidades de manejo |
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
 | Tests unitarios del motor de diagnóstico | ✅ | 84 tests: engine, forma, texto, zonificación, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py` |
-| Pipeline de reporte ejecutivo PDF (POC) | ✅ | Motor de diagnóstico → mapa PNG estático → template Jinja2 → WeasyPrint. Script standalone `scripts/poc_reporte_pdf.py` (`app/reportes/`) — sin endpoint HTTP todavía |
-| Endpoint de reporte PDF / Exportación Shapefile | ❌ | Pendiente |
+| Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
+| Exportación Shapefile | ❌ | Pendiente |
 
 ### Credenciales de desarrollo
 
