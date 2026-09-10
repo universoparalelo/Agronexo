@@ -9,6 +9,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     ca-certificates \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libpangoft2-1.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libcairo2 \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Certificado raíz de Avast (SSL/TLS scanning) — sin esto, pip no puede

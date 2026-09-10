@@ -40,3 +40,6 @@ tests/fixtures/*.tif
 
 # Agents
 .agents/
+
+# Salida local de scripts/poc_reporte_pdf.py
+reporte_poc.pdf

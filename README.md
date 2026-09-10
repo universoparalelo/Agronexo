@@ -1,5 +1,7 @@
 # AgroNexo
 
+[![CI](https://github.com/universoparalelo/Agronexo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/universoparalelo/Agronexo/actions/workflows/ci.yml)
+
 Plataforma de agricultura de precisión para el NEA argentino (Chaco, Formosa, Corrientes). Procesa imágenes satelitales y de drones (GeoTIFF multiespectrales), calcula índices de vegetación (NDVI, GNDVI, SAVI, NDRE, EVI, MSAVI) y genera diagnósticos agronómicos con prescripción diferenciada por zona.
 
 ---

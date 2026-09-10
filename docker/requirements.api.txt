@@ -27,6 +27,12 @@ minio==7.2.11
 
 # Reportes PDF
 weasyprint==63.1
+jinja2==3.1.4
+pillow==10.4.0
+
+# Exportación de zonas (GeoJSON / Shapefile) — pyshp es Python puro, sin
+# GDAL/Fiona (ver app/diagnostico/service.py: FastAPI no lleva GIS pesado)
+pyshp==2.3.1
 
 # Uploads
 python-multipart==0.0.20

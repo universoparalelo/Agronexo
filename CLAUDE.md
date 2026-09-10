@@ -2,8 +2,8 @@
 
 ## Estado actual del proyecto
 
-**Release activa:** v2.0.0 (en desarrollo) — seguimiento en `docs/release-v2.0.0.md`
-**Release anterior:** v1.0.0 — seguimiento en `docs/release-v1.0.0.md`
+**Release activa:** v3.0.0 (en desarrollo) — seguimiento en `docs/release-v3.0.0.md`
+**Release anterior:** v2.0.0 — seguimiento en `docs/release-v2.0.0.md`
 **Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
 
 ### Qué está implementado y funcionando
@@ -39,7 +39,8 @@
 | Mapa con color por severidad | ✅ | Toggle automático al activar tab Diagnóstico + contornos de unidades de manejo |
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
 | Tests unitarios del motor de diagnóstico | ✅ | 84 tests: engine, forma, texto, zonificación, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py` |
-| Exportación Shapefile / PDF | ❌ | Pendiente |
+| Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
+| Exportación Shapefile | ❌ | Pendiente |
 
 ### Credenciales de desarrollo
 
@@ -281,11 +282,13 @@ Cada release tiene su propio archivo de seguimiento en `docs/`. **Una release = 
 
 | Release | Archivo | Estado |
 |---|---|---|
-| v1.0.0 | `docs/release-v1.0.0.md` | En desarrollo |
+| v1.0.0 | `docs/release-v1.0.0.md` | Cerrada |
+| v2.0.0 | `docs/release-v2.0.0.md` | Cerrada |
+| v3.0.0 | `docs/release-v3.0.0.md` | En desarrollo |
 
 Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estructura de la release anterior. El archivo de la release anterior no se modifica una vez cerrada.
 
-**El archivo activo ahora es: `docs/release-v1.0.0.md`**
+**El archivo activo ahora es: `docs/release-v3.0.0.md`**
 
 **Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional:**
 - Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.
