@@ -19,6 +19,7 @@
 | Generar imagen estática del mapa de zonas para incrustar en el PDF | Completada |
 | Endpoint de reporte ejecutivo PDF (`GET .../reporte/pdf`) | Completada |
 | Dibujo de lote sobre mapa satelital → GeoJSON (alta y edición de límites) | Completada |
+| Modelo y cálculo de la orden de trabajo (RFSA-04) — sin endpoint/UI todavía | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -89,6 +90,24 @@ Reemplaza la carga manual de GeoJSON como único método para definir el límite
 - Backend: 6 tests nuevos en `tests/test_lotes.py` (geometría autointersectada → 422; área muy chica/muy grande → 400 tanto al crear como al editar). 21/21 tests pasan.
 - Frontend: primer test suite del proyecto (`vitest`, `npm test` en `frontend/`) — `frontend/src/utils/geometria.test.js`, 5 tests (área geodésica vs. aproximación plana, autointersección en rectángulo/bowtie/triángulo).
 - Probado manualmente en el navegador: alta de lote dibujando el polígono (`POST /lotes` → 201 con la geometría correcta), edición de límites de un lote existente con la geometría precargada (`PUT /lotes/{id}` → 200), bloqueo del submit con polígono autointersectado y con área fuera de rango.
+
+#### Modelo y cálculo de la orden de trabajo (RFSA-04)
+**Fecha:** 2026-09-14
+**Rama:** `feat/orden-trabajo-modelo`
+
+Primera mitad de la tarjeta de Trello "Modelo y cálculo de la orden de trabajo": estructura de datos + lógica pura de cálculo de dosis/volumen por unidad de manejo. Sin endpoint ni UI todavía — eso queda para las tarjetas de backlog "Documento y endpoint de orden de trabajo PDF" e "Integración en el dashboard".
+
+- Migración `0018`: agrega `restricciones_ambientales` e `instrucciones_seguridad` (Text, nullable) a `productos_fitosanitarios` — el catálogo (migración 0015) no tenía estos campos y RFSA-04 los pide explícitamente. Los 21 productos seed quedan con estos campos en `NULL`, a completar manualmente por ficha técnica.
+- `app/diagnostico/schemas.py`: nuevos `OrdenTrabajoItem`, `TotalProducto`, `OrdenTrabajoResponse`.
+- Nuevo módulo puro `app/diagnostico/orden_trabajo.py::generar_orden_trabajo()` — toma `unidades_manejo` (salida ya existente de `zonificacion.py`) + un catálogo de dosis, y calcula por unidad: producto elegido, dosis/ha, volumen total (`area_total_ha × dosis_referencia`), restricciones e instrucciones de seguridad, más totales agregados por producto para todo el lote.
+
+**Decisiones tomadas:**
+- Producto por unidad = el primero de `productos_sugeridos` (ya resuelto por el motor de reglas vía `causa_indice`) — no hay selección múltiple ni UI de por medio en esta tarjeta.
+- Unidad sin producto sugerido, o producto sin `dosis_referencia` cargada en BD, no se descarta: se incluye en la orden con `sin_dosis_referencia=True` y `volumen_total=None`, para que la cantidad se complete a mano en vez de perderse silenciosamente.
+- Función pura sin DB (mismo criterio que `zonificacion.py`) — no se conectó todavía a `service.py` ni a un endpoint, ya que la tarjeta es explícitamente solo "modelo y cálculo".
+
+**Verificación:**
+- `tests/test_orden_trabajo.py` (12 tests, mismo patrón que `test_zonificacion.py`): unidad simple, agrupación de totales por producto, producto fuera de catálogo, producto sin dosis, unidad sin producto sugerido, suma de área total tratada. Los 12 pasan.
 
 ### Problemas encontrados
 
