@@ -1,6 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import client from '../api/client'
-import { analizarIndicesBatch, inspeccionarGeotiff } from '../api/analisis'
+import {
+  analizarIndicesBatch,
+  buscarImagenesSatelitales,
+  crearVueloDesdeSatelite,
+  inspeccionarGeotiff,
+} from '../api/analisis'
+
+// Mismo patrón que ModalLimites.jsx/ModalNuevoLote.jsx — autocentra el mapa
+// en una geometría ya conocida, sin depender de props extra de Leaflet.
+function FitBounds({ bounds }) {
+  const map = useMap()
+  useEffect(() => {
+    if (bounds) map.fitBounds(bounds, { padding: [20, 20] })
+  }, [bounds, map])
+  return null
+}
+
+function boundsDesdePoligono(coordinates) {
+  const coords = coordinates[0]
+  const lngs = coords.map((c) => c[0])
+  const lats = coords.map((c) => c[1])
+  return [
+    [Math.min(...lats), Math.min(...lngs)],
+    [Math.max(...lats), Math.max(...lngs)],
+  ]
+}
 
 const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
@@ -75,6 +101,16 @@ const IconInfo = () => (
     <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
   </svg>
 )
+const IconSatelite = () => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="8" y="8" width="8" height="8" rx="1.5" transform="rotate(45 12 12)"/>
+    <line x1="14.5" y1="9.5" x2="19" y2="5"/>
+    <line x1="9.5" y1="14.5" x2="5" y2="19"/>
+    <path d="M2 22l3-3"/>
+    <path d="M17 2l-1.5 1.5"/>
+    <path d="M4 7l3 3"/>
+  </svg>
+)
 const IconDron = () => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
@@ -92,6 +128,7 @@ const IconDron = () => (
 export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onClose }) {
   const [step, setStep] = useState('carga') // 'carga' | 'analisis'
   const [loteId, setLoteId] = useState(loteIdInicial ?? lotes?.[0]?.id ?? '')
+  const [fuente, setFuente] = useState('dron') // 'dron' | 'satelite'
   const [sensor, setSensor] = useState('sentinel2')
   const [indices, setIndices] = useState(() => indicesAutomaticos('sentinel2'))
   const [indiceMostrado, setIndiceMostrado] = useState('ndvi')
@@ -106,10 +143,20 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [inspeccion, setInspeccion] = useState(null)
   const inputRef = useRef()
 
+  // ── Carga desde imagen satelital (sin subir archivo) ──────────────────
+  const [fechaDeseada, setFechaDeseada] = useState('')
+  const [buscandoEscenas, setBuscandoEscenas] = useState(false)
+  const [errorBusqueda, setErrorBusqueda] = useState('')
+  const [escenas, setEscenas] = useState([])
+  const [escenaSeleccionada, setEscenaSeleccionada] = useState(null)
+
   const sinLotes = !lotes || lotes.length === 0
   const loteSeleccionado = lotes?.find((l) => l.id === loteId)
   const indiceInfo = INDICES.find((i) => i.value === indiceMostrado)
   const indicesParaSensor = indicesDisponibles(sensor)
+  const loteBoundsSatelital = loteSeleccionado?.geometry
+    ? boundsDesdePoligono(loteSeleccionado.geometry.coordinates)
+    : null
 
   useEffect(() => {
     // al cambiar de sensor, recalculamos qué índices se calculan por
@@ -136,6 +183,42 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     // lote (ver app/diagnostico/service.py::_resolver_estadio).
     setEstadioFenologico(loteSeleccionado?.estadio_fenologico ?? '')
   }, [loteId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // la imagen satelital siempre viene de Sentinel-2 — no hay selección
+    // manual de sensor en este modo, a diferencia de subir un archivo.
+    if (fuente === 'satelite') setSensor('sentinel2')
+  }, [fuente])
+
+  function cambiarFuente(nueva) {
+    setFuente(nueva)
+    setArchivo(null)
+    setEscenas([])
+    setEscenaSeleccionada(null)
+    setErrorBusqueda('')
+    setError('')
+  }
+
+  async function handleBuscarEscenas() {
+    if (!fechaDeseada) {
+      setErrorBusqueda('Elegí una fecha para buscar.')
+      return
+    }
+    setBuscandoEscenas(true)
+    setErrorBusqueda('')
+    setEscenas([])
+    setEscenaSeleccionada(null)
+    try {
+      const data = await buscarImagenesSatelitales(loteId, fechaDeseada, 15)
+      setEscenas(data.items)
+      if (data.items.length > 0) setEscenaSeleccionada(data.items[0])
+    } catch (err) {
+      const msg = err.response?.data?.detail
+      setErrorBusqueda(typeof msg === 'string' ? msg : 'No se pudieron buscar imágenes satelitales. Probá de nuevo.')
+    } finally {
+      setBuscandoEscenas(false)
+    }
+  }
 
   function toggleIndice(value) {
     // cada clic (prenda o apague el índice) siempre actualiza la info mostrada
@@ -168,12 +251,19 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
 
   function handleSiguiente() {
     if (!loteId) { setError('Seleccioná a qué lote pertenece este vuelo.'); return }
-    if (!archivo) { setError('Seleccioná un archivo GeoTIFF.'); return }
+    if (fuente === 'dron' && !archivo) { setError('Seleccioná un archivo GeoTIFF.'); return }
+    if (fuente === 'satelite' && !escenaSeleccionada) { setError('Elegí una escena satelital.'); return }
+    if (fuente === 'satelite') setFechaVuelo(escenaSeleccionada.fecha)
     setError('')
     setStep('analisis')
   }
 
   function uploadMessage() {
+    if (fuente === 'satelite') {
+      if (uploadPhase === 'processing') return 'Descargando y recortando la imagen satelital...'
+      if (uploadPhase === 'done') return 'El análisis estará listo en unos momentos.'
+      return 'Solicitando imagen satelital...'
+    }
     if (uploadPhase === 'processing') return 'Archivo recibido. Encolando análisis...'
     if (uploadPhase === 'done') return 'El análisis estará listo en unos momentos.'
     if (uploadProgress < 15) return 'Iniciando carga del ortomosaico...'
@@ -184,27 +274,43 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   }
 
   async function handleSubmit() {
-    const fd = new FormData()
-    fd.append('archivo', archivo)
-    fd.append('sensor', sensor)
-    if (estadioFenologico.trim()) fd.append('estadio_fenologico', estadioFenologico.trim())
-    if (fechaVuelo) fd.append('fecha_vuelo', new Date(fechaVuelo).toISOString())
-
     setLoading(true)
     setError('')
-    setUploadProgress(0)
-    setUploadPhase('uploading')
-    try {
-      const { data } = await client.post(`/lotes/${loteId}/vuelos`, fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => {
-          if (e.total) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100))
-          }
-        },
-      })
 
-      setUploadPhase('processing')
+    try {
+      let data
+      if (fuente === 'satelite') {
+        // No hay bytes que subir — la descarga real ocurre en el worker
+        // (workers.gis.tasks.descargar_satelital), así que no hay barra de
+        // progreso de upload, directo a "procesando".
+        setUploadPhase('processing')
+        data = await crearVueloDesdeSatelite(
+          loteId,
+          escenaSeleccionada.escena_id,
+          new Date(fechaVuelo).toISOString(),
+          estadioFenologico.trim() || null,
+        )
+      } else {
+        const fd = new FormData()
+        fd.append('archivo', archivo)
+        fd.append('sensor', sensor)
+        if (estadioFenologico.trim()) fd.append('estadio_fenologico', estadioFenologico.trim())
+        if (fechaVuelo) fd.append('fecha_vuelo', new Date(fechaVuelo).toISOString())
+
+        setUploadProgress(0)
+        setUploadPhase('uploading')
+        const res = await client.post(`/lotes/${loteId}/vuelos`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (e.total) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 100))
+            }
+          },
+        })
+        data = res.data
+        setUploadPhase('processing')
+      }
+
       const indicesAdicionales = indices.filter((i) => i !== 'ndvi')
       if (indicesAdicionales.length > 0) {
         try {
@@ -217,7 +323,10 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
       onSuccess(data)
     } catch (err) {
       const msg = err.response?.data?.detail
-      setError(typeof msg === 'string' ? msg : 'Error al subir el archivo. Verificá que sea un GeoTIFF válido.')
+      const fallback = fuente === 'satelite'
+        ? 'Error al solicitar la imagen satelital. Probá de nuevo.'
+        : 'Error al subir el archivo. Verificá que sea un GeoTIFF válido.'
+      setError(typeof msg === 'string' ? msg : fallback)
       setUploadPhase(null)
     } finally {
       setLoading(false)
@@ -273,62 +382,162 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               </select>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="sensor">Sensor</label>
-              <select
-                id="sensor"
-                value={sensor}
-                onChange={(e) => setSensor(e.target.value)}
+            <div className="modo-limite-toggle">
+              <button
+                type="button"
+                className={`modo-limite-btn${fuente === 'dron' ? ' modo-limite-btn--activo' : ''}`}
+                onClick={() => cambiarFuente('dron')}
                 disabled={loading}
               >
-                {SENSORES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+                🚁 Subir archivo (dron)
+              </button>
+              <button
+                type="button"
+                className={`modo-limite-btn${fuente === 'satelite' ? ' modo-limite-btn--activo' : ''}`}
+                onClick={() => cambiarFuente('satelite')}
+                disabled={loading || !loteSeleccionado?.geometry}
+                title={!loteSeleccionado?.geometry ? 'Este lote no tiene límite cargado — dibujalo primero para poder usar imágenes satelitales.' : undefined}
+              >
+                🛰️ Imagen satelital
+              </button>
             </div>
-
-            {inspeccion && !inspeccion.compatible ? (
-              <div className="requisitos-box requisitos-box--error">
-                <IconInfo />
-                <p>
-                  <strong>El archivo no coincide con el sensor seleccionado</strong><br />
-                  {inspeccion.mensaje}
-                </p>
-              </div>
-            ) : (
-              <div className="requisitos-box">
-                <IconInfo />
-                <p>
-                  <strong>Requerimientos Técnicos</strong><br />
-                  El archivo debe estar en formato GeoTIFF (.tif), contener información georreferenciada y poseer
-                  las bandas necesarias para el análisis multiespectral.
-                </p>
-              </div>
+            {fuente === 'satelite' && !loteSeleccionado?.geometry && (
+              <p className="area-badge area-badge--alerta">
+                Este lote no tiene límite cargado — dibujalo primero (botón "Límites") para poder recortar una imagen satelital.
+              </p>
             )}
 
-            <div
-              className={`dropzone${dragging ? ' dropzone--activo' : ''}${archivo ? ' dropzone--ok' : ''}`}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-              onClick={() => inputRef.current.click()}
-            >
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".tif,.tiff"
-                style={{ display: 'none' }}
-                onChange={(e) => handleArchivo(e.target.files[0])}
-              />
-              {archivo ? (
-                <p className="dropzone-archivo">{archivo.name}</p>
-              ) : (
-                <>
-                  <p className="dropzone-icono">☁️</p>
-                  <p className="dropzone-hint">Arrastrá el archivo GeoTIFF aquí</p>
-                  <p className="dropzone-hint dropzone-hint--sub">O hacé clic para explorar tus archivos locales</p>
-                  <p className="dropzone-ext">.tif / .tiff</p>
-                </>
-              )}
-            </div>
+            {fuente === 'dron' ? (
+              <>
+                <div className="form-group">
+                  <label htmlFor="sensor">Sensor</label>
+                  <select
+                    id="sensor"
+                    value={sensor}
+                    onChange={(e) => setSensor(e.target.value)}
+                    disabled={loading}
+                  >
+                    {SENSORES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+
+                {inspeccion && !inspeccion.compatible ? (
+                  <div className="requisitos-box requisitos-box--error">
+                    <IconInfo />
+                    <p>
+                      <strong>El archivo no coincide con el sensor seleccionado</strong><br />
+                      {inspeccion.mensaje}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="requisitos-box">
+                    <IconInfo />
+                    <p>
+                      <strong>Requerimientos Técnicos</strong><br />
+                      El archivo debe estar en formato GeoTIFF (.tif), contener información georreferenciada y poseer
+                      las bandas necesarias para el análisis multiespectral.
+                    </p>
+                  </div>
+                )}
+
+                <div
+                  className={`dropzone${dragging ? ' dropzone--activo' : ''}${archivo ? ' dropzone--ok' : ''}`}
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  onClick={() => inputRef.current.click()}
+                >
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".tif,.tiff"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleArchivo(e.target.files[0])}
+                  />
+                  {archivo ? (
+                    <p className="dropzone-archivo">{archivo.name}</p>
+                  ) : (
+                    <>
+                      <p className="dropzone-icono">☁️</p>
+                      <p className="dropzone-hint">Arrastrá el archivo GeoTIFF aquí</p>
+                      <p className="dropzone-hint dropzone-hint--sub">O hacé clic para explorar tus archivos locales</p>
+                      <p className="dropzone-ext">.tif / .tiff</p>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {loteBoundsSatelital && (
+                  <div className="limites-preview-map">
+                    <MapContainer
+                      bounds={loteBoundsSatelital}
+                      style={{ height: '220px', width: '100%', borderRadius: '8px' }}
+                      zoomControl={true}
+                      scrollWheelZoom={false}
+                    >
+                      <TileLayer
+                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                        attribution="Tiles &copy; Esri"
+                      />
+                      <GeoJSON
+                        data={loteSeleccionado.geometry}
+                        style={{ color: '#2ecc71', weight: 2, fillOpacity: 0.15 }}
+                      />
+                      <FitBounds bounds={loteBoundsSatelital} />
+                    </MapContainer>
+                  </div>
+                )}
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="fecha_deseada">Fecha deseada</label>
+                    <input
+                      id="fecha_deseada"
+                      type="date"
+                      value={fechaDeseada}
+                      onChange={(e) => setFechaDeseada(e.target.value)}
+                      disabled={loading || buscandoEscenas}
+                    />
+                  </div>
+                  <div className="form-group" style={{ alignSelf: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleBuscarEscenas}
+                      disabled={loading || buscandoEscenas || !fechaDeseada}
+                    >
+                      {buscandoEscenas ? 'Buscando...' : 'Buscar imágenes'}
+                    </button>
+                  </div>
+                </div>
+
+                {errorBusqueda && <p className="error-message">{errorBusqueda}</p>}
+
+                {escenas.length > 0 && (
+                  <div className="escena-satelital-lista">
+                    <p className="dropzone-hint dropzone-hint--sub">
+                      Elegí una fecha — si está muy nublada, probá otra.
+                    </p>
+                    {escenas.map((e) => (
+                      <button
+                        type="button"
+                        key={e.escena_id}
+                        className={`escena-satelital-card${escenaSeleccionada?.escena_id === e.escena_id ? ' escena-satelital-card--activa' : ''}${e.nubes_pct != null && e.nubes_pct > 30 ? ' escena-satelital-card--nublada' : ''}`}
+                        onClick={() => setEscenaSeleccionada(e)}
+                        disabled={loading}
+                      >
+                        <span className="escena-satelital-fecha">{e.fecha}</span>
+                        <span className="escena-satelital-nubes">
+                          ☁️ {e.nubes_pct != null ? `${e.nubes_pct.toFixed(1)}%` : '—'}
+                        </span>
+                        <span className="escena-satelital-dias">{e.dias_diferencia === 0 ? 'exacta' : `±${e.dias_diferencia} día(s)`}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
             {error && <p className="error-message">{error}</p>}
 
@@ -336,7 +545,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               <button type="button" className="btn-secondary" onClick={onClose} disabled={loading}>
                 Cancelar
               </button>
-              <button type="button" className="btn-primary" onClick={handleSiguiente} disabled={!archivo}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSiguiente}
+                disabled={fuente === 'dron' ? !archivo : !escenaSeleccionada}
+              >
                 Siguiente →
               </button>
             </div>
@@ -346,7 +560,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             <p className="config-analisis-titulo">Análisis del ortomosaico</p>
 
             <div className="lote-info-card">
-              <div className="lote-info-thumb"><IconDron /></div>
+              <div className="lote-info-thumb">{fuente === 'satelite' ? <IconSatelite /> : <IconDron />}</div>
               <div className="lote-info-body">
                 <div className="lote-info-title-row">
                   <h3>{loteSeleccionado?.nombre}</h3>
@@ -356,7 +570,11 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                   <span><strong>Superficie:</strong> {loteSeleccionado?.area_ha ? `${Math.round(loteSeleccionado.area_ha)} Ha` : '—'}</span>
                   <span><strong>Cultivo:</strong> {CULTIVO_LABEL[loteSeleccionado?.cultivo] ?? loteSeleccionado?.cultivo}</span>
                   <span><strong>Sensor:</strong> {SENSOR_LABEL[sensor]}</span>
-                  <span><strong>Archivo:</strong> {archivo?.name}</span>
+                  {fuente === 'satelite' ? (
+                    <span><strong>Escena:</strong> {escenaSeleccionada?.fecha} ({escenaSeleccionada?.nubes_pct != null ? `${escenaSeleccionada.nubes_pct.toFixed(1)}% nubes` : 'nubes desconocidas'})</span>
+                  ) : (
+                    <span><strong>Archivo:</strong> {archivo?.name}</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -406,13 +624,16 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               </div>
 
               <div className="form-group">
-                <label htmlFor="fecha_vuelo">Fecha del vuelo <span className="label-opcional">(opcional)</span></label>
+                <label htmlFor="fecha_vuelo">
+                  Fecha del vuelo {fuente === 'dron' && <span className="label-opcional">(opcional)</span>}
+                </label>
                 <input
                   id="fecha_vuelo"
                   type="date"
                   value={fechaVuelo}
                   onChange={(e) => setFechaVuelo(e.target.value)}
-                  disabled={loading}
+                  disabled={loading || fuente === 'satelite'}
+                  title={fuente === 'satelite' ? 'Es la fecha real de captura de la escena elegida — no se puede editar.' : undefined}
                 />
               </div>
             </div>

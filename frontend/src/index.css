@@ -2201,6 +2201,60 @@ body {
   color: #b45309;
 }
 
+/* ── Selector de escena satelital (ModalCargaGeoTIFF) ── */
+.escena-satelital-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.escena-satelital-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid #e5e8df;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.escena-satelital-card:hover {
+  border-color: #92c270;
+}
+
+.escena-satelital-card--activa {
+  border-color: #27500a;
+  background: #eaf2e4;
+}
+
+.escena-satelital-card--nublada:not(.escena-satelital-card--activa) {
+  border-color: #fde3c0;
+}
+
+.escena-satelital-fecha {
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.escena-satelital-nubes {
+  color: #b45309;
+}
+
+.escena-satelital-card--activa .escena-satelital-nubes {
+  color: #27500a;
+}
+
+.escena-satelital-dias {
+  font-size: 0.76rem;
+  color: #9ca3af;
+}
+
 .mapa-dibujo-wrapper {
   position: relative;
 }

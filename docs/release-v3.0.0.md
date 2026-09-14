@@ -23,6 +23,7 @@
 | Textos legales y de seguridad — carga parcial (15/21 productos) | Completada |
 | POC: cargar vuelo desde imagen satelital (Earth Search, sin cuenta) | Completada |
 | Endpoint + tarea Celery: cargar vuelo real desde imagen satelital | Completada |
+| Frontend: opción "Imagen satelital" en el modal de carga de ortomosaico | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -192,6 +193,26 @@ ValueError: La imagen no tiene píxeles con datos válidos — el archivo está 
 - `tests/test_satelital_catalogo.py` (6 tests, mockeando la llamada HTTP) + suite existente de ingesta/diagnóstico/lotes (51 tests) + `tests/test_ingesta_worker.py` y `tests/test_ndvi_pipeline.py` (worker) — todos pasan, sin regresiones por el fix de validación.
 
 **Pendiente:** frontend (selector "Dron / Satélite" en el modal, mapa autocentrado en el lote, selector de fecha con las escenas devueltas) — el backend ya está completo y probado.
+
+#### Frontend: opción "Imagen satelital" en el modal de carga
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Cierra la feature de punta a punta: `ModalCargaGeoTIFF.jsx` ahora tiene un selector "🚁 Subir archivo (dron)" / "🛰️ Imagen satelital" (mismo patrón visual que el toggle "Dibujar / Subir GeoJSON" de `ModalLimites.jsx`). En el modo satelital:
+
+- Mapa autocentrado en la geometría real del lote (reusa el patrón `FitBounds`/`boundsDesdePoligono` ya duplicado en `ModalLimites.jsx`/`ModalNuevoLote.jsx`/`MapaDibujoLote.jsx` — cuarta vez que se repite, sin extraerlo a un módulo compartido todavía) — es justo el pedido original: "que aparezca automáticamente un mapa ya con el campo en vista".
+- Selector de fecha + botón "Buscar imágenes" → `GET .../imagenes-satelitales`, muestra las escenas encontradas como tarjetas con fecha, % de nubosidad y distancia en días a la fecha pedida, para que el usuario elija otra si la más cercana está nublada (igual que se probó por API en la tarea anterior).
+- El botón "🛰️ Imagen satelital" se deshabilita (con tooltip explicativo) si el lote elegido no tiene `geometry` cargada — no se puede buscar ni recortar sin un polígono.
+- Paso 2 (configuración de análisis): mismo selector de índices que para dron (Sentinel-2 tiene las mismas bandas disponibles), la fecha del vuelo se autocompleta con la fecha real de la escena y queda no editable (evita que quede una fecha inventada distinta a la captura real).
+- `handleSubmit` llama a `POST .../desde-satelite` en vez de subir un archivo — sin barra de progreso de bytes (no hay upload del lado del cliente), directo a "Descargando y recortando la imagen satelital...".
+
+**Decisiones tomadas:**
+- Sensor forzado a `sentinel2` en modo satelital (sin selector manual) — es lo único que este flujo puede producir.
+- No se armó un componente de mapa reutilizable nuevo — se siguió el patrón ya establecido en el proyecto de duplicar el pequeño `FitBounds` local en cada modal en vez de crear una abstracción compartida prematura.
+
+**Verificación:**
+- `npm run build` (Vite) sin errores.
+- Probado manualmente en el navegador contra la app real: seleccioné "Lote Nuevisimo", el botón satelital estaba habilitado (tiene geometry) y deshabilitado para lotes sin límite (ej. "Lote Sur"); mapa mostró el polígono real sobre imagen Esri World Imagery; busqué escenas para `2026-08-03` y aparecieron las mismas 8 escenas ya validadas por API; elegí la del `2026-08-06` (0% nubes) en vez de la más cercana (58% nubes); completé el wizard → vuelo creado, visible en el dashboard como "Pendiente" y confirmado luego como `completado` vía API, con `fecha_vuelo` igual a la fecha real de la escena elegida.
 
 ### Problemas abiertos
 

@@ -15,6 +15,21 @@ export const eliminarVuelo = (loteId, vueloId) =>
 export const reintentarVuelo = (loteId, vueloId) =>
   client.post(`/lotes/${loteId}/vuelos/${vueloId}/reintentar`).then(r => r.data)
 
+// Busca escenas Sentinel-2 (Earth Search, sin auth) cerca de la fecha
+// elegida por el usuario — devuelve la nubosidad de cada una para que el
+// usuario elija otra fecha si la más cercana está nublada.
+export const buscarImagenesSatelitales = (loteId, fecha, ventanaDias = 15) =>
+  client.get(`/lotes/${loteId}/vuelos/imagenes-satelitales`, {
+    params: { fecha, ventana_dias: ventanaDias },
+  }).then(r => r.data)
+
+export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFenologico) =>
+  client.post(`/lotes/${loteId}/vuelos/desde-satelite`, {
+    escena_id: escenaId,
+    fecha_vuelo: fechaVuelo,
+    estadio_fenologico: estadioFenologico || null,
+  }).then(r => r.data)
+
 export const inspeccionarGeotiff = (archivo, sensor) => {
   const fd = new FormData()
   fd.append('archivo', archivo)
