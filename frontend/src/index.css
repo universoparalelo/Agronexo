@@ -2224,6 +2224,15 @@ body {
   text-align: left;
 }
 
+.escena-satelital-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid #e5e8df;
+  flex-shrink: 0;
+}
+
 .escena-satelital-card:hover {
   border-color: #92c270;
 }
@@ -2254,6 +2263,135 @@ body {
   font-size: 0.76rem;
   color: #9ca3af;
 }
+
+/* ── Calendario satelital (CalendarioSatelital.jsx) ── */
+.calendario-satelital {
+  position: relative;
+}
+
+.calendario-satelital-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid #c2c9b8;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.88rem;
+  color: #1a1a1a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.calendario-satelital-trigger:hover {
+  border-color: #27500a;
+}
+
+.calendario-satelital-trigger-icono {
+  opacity: 0.6;
+}
+
+.calendario-satelital-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 260px;
+  background: #fff;
+  border: 1px solid #e5e8df;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.7rem;
+}
+
+.calendario-satelital-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.calendario-satelital-header button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #27500a;
+  padding: 0.1rem 0.4rem;
+}
+
+.calendario-satelital-cargando {
+  font-size: 0.72rem;
+  color: #9ca3af;
+  margin: 0 0 0.4rem;
+}
+
+.calendario-satelital-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendario-satelital-diasemana {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  text-align: center;
+  padding-bottom: 0.2rem;
+}
+
+.calendario-satelital-dia {
+  aspect-ratio: 1;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.calendario-satelital-dia:hover {
+  background: #f0f5ec;
+}
+
+.calendario-satelital-dia--disponible {
+  background: #eaf2e4;
+  color: #27500a;
+  font-weight: 700;
+}
+
+.calendario-satelital-dia--nublado {
+  background: #fef3e2;
+  color: #b45309;
+  font-weight: 700;
+}
+
+.calendario-satelital-dia--activo {
+  outline: 2px solid #27500a;
+  outline-offset: -2px;
+}
+
+.calendario-satelital-leyenda {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 0.55rem;
+  font-size: 0.68rem;
+  color: #6b7280;
+}
+
+.calendario-satelital-punto {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.25rem;
+}
+
+.calendario-satelital-punto--disponible { background: #27500a; }
+.calendario-satelital-punto--nublado { background: #b45309; }
 
 .mapa-dibujo-wrapper {
   position: relative;

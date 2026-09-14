@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import client from '../api/client'
+import CalendarioSatelital from './CalendarioSatelital'
 import {
   analizarIndicesBatch,
   buscarImagenesSatelitales,
@@ -182,6 +183,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     // sigue siendo editable, es el estadio de ESTE vuelo puntual, no el del
     // lote (ver app/diagnostico/service.py::_resolver_estadio).
     setEstadioFenologico(loteSeleccionado?.estadio_fenologico ?? '')
+    // resultados de búsqueda satelital son específicos del lote anterior —
+    // no tiene sentido dejarlos si se cambia de lote a mitad de camino.
+    setFechaDeseada('')
+    setEscenas([])
+    setEscenaSeleccionada(null)
+    setErrorBusqueda('')
   }, [loteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -199,8 +206,9 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     setError('')
   }
 
-  async function handleBuscarEscenas() {
-    if (!fechaDeseada) {
+  async function handleBuscarEscenas(fechaParam) {
+    const fecha = fechaParam ?? fechaDeseada
+    if (!fecha) {
       setErrorBusqueda('Elegí una fecha para buscar.')
       return
     }
@@ -209,7 +217,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     setEscenas([])
     setEscenaSeleccionada(null)
     try {
-      const data = await buscarImagenesSatelitales(loteId, fechaDeseada, 15)
+      const data = await buscarImagenesSatelitales(loteId, fecha, 15)
       setEscenas(data.items)
       if (data.items.length > 0) setEscenaSeleccionada(data.items[0])
     } catch (err) {
@@ -218,6 +226,11 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     } finally {
       setBuscandoEscenas(false)
     }
+  }
+
+  function handleElegirFechaCalendario(fechaISO) {
+    setFechaDeseada(fechaISO)
+    handleBuscarEscenas(fechaISO)
   }
 
   function toggleIndice(value) {
@@ -489,29 +502,17 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                   </div>
                 )}
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="fecha_deseada">Fecha deseada</label>
-                    <input
-                      id="fecha_deseada"
-                      type="date"
-                      value={fechaDeseada}
-                      onChange={(e) => setFechaDeseada(e.target.value)}
-                      disabled={loading || buscandoEscenas}
-                    />
-                  </div>
-                  <div className="form-group" style={{ alignSelf: 'flex-end' }}>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={handleBuscarEscenas}
-                      disabled={loading || buscandoEscenas || !fechaDeseada}
-                    >
-                      {buscandoEscenas ? 'Buscando...' : 'Buscar imágenes'}
-                    </button>
-                  </div>
+                <div className="form-group">
+                  <label>Fecha deseada</label>
+                  <CalendarioSatelital
+                    loteId={loteId}
+                    fechaSeleccionada={fechaDeseada}
+                    onSeleccionar={handleElegirFechaCalendario}
+                    disabled={loading || buscandoEscenas}
+                  />
                 </div>
 
+                {buscandoEscenas && <p className="dropzone-hint dropzone-hint--sub">Buscando imágenes para esa fecha...</p>}
                 {errorBusqueda && <p className="error-message">{errorBusqueda}</p>}
 
                 {escenas.length > 0 && (
@@ -527,6 +528,9 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                         onClick={() => setEscenaSeleccionada(e)}
                         disabled={loading}
                       >
+                        {e.thumbnail_url && (
+                          <img className="escena-satelital-thumb" src={e.thumbnail_url} alt={`Vista previa de la escena del ${e.fecha}`} loading="lazy" />
+                        )}
                         <span className="escena-satelital-fecha">{e.fecha}</span>
                         <span className="escena-satelital-nubes">
                           ☁️ {e.nubes_pct != null ? `${e.nubes_pct.toFixed(1)}%` : '—'}

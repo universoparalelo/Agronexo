@@ -119,6 +119,7 @@ class EscenaSatelitalItem(BaseModel):
     fecha: str
     nubes_pct: float | None
     dias_diferencia: int
+    thumbnail_url: str | None = None
 
 
 class EscenasSatelitalesResponse(BaseModel):

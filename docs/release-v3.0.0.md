@@ -24,6 +24,7 @@
 | POC: cargar vuelo desde imagen satelital (Earth Search, sin cuenta) | Completada |
 | Endpoint + tarea Celery: cargar vuelo real desde imagen satelital | Completada |
 | Frontend: opción "Imagen satelital" en el modal de carga de ortomosaico | Completada |
+| Calendario con fechas marcadas + miniatura real por escena (feedback de usuario) | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -214,10 +215,30 @@ Cierra la feature de punta a punta: `ModalCargaGeoTIFF.jsx` ahora tiene un selec
 - `npm run build` (Vite) sin errores.
 - Probado manualmente en el navegador contra la app real: seleccioné "Lote Nuevisimo", el botón satelital estaba habilitado (tiene geometry) y deshabilitado para lotes sin límite (ej. "Lote Sur"); mapa mostró el polígono real sobre imagen Esri World Imagery; busqué escenas para `2026-08-03` y aparecieron las mismas 8 escenas ya validadas por API; elegí la del `2026-08-06` (0% nubes) en vez de la más cercana (58% nubes); completé el wizard → vuelo creado, visible en el dashboard como "Pendiente" y confirmado luego como `completado` vía API, con `fecha_vuelo` igual a la fecha real de la escena elegida.
 
+#### Calendario con fechas marcadas + miniatura real por escena
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Feedback directo tras probar la tarea anterior: el `<input type="date">` nativo no daba ninguna pista de qué fechas tenían imagen disponible, y el mapa de referencia (basemap Esri genérico) no reflejaba la escena elegida — parecía "no actualizarse", pero en realidad nunca estuvo conectado a la escena puntual.
+
+- Nuevo componente `frontend/src/components/CalendarioSatelital.jsx` — reemplaza el input nativo. Al abrirse (o cambiar de mes) busca escenas en una ventana de ~20 días centrada en el día 15 del mes visible y pinta los días: verde si hay imagen con ≤30% de nubes, ámbar si hay imagen pero muy nublada, sin marca si no hay escena ese día. Clic en un día marcado dispara la búsqueda real (±15 días) igual que antes, poblando la lista de tarjetas debajo.
+- `EscenaSatelitalItem` (`app/ingesta/schemas.py`) suma `thumbnail_url` — Earth Search expone un asset `thumbnail` (JPG chico, `preview.jpg`) por escena además de las bandas individuales; no hace falta descargar ni procesar nada para mostrarlo. Cada tarjeta de escena en el modal ahora muestra esa miniatura real junto a la fecha y el % de nubes — se ve literalmente si está nublado o no, no solo el número.
+
+**Decisiones tomadas:**
+- Calendario propio en vez de sumar una librería de datepicker — ningún navegador permite marcar días dentro de su calendario nativo (`<input type="date">`), así que de cualquier forma había que reemplazarlo por un componente propio; dado eso, no se justificaba sumar una dependencia nueva de UI (primera de este tipo en el frontend) para algo que se resuelve con un grid de mes simple.
+- Fechas calculadas con año/mes/día locales a mano (`fechaISOLocal()`), no `Date#toISOString()` — ese método normaliza a UTC y puede correr la fecha un día para atrás en husos horarios positivos.
+- El basemap del mapa de referencia se mantiene genérico (Esri, sin fecha) — mostrar la imagen real de la escena elegida como capa del mapa (no solo como miniatura chica) queda pendiente, requiere renderizar el raster Sentinel-2 real como overlay en vez de una URL de tile fija.
+
+**Verificación:**
+- Probado en el navegador: mes actual (septiembre 2026) marcó los días 2, 5 y 10 en verde; al navegar a agosto 2026 marcó el día 1 en ámbar (58% nubes, confirmado con `curl` contra el endpoint) y varios días en verde (6, 11, 13, 16, 21, 26); clic en un día disparó la búsqueda automática y mostró la lista con miniaturas reales — la escena de 99.9% de nubes se ve directamente blanca, la de 0% se ve el campo verde.
+- Verificado con JS en consola del navegador que las miniaturas cargan (`complete: true`, `naturalWidth: 343`) pese a que el listado de network requests del panel no las mostraba (limitación de esa herramienta con cargas de `<img>`, no señal de un problema real).
+- `npm run build` sin errores; suite de tests backend (`test_ingesta.py`, `test_satelital_catalogo.py`, `test_diagnostico_api.py`, 18 tests) sigue pasando sin cambios.
+
 ### Problemas abiertos
 
 - 6 productos del catálogo (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) no tienen `restricciones_ambientales`/`instrucciones_seguridad` cargados — falta ficha de seguridad específica confirmada. Ver `docs/investigacion_seguridad_fitosanitaria.md` sección 3 (marcados 🔴).
 - Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
+- El mapa de referencia del modal satelital sigue mostrando un basemap genérico (Esri, sin fecha), no la imagen real de la escena elegida como capa — solo se ve como miniatura chica en la tarjeta. Mostrarla como overlay del mapa requeriría renderizar el raster Sentinel-2 real en vez de un tile fijo.
 - Earth Search (Element84) es un servicio "best effort" sin SLA ni garantía de disponibilidad publicada (textual en su propio README: "This public API does not come with any guaranteed service") — los datos en sí (bucket AWS Open Data) son sólidos, pero el catálogo de búsqueda podría estar caído o lento sin aviso. Si la disponibilidad se vuelve un problema para el uso real, evaluar sumar Copernicus Data Space Ecosystem (requiere cuenta OAuth2, pero es infraestructura oficial con más garantías) como fuente alternativa o de respaldo.
 
 ### Problemas encontrados

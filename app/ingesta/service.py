@@ -151,6 +151,9 @@ async def buscar_imagenes_satelitales(lote: Lote, fecha: str, ventana_dias: int 
             "fecha": f["properties"]["datetime"][:10],
             "nubes_pct": f["properties"].get("eo:cloud_cover"),
             "dias_diferencia": f["_dias_de_diferencia"],
+            # Preview JPG liviano (no es la banda completa) — deja ver la
+            # escena real antes de descargar/recortar nada.
+            "thumbnail_url": f.get("assets", {}).get("thumbnail", {}).get("href"),
         }
         for f in features
     ]
