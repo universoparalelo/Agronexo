@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, func
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -59,6 +59,8 @@ class ProductoFitosanitario(Base):
     causa_indice: Mapped[CausaIndiceEnum] = mapped_column(Enum(CausaIndiceEnum), nullable=False)
     dosis_referencia: Mapped[float | None] = mapped_column(Float, nullable=True)
     unidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    restricciones_ambientales: Mapped[str | None] = mapped_column(Text, nullable=True)
+    instrucciones_seguridad: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Diagnostico(Base):

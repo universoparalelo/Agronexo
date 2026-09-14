@@ -21,6 +21,8 @@ class ProductoFitosanitarioResponse(BaseModel):
     causa_indice: CausaIndiceEnum
     dosis_referencia: float | None
     unidad: str | None
+    restricciones_ambientales: str | None
+    instrucciones_seguridad: str | None
 
     model_config = {"from_attributes": True}
 
@@ -28,6 +30,36 @@ class ProductoFitosanitarioResponse(BaseModel):
 class ProductoFitosanitarioListResponse(BaseModel):
     total: int
     items: list[ProductoFitosanitarioResponse]
+
+
+class OrdenTrabajoItem(BaseModel):
+    """Una línea de la orden de trabajo — una unidad de manejo a tratar."""
+
+    unidad_id: int
+    causa_indice: str
+    severidad: str
+    area_ha: float
+    zona_ids: list[int]
+    producto: str | None
+    dosis_por_ha: float | None
+    unidad_dosis: str | None
+    volumen_total: float | None
+    restricciones_ambientales: str | None
+    instrucciones_seguridad: str | None
+    sin_dosis_referencia: bool
+
+
+class TotalProducto(BaseModel):
+    producto: str
+    area_ha: float
+    volumen_total: float
+    unidad_dosis: str | None
+
+
+class OrdenTrabajoResponse(BaseModel):
+    items: list[OrdenTrabajoItem]
+    totales_por_producto: list[TotalProducto]
+    area_total_tratada_ha: float
 
 
 class ZonaDiagnosticoProperties(BaseModel):
