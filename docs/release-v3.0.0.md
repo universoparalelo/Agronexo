@@ -20,6 +20,9 @@
 | Endpoint de reporte ejecutivo PDF (`GET .../reporte/pdf`) | Completada |
 | Dibujo de lote sobre mapa satelital → GeoJSON (alta y edición de límites) | Completada |
 | Modelo y cálculo de la orden de trabajo (RFSA-04) — sin endpoint/UI todavía | Completada |
+| Textos legales y de seguridad — carga parcial (15/21 productos) | Completada |
+| POC: cargar vuelo desde imagen satelital (Earth Search, sin cuenta) | Completada |
+| Endpoint + tarea Celery: cargar vuelo real desde imagen satelital | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -129,10 +132,72 @@ Se había asumido sin verificar que la Ley 6.312 era la ley de agroquímicos de 
 - Migración `0019` corrida contra la BD (`docker compose exec api alembic upgrade head`) — verificado con `psql` que exactamente 15/21 productos tienen ambos campos poblados y los otros 6 siguen en `NULL`.
 - `tests/test_diagnostico_api.py` y `tests/test_orden_trabajo.py` (20 tests) siguen pasando sin cambios.
 
+#### POC: cargar vuelo desde imagen satelital (Earth Search)
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Objetivo: evaluar si es viable ofrecer, además de subir un GeoTIFF de dron, la opción de cargar un vuelo a partir de una imagen satelital Sentinel-2, dejando que el usuario elija la fecha y vea la nubosidad antes de confirmar (si está nublado, elige otra fecha).
+
+`scripts/poc_satelital_earthsearch.py` extiende el script existente `scripts/descargar_sentinel2_real.py` (agregado en `c5e41ae`, ago-2026) en dos puntos:
+- Búsqueda por **ventana de fechas** alrededor de la fecha elegida por el usuario (no solo "la más reciente") vía el catálogo STAC de [Earth Search (Element84)](https://earth-search.aws.element84.com/v1) — imprime todas las escenas candidatas con su fecha real y % de nubosidad.
+- Recorte al **polígono real del lote** (`rasterio.mask`), no solo al bbox rectangular como hacía el script original.
+
+Probado contra el lote real "Lote Nuevisimo" (`a9f9c87d-...`, 1.2645 ha dibujado a mano con leaflet-geoman) pidiendo la fecha `2026-08-03`.
+
+**Decisiones tomadas:**
+- **Earth Search (AWS Open Data) en vez de Copernicus Data Space Ecosystem** — no requiere cuenta, OAuth2 ni credenciales de ningún tipo; el bucket de datos (`e84-earth-search-sentinel-data`) es público, `RequesterPays: False`, sin costo. Copernicus queda documentado como plan B (ver "Problemas abiertos") si la disponibilidad de Earth Search se vuelve un problema.
+- El GeoTIFF de salida usa el mismo mapeo de bandas que `sensor="sentinel2"` en `workers/gis/band_mapping.py` (ya existente, no hubo que tocarlo) — el pipeline completo de procesamiento (`procesar_vuelo`, cálculo de índices) no necesita ningún cambio, solo el paso previo de conseguir el archivo.
+
+**Error encontrado — bandas de Sentinel-2 a distinta resolución nativa**
+```
+ValueError: could not broadcast input array from shape (9,9) into shape (17,17)
+```
+Blue/Green/Red/NIR son 10 m/px pero RedEdge (B05) es 20 m/px — leer cada banda a su resolución nativa produce arrays de distinto tamaño para la misma área geográfica, que no se pueden apilar en un único GeoTIFF multibanda. Se resolvió pasando `out_shape` explícito (calculado desde el bbox en metros / 10 m) a cada `src.read()`, forzando remuestreo bilineal de todas las bandas a una grilla común de 10 m sin importar su resolución nativa.
+
+**Verificación:**
+- Búsqueda por fecha: con fecha elegida `2026-08-03` (ventana ±15 días) se encontraron 8 escenas; la más cercana (2026-08-01) tenía 58% de nubes y quedó marcada por sobre el umbral, mostrando como alternativa la del 2026-08-06 con 0.004% de nubes — confirma que el flujo "elegir otra fecha si está nublado" funciona con datos reales.
+- Recorte al polígono: el GeoTIFF de salida tiene 126 píxeles con datos de 256 en la ventana total — 126 × 100 m² = 1.26 ha, coincide con el área real del lote (1.2645 ha) casi exacto.
+- Sanity check agronómico: NDVI promedio ~0.005 (suelo prácticamente desnudo) para una escena de agosto (invierno) — coherente con que los cultivos de verano del NEA (soja/maíz/algodón/sorgo) todavía no están sembrados en esa fecha.
+
+**Pendiente (no es parte de este POC):** conectar esto a un endpoint real (`GET` de escenas disponibles + tarea Celery que descargue, suba a MinIO y encole `procesar_vuelo`) y al frontend (mapa autocentrado en el lote + selector de fecha). Ver desglose completo de tareas en la conversación de esta sesión — no repetido acá para no duplicar.
+
+#### Endpoint + tarea Celery: cargar vuelo real desde imagen satelital
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Conecta el POC (ver tarea anterior) a la aplicación real: dos endpoints nuevos en `app/ingesta/router.py` bajo el mismo prefijo `/lotes` que el resto de ingesta, y una tarea Celery nueva — sin tocar el pipeline de procesamiento existente.
+
+- `GET /lotes/{lote_id}/vuelos/imagenes-satelitales?fecha=...&ventana_dias=...` — corre **síncrono en FastAPI** (no en Celery): solo consulta el catálogo STAC de Earth Search (HTTP + JSON, sin rasterio), no es "procesamiento de GeoTIFF". Devuelve las escenas candidatas con su nubosidad para que el usuario elija.
+- `POST /lotes/{lote_id}/vuelos/desde-satelite` (`{escena_id, fecha_vuelo, estadio_fenologico?}`) — crea el `Vuelo` (sensor=`sentinel2`) y encola `workers.gis.tasks.descargar_satelital`.
+- Nuevo `workers/gis/tasks.py::descargar_satelital` — descarga+recorta la escena elegida (reconsultando el item por id para tener URLs de assets frescas), la sube a MinIO con la misma convención de key que un upload de dron, actualiza `vuelo.task_id` a la tarea de procesamiento que encola después (si no, el polling de `/estado` se queda mirando una tarea ya terminada) y llama a `procesar_vuelo` — de ahí en más, mismo pipeline sin cambios.
+- Módulos nuevos en `workers/gis/`: `satelital_catalogo.py` (solo `urllib`/`json`/`datetime`, sin rasterio — importable también desde FastAPI) y `satelital_descarga.py` (rasterio/numpy, worker-only). Reusan `band_mapping.py::MAPEO_SENSORES["sentinel2"]` como única fuente de verdad del orden de bandas, en vez de duplicar el mapeo como hacía el script del POC.
+
+**Decisiones tomadas:**
+- Separar el módulo de catálogo (liviano) del de descarga (pesado) — el proceso FastAPI deliberadamente no tiene rasterio/numpy instalado (mismo criterio que `app/diagnostico/service.py`/`forma.py`), así que un solo archivo con `import rasterio` a nivel de módulo habría roto el import del endpoint de búsqueda.
+- La búsqueda de escenas no se encolá en Celery — es una consulta HTTP liviana, no viola la regla "el procesamiento de GeoTIFF nunca ocurre en FastAPI" del CLAUDE.md porque no hay GeoTIFF de por medio en ese paso.
+- `descargar_satelital` reconsulta la escena por id en vez de recibir las URLs de los assets por parámetro — evita pasar URLs largas por la cola de Celery y son válidas más tiempo cerca del momento de descarga real.
+
+**Error encontrado — validación de "imagen vacía" rechazaba cualquier GeoTIFF Sentinel-2 real**
+```
+ValueError: La imagen no tiene píxeles con datos válidos — el archivo está vacío.
+```
+`_validar_geotiff_gis_desde_src()` en `workers/gis/tasks.py` siempre muestreaba la **banda 1** para detectar archivos vacíos. Pero el mapeo `sentinel2` de `band_mapping.py` deja la banda 1 sin usar a propósito (BLUE arranca en la posición 2, replicando la numeración real de Sentinel-2 donde la banda 1 es Coastal Aerosol) — cualquier GeoTIFF generado con esa convención se rechazaba como "vacío" aunque el resto de las bandas tuviera datos reales. Bug preexistente (afectaba también a `scripts/descargar_sentinel2_real.py`, nunca ejercitado antes end-to-end), no introducido por esta tarea, pero la bloqueaba por completo. Se corrigió recorriendo todas las bandas hasta encontrar la primera con datos válidos, en vez de asumir que siempre es la banda 1.
+
+**Verificación (end-to-end, contra la app real corriendo, no mocks):**
+- `GET .../imagenes-satelitales?fecha=2026-08-03&ventana_dias=15` contra el lote real "Lote Nuevisimo" → 200, mismas 8 escenas que el POC, con la del 2026-08-01 marcada con 58% de nubes.
+- `POST .../desde-satelite` con la escena del 2026-08-06 (0.004% nubes) → 202, `Vuelo` creado.
+- Polling de `GET .../estado` → `descargar_satelital` completa en ~12s, encola `procesar_vuelo`, que completa sin error tras el fix de validación. Estado final: `completado`.
+- `GET .../resultado` → GeoJSON real con 1 zona, `area_ha=1.71`, `ndvi_promedio=0.59` ("normal") — confirma que el NDVI se calculó de verdad sobre la imagen satelital descargada, no es un mock.
+- **Nota operativa:** el worker Celery no tiene hot-reload — una tarea `@celery_app.task` nueva no se registra hasta reiniciar el proceso (`docker compose restart worker`). El primer intento falló con `KeyError` / "Received unregistered task" hasta reiniciar.
+- `tests/test_satelital_catalogo.py` (6 tests, mockeando la llamada HTTP) + suite existente de ingesta/diagnóstico/lotes (51 tests) + `tests/test_ingesta_worker.py` y `tests/test_ndvi_pipeline.py` (worker) — todos pasan, sin regresiones por el fix de validación.
+
+**Pendiente:** frontend (selector "Dron / Satélite" en el modal, mapa autocentrado en el lote, selector de fecha con las escenas devueltas) — el backend ya está completo y probado.
+
 ### Problemas abiertos
 
 - 6 productos del catálogo (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) no tienen `restricciones_ambientales`/`instrucciones_seguridad` cargados — falta ficha de seguridad específica confirmada. Ver `docs/investigacion_seguridad_fitosanitaria.md` sección 3 (marcados 🔴).
 - Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
+- Earth Search (Element84) es un servicio "best effort" sin SLA ni garantía de disponibilidad publicada (textual en su propio README: "This public API does not come with any guaranteed service") — los datos en sí (bucket AWS Open Data) son sólidos, pero el catálogo de búsqueda podría estar caído o lento sin aviso. Si la disponibilidad se vuelve un problema para el uso real, evaluar sumar Copernicus Data Space Ecosystem (requiere cuenta OAuth2, pero es infraestructura oficial con más garantías) como fuente alternativa o de respaldo.
 
 ### Problemas encontrados
 
