@@ -109,6 +109,31 @@ Primera mitad de la tarjeta de Trello "Modelo y cálculo de la orden de trabajo"
 **Verificación:**
 - `tests/test_orden_trabajo.py` (12 tests, mismo patrón que `test_zonificacion.py`): unidad simple, agrupación de totales por producto, producto fuera de catálogo, producto sin dosis, unidad sin producto sugerido, suma de área total tratada. Los 12 pasan.
 
+#### Textos legales y de seguridad (RFSA-04) — carga parcial
+**Fecha:** 2026-09-14
+**Rama:** `feat/orden-trabajo-modelo`
+
+Investigación y carga de `restricciones_ambientales`/`instrucciones_seguridad` (campos agregados en `0018`) para el catálogo de 21 productos fitosanitarios.
+
+- `docs/investigacion_seguridad_fitosanitaria.md`: investigación por producto (marbete SENASA cuando había RE disponible, fichas técnicas/SDS de fabricantes, Ley 7032 de Chaco como marco general) con nivel de confianza marcado por fila (🟢/🟡/🔴).
+- Migración `0019`: carga los 15 productos con fuente confirmada (🟢/🟡). Los 6 restantes (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) quedan en `NULL` a propósito — no se encontró ficha de seguridad específica que los respalde.
+
+**Decisiones tomadas:**
+- No cargar una estimación sin marcar para los 6 productos sin fuente confirmada — mejor dejarlos pendientes y visibles que completar el campo con texto no verificado que termine guiando una aplicación real de agroquímico.
+- Las restricciones generales de la Ley provincial (distancias de aplicación, receta agronómica obligatoria, prohibición a menores/embarazadas) no se cargan por producto — aplican a cualquier aplicación, no son un dato específico de cada fila del catálogo. Queda como nota de diseño para cuando se conecte esto al endpoint/dashboard.
+
+**Error encontrado — ley provincial mal identificada**
+Se había asumido sin verificar que la Ley 6.312 era la ley de agroquímicos de Chaco. Al bajar el PDF real resultó ser la ley de **Santiago del Estero** (mismo número, provincia distinta — los números de ley no son únicos entre provincias). La ley vigente en Chaco es la **Ley 7032 — Ley de Biocidas** (2012), verificada contra el texto completo publicado por CASAFE. Corregido en el documento de investigación; pendiente corregir también la descripción de la tarjeta de Trello, que todavía cita "Ley 6.312".
+
+**Verificación:**
+- Migración `0019` corrida contra la BD (`docker compose exec api alembic upgrade head`) — verificado con `psql` que exactamente 15/21 productos tienen ambos campos poblados y los otros 6 siguen en `NULL`.
+- `tests/test_diagnostico_api.py` y `tests/test_orden_trabajo.py` (20 tests) siguen pasando sin cambios.
+
+### Problemas abiertos
+
+- 6 productos del catálogo (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) no tienen `restricciones_ambientales`/`instrucciones_seguridad` cargados — falta ficha de seguridad específica confirmada. Ver `docs/investigacion_seguridad_fitosanitaria.md` sección 3 (marcados 🔴).
+- Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
+
 ### Problemas encontrados
 
 _(ver errores documentados en las tareas de arriba — todos resueltos)_
