@@ -15,6 +15,21 @@ _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 
 def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
+    """
+    Rellena geometry SOLO si el lote todavía no tiene una — pensado para
+    el flujo legacy `/lotes/desde-geotiff`, que crea el lote con
+    geometry=NULL y depende de esto para completarla después de procesar
+    el primer vuelo (ver migración 0005).
+
+    Con el flujo actual (ModalNuevoLote → POST /lotes ya con el polígono
+    dibujado a mano, y recién después se suben vuelos) el lote YA tiene
+    una geometry real antes de que esta función se llame. El `WHERE
+    geometry IS NULL` evita pisarla con el bounding box rectangular del
+    raster en cada vuelo nuevo — antes de este chequeo, cualquier vuelo
+    (dron o satelital) subido a un lote ya dibujado le reemplazaba el
+    polígono real por un rectángulo silenciosamente (bug real detectado
+    2026-09-14, ver docs/release-v3.0.0.md).
+    """
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
 
@@ -26,7 +41,7 @@ def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
             session.execute(
                 text(
                     "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
-                    "WHERE id = CAST(:lote_id AS uuid)"
+                    "WHERE id = CAST(:lote_id AS uuid) AND geometry IS NULL"
                 ),
                 {"wkt": wkt, "lote_id": lote_id},
             )

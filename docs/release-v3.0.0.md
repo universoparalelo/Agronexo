@@ -25,6 +25,7 @@
 | Endpoint + tarea Celery: cargar vuelo real desde imagen satelital | Completada |
 | Frontend: opción "Imagen satelital" en el modal de carga de ortomosaico | Completada |
 | Calendario con fechas marcadas + miniatura real por escena (feedback de usuario) | Completada |
+| Fix: worker pisaba la geometry real de un lote con un rectángulo en cada vuelo | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -234,8 +235,28 @@ Feedback directo tras probar la tarea anterior: el `<input type="date">` nativo 
 - Verificado con JS en consola del navegador que las miniaturas cargan (`complete: true`, `naturalWidth: 343`) pese a que el listado de network requests del panel no las mostraba (limitación de esa herramienta con cargas de `<img>`, no señal de un problema real).
 - `npm run build` sin errores; suite de tests backend (`test_ingesta.py`, `test_satelital_catalogo.py`, `test_diagnostico_api.py`, 18 tests) sigue pasando sin cambios.
 
+#### Fix: el worker pisaba la geometry real de un lote con un rectángulo
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Bug detectado por reporte del usuario: "Lote de cele" perdió su forma real dibujada a mano y quedó como un cuadrado, después de probar la carga satelital sobre ese lote. Investigado y confirmado con datos reales — **afecta también al flujo existente de subida de GeoTIFF por dron**, no es exclusivo de esta feature nueva.
+
+**Causa raíz:** `workers/gis/tasks.py::_actualizar_lote_geometry()` — llamada desde `procesar_vuelo()` cada vez que se procesa un vuelo con `lote_id` — hacía `UPDATE lotes SET geometry = ...` **sin condición**, usando el bounding box rectangular del GeoTIFF procesado. Tenía sentido cuando el único flujo de alta era `/lotes/desde-geotiff` (lote creado con `geometry=NULL`, se completaba recién al procesar el primer vuelo — documentado en migración `0005`). Pero desde que existe `ModalNuevoLote` (el lote se crea primero con el polígono real dibujado a mano, y los vuelos se suben después a un lote ya existente), esta misma función sigue ejecutándose en **cada** vuelo nuevo — dron o satelital — y reemplaza el polígono real por un rectángulo, silenciosamente, sin ningún error ni aviso.
+
+**Impacto real confirmado en esta sesión:** dos lotes quedaron con la geometry pisada — "Lote de cele" (probado por el usuario) y "Lote Nuevisimo" (pisado por las pruebas propias de esta sesión, incluida la primera versión de este mismo trabajo antes de encontrar el bug). En ambos casos el polígono original **no es recuperable** — no hay historial de versiones de `geometry` en la tabla `lotes`, y el `UPDATE` es directo por SQL crudo, sin trigger de auditoría.
+
+**Fix:** se agregó `AND geometry IS NULL` a la cláusula `WHERE` del `UPDATE` — la función ahora solo rellena la geometry si todavía no existe, preservando el flujo legacy de `/lotes/desde-geotiff` intacto, pero sin volver a tocar un polígono ya dibujado.
+
+**Verificación:**
+- Reprocesado un vuelo de "Lote de cele" (ya con la geometry rota) tras el fix → geometry no cambió (correcto, ya no se toca, aunque sigue siendo el rectángulo incorrecto).
+- Creado un lote de prueba nuevo con un polígono real (8 vértices, irregular) → corrida una carga satelital completa de punta a punta → geometry se mantuvo exactamente igual después de `completado`. Confirma que el bug está resuelto para el caso real.
+- Suite completa (`test_ingesta.py`, `test_satelital_catalogo.py`, `test_lotes.py`, `test_ingesta_worker.py`) sigue pasando sin cambios.
+
+**Pendiente / no resuelto:** el polígono original de "Lote de cele" y "Lote Nuevisimo" quedó perdido — hay que redibujarlo a mano con "Límites" si se necesita la forma real de vuelta. Movido a "Problemas abiertos".
+
 ### Problemas abiertos
 
+- **"Lote de cele" y "Lote Nuevisimo" tienen la geometry incorrecta** (quedó como rectángulo por el bug de arriba, ya corregido para el futuro pero sin poder revertir el dato ya pisado) — hay que redibujar el límite real a mano vía el botón "Límites" en cada uno.
 - 6 productos del catálogo (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) no tienen `restricciones_ambientales`/`instrucciones_seguridad` cargados — falta ficha de seguridad específica confirmada. Ver `docs/investigacion_seguridad_fitosanitaria.md` sección 3 (marcados 🔴).
 - Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
 - El mapa de referencia del modal satelital sigue mostrando un basemap genérico (Esri, sin fecha), no la imagen real de la escena elegida como capa — solo se ve como miniatura chica en la tarjeta. Mostrarla como overlay del mapa requeriría renderizar el raster Sentinel-2 real en vez de un tile fijo.
