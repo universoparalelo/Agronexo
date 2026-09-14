@@ -15,6 +15,21 @@ _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 
 def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
+    """
+    Rellena geometry SOLO si el lote todavía no tiene una — pensado para
+    el flujo legacy `/lotes/desde-geotiff`, que crea el lote con
+    geometry=NULL y depende de esto para completarla después de procesar
+    el primer vuelo (ver migración 0005).
+
+    Con el flujo actual (ModalNuevoLote → POST /lotes ya con el polígono
+    dibujado a mano, y recién después se suben vuelos) el lote YA tiene
+    una geometry real antes de que esta función se llame. El `WHERE
+    geometry IS NULL` evita pisarla con el bounding box rectangular del
+    raster en cada vuelo nuevo — antes de este chequeo, cualquier vuelo
+    (dron o satelital) subido a un lote ya dibujado le reemplazaba el
+    polígono real por un rectángulo silenciosamente (bug real detectado
+    2026-09-14, ver docs/release-v3.0.0.md).
+    """
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
 
@@ -26,7 +41,7 @@ def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
             session.execute(
                 text(
                     "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
-                    "WHERE id = CAST(:lote_id AS uuid)"
+                    "WHERE id = CAST(:lote_id AS uuid) AND geometry IS NULL"
                 ),
                 {"wkt": wkt, "lote_id": lote_id},
             )
@@ -368,12 +383,22 @@ def _validar_geotiff_gis_desde_src(src) -> dict:
             f"Usar float32, uint8, uint16, int16 o int32."
         )
     # Muestra de 128×128 px para detectar imágenes vacías sin leer el archivo completo.
+    # Recorre TODAS las bandas (no solo la 1) — el mapeo sentinel2 de
+    # band_mapping.py deja la banda 1 sin usar a propósito (BLUE arranca en
+    # la posición 2, replicando la numeración real de Sentinel-2 donde la
+    # banda 1 es Coastal Aerosol). Chequear solo la banda 1 rechazaba como
+    # "vacío" cualquier GeoTIFF sentinel2 real, aunque el resto de las
+    # bandas tuviera datos válidos.
     nodata = src.nodata
-    muestra = src.read(1, out_shape=(1, min(128, src.height), min(128, src.width))).astype(np.float64)
-    if nodata is not None and not (isinstance(nodata, float) and np.isnan(nodata)):
-        px_validos = int(np.sum(muestra != nodata))
-    else:
-        px_validos = int(np.sum(~np.isnan(muestra)))
+    px_validos = 0
+    for banda in range(1, min(src.count, 8) + 1):
+        muestra = src.read(banda, out_shape=(1, min(128, src.height), min(128, src.width))).astype(np.float64)
+        if nodata is not None and not (isinstance(nodata, float) and np.isnan(nodata)):
+            px_validos += int(np.sum(muestra != nodata))
+        else:
+            px_validos += int(np.sum(~np.isnan(muestra)))
+        if px_validos > 0:
+            break
     if px_validos == 0:
         raise ValueError(
             "La imagen no tiene píxeles con datos válidos — el archivo está vacío. "
@@ -507,6 +532,122 @@ def _actualizar_analisis_indice(
             session.commit()
     finally:
         engine.dispose()
+
+
+# ── Carga de vuelo desde imagen satelital (Sentinel-2 / Earth Search) ───────
+
+def _obtener_geometry_lote_geojson(lote_id: str) -> dict | None:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.core.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with Session(engine) as session:
+            row = session.execute(
+                text("SELECT ST_AsGeoJSON(geometry) FROM lotes WHERE id = CAST(:lote_id AS uuid)"),
+                {"lote_id": lote_id},
+            ).scalar_one_or_none()
+        return json.loads(row) if row else None
+    finally:
+        engine.dispose()
+
+
+def _actualizar_vuelo_archivo_y_task(vuelo_id: str, minio_key: str, task_id: str) -> None:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+
+    from app.core.config import settings
+
+    engine = create_engine(settings.database_url_sync)
+    try:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "UPDATE vuelos SET archivo_original = :minio_key, task_id = :task_id "
+                    "WHERE id = CAST(:vuelo_id AS uuid)"
+                ),
+                {"minio_key": minio_key, "task_id": task_id, "vuelo_id": vuelo_id},
+            )
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+@celery_app.task(
+    bind=True,
+    name="workers.gis.tasks.descargar_satelital",
+    autoretry_for=(ConnectionError, OSError),
+    max_retries=3,
+    default_retry_delay=30,
+)
+def descargar_satelital(self, vuelo_id: str, lote_id: str, usuario_id: str, escena_id: str, sensor: str = "sentinel2") -> dict:
+    """
+    Descarga la escena Sentinel-2 `escena_id` (elegida por el usuario en
+    GET .../imagenes-satelitales), la recorta al polígono real del lote,
+    la sube a MinIO con la misma convención de key que un upload de dron
+    ({usuario}/{lote}/{vuelo}/original.tif), y encola procesar_vuelo con
+    ese archivo — de ahí en más es el mismo pipeline que un vuelo de dron,
+    sin cambios.
+    """
+    from app.core.storage import upload_geotiff_stream
+    from workers.gis.satelital_catalogo import obtener_escena_por_id
+    from workers.gis.satelital_descarga import descargar_y_recortar_geotiff
+
+    self.update_state(state="STARTED", meta={"progreso": 0, "mensaje": "Consultando escena satelital"})
+
+    poligono = _obtener_geometry_lote_geojson(lote_id)
+    if poligono is None:
+        _actualizar_vuelo(vuelo_id, "error", "El lote no tiene límite (geometry) cargado — no se puede recortar la imagen satelital.")
+        raise ValueError(f"Lote {lote_id} sin geometry, no se puede procesar imagen satelital.")
+
+    try:
+        item = obtener_escena_por_id(escena_id)
+    except Exception as exc:
+        _actualizar_vuelo(vuelo_id, "error", f"No se pudo consultar la escena satelital: {exc}")
+        raise
+
+    self.update_state(state="PROGRESS", meta={"progreso": 20, "mensaje": "Descargando y recortando bandas Sentinel-2"})
+
+    tiff_tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+    tiff_path = tiff_tmp.name
+    tiff_tmp.close()
+
+    try:
+        descargar_y_recortar_geotiff(item, poligono, tiff_path)
+
+        self.update_state(state="PROGRESS", meta={"progreso": 60, "mensaje": "Subiendo a almacenamiento"})
+        with open(tiff_path, "rb") as f:
+            key = upload_geotiff_stream(
+                usuario_id=usuario_id, lote_id=lote_id, vuelo_id=vuelo_id,
+                stream=f, length=os.path.getsize(tiff_path),
+            )
+    except Exception as exc:
+        _actualizar_vuelo(vuelo_id, "error", f"Error descargando imagen satelital: {exc}")
+        raise
+    finally:
+        if os.path.exists(tiff_path):
+            os.unlink(tiff_path)
+
+    self.update_state(state="PROGRESS", meta={"progreso": 70, "mensaje": "Encolando cálculo de NDVI"})
+
+    tarea_procesamiento = celery_app.send_task(
+        "workers.gis.tasks.procesar_vuelo",
+        kwargs={"vuelo_id": vuelo_id, "lote_id": lote_id, "minio_key": key, "sensor": sensor, "indice": "ndvi"},
+        queue="gis",
+    )
+    # El polling de GET /vuelos/{id}/estado sigue vuelo.task_id — hay que
+    # apuntarlo a la tarea nueva (procesar_vuelo). Si no, el frontend vería
+    # esta tarea (ya terminada) en vez del progreso real del procesamiento.
+    _actualizar_vuelo_archivo_y_task(vuelo_id, key, tarea_procesamiento.id)
+
+    return {
+        "vuelo_id": vuelo_id,
+        "minio_key": key,
+        "escena_id": escena_id,
+        "task_id_procesamiento": tarea_procesamiento.id,
+    }
 
 
 @celery_app.task(

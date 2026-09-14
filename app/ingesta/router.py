@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -9,6 +9,7 @@ from app.auth.models import Usuario
 from app.core.database import get_db
 from app.ingesta import service
 from app.ingesta.schemas import (
+    EscenasSatelitalesResponse,
     EstadoVueloResponse,
     IndiceAnalisisIniciarResponse,
     IndiceAnalisisItem,
@@ -18,6 +19,7 @@ from app.ingesta.schemas import (
     IndicesBatchRequest,
     InspeccionGeotiffResponse,
     LoteDesdeGeotiffResponse,
+    VueloDesdeSateliteRequest,
     VueloListItem,
     VueloReintentoResponse,
     VueloUploadResponse,
@@ -161,6 +163,80 @@ async def subir_vuelo(
         task_id=vuelo.task_id,
         created_at=vuelo.created_at,
         estadio_fenologico=vuelo.estadio_fenologico,
+    )
+
+
+@router.get(
+    "/{lote_id}/vuelos/imagenes-satelitales",
+    response_model=EscenasSatelitalesResponse,
+    summary="Buscar escenas Sentinel-2 disponibles para el lote cerca de una fecha",
+)
+async def buscar_imagenes_satelitales(
+    lote_id: uuid.UUID,
+    fecha: date = Query(..., description="Fecha elegida por el usuario"),
+    ventana_dias: int = Query(default=15, ge=1, le=60, description="Ventana +/- días alrededor de la fecha"),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+    if lote.geometry is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El lote no tiene límite (geometry) cargado. Dibujá o subí el límite del lote antes de buscar imágenes satelitales.",
+        )
+
+    try:
+        items = await service.buscar_imagenes_satelitales(lote, fecha.isoformat(), ventana_dias)
+    except RuntimeError as exc:
+        # Sin escenas en la ventana pedida — no es un error del servidor,
+        # es información para que el usuario pruebe otra fecha/ventana.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    return EscenasSatelitalesResponse(items=items, fecha_elegida=fecha.isoformat(), ventana_dias=ventana_dias)
+
+
+@router.post(
+    "/{lote_id}/vuelos/desde-satelite",
+    response_model=VueloUploadResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Cargar vuelo a partir de una escena satelital ya elegida",
+)
+async def crear_vuelo_desde_satelite(
+    lote_id: uuid.UUID,
+    data: VueloDesdeSateliteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+    if lote.geometry is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El lote no tiene límite (geometry) cargado. Dibujá o subí el límite del lote antes de cargar una imagen satelital.",
+        )
+
+    vuelo = await service.crear_vuelo_desde_satelite(
+        db=db,
+        lote_id=lote_id,
+        usuario_id=uuid.UUID(str(current_user.id)),
+        escena_id=data.escena_id,
+        fecha_vuelo=data.fecha_vuelo,
+        estadio_fenologico=data.estadio_fenologico,
+    )
+    await db.commit()
+
+    return VueloUploadResponse(
+        vuelo_id=vuelo.id,
+        lote_id=vuelo.lote_id,
+        sensor=vuelo.sensor,
+        estado=vuelo.estado,
+        task_id=vuelo.task_id,
+        created_at=vuelo.created_at,
+        estadio_fenologico=vuelo.estadio_fenologico,
+        mensaje="Imagen satelital solicitada. Descarga y procesamiento iniciados.",
     )
 
 

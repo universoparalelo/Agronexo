@@ -20,6 +20,12 @@
 | Endpoint de reporte ejecutivo PDF (`GET .../reporte/pdf`) | Completada |
 | Dibujo de lote sobre mapa satelital → GeoJSON (alta y edición de límites) | Completada |
 | Modelo y cálculo de la orden de trabajo (RFSA-04) — sin endpoint/UI todavía | Completada |
+| Textos legales y de seguridad — carga parcial (15/21 productos) | Completada |
+| POC: cargar vuelo desde imagen satelital (Earth Search, sin cuenta) | Completada |
+| Endpoint + tarea Celery: cargar vuelo real desde imagen satelital | Completada |
+| Frontend: opción "Imagen satelital" en el modal de carga de ortomosaico | Completada |
+| Calendario con fechas marcadas + miniatura real por escena (feedback de usuario) | Completada |
+| Fix: worker pisaba la geometry real de un lote con un rectángulo en cada vuelo | Completada |
 
 #### Pipeline de generación de PDF (POC + template + mapa)
 **Fecha:** 2026-09-10
@@ -129,10 +135,132 @@ Se había asumido sin verificar que la Ley 6.312 era la ley de agroquímicos de 
 - Migración `0019` corrida contra la BD (`docker compose exec api alembic upgrade head`) — verificado con `psql` que exactamente 15/21 productos tienen ambos campos poblados y los otros 6 siguen en `NULL`.
 - `tests/test_diagnostico_api.py` y `tests/test_orden_trabajo.py` (20 tests) siguen pasando sin cambios.
 
+#### POC: cargar vuelo desde imagen satelital (Earth Search)
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Objetivo: evaluar si es viable ofrecer, además de subir un GeoTIFF de dron, la opción de cargar un vuelo a partir de una imagen satelital Sentinel-2, dejando que el usuario elija la fecha y vea la nubosidad antes de confirmar (si está nublado, elige otra fecha).
+
+`scripts/poc_satelital_earthsearch.py` extiende el script existente `scripts/descargar_sentinel2_real.py` (agregado en `c5e41ae`, ago-2026) en dos puntos:
+- Búsqueda por **ventana de fechas** alrededor de la fecha elegida por el usuario (no solo "la más reciente") vía el catálogo STAC de [Earth Search (Element84)](https://earth-search.aws.element84.com/v1) — imprime todas las escenas candidatas con su fecha real y % de nubosidad.
+- Recorte al **polígono real del lote** (`rasterio.mask`), no solo al bbox rectangular como hacía el script original.
+
+Probado contra el lote real "Lote Nuevisimo" (`a9f9c87d-...`, 1.2645 ha dibujado a mano con leaflet-geoman) pidiendo la fecha `2026-08-03`.
+
+**Decisiones tomadas:**
+- **Earth Search (AWS Open Data) en vez de Copernicus Data Space Ecosystem** — no requiere cuenta, OAuth2 ni credenciales de ningún tipo; el bucket de datos (`e84-earth-search-sentinel-data`) es público, `RequesterPays: False`, sin costo. Copernicus queda documentado como plan B (ver "Problemas abiertos") si la disponibilidad de Earth Search se vuelve un problema.
+- El GeoTIFF de salida usa el mismo mapeo de bandas que `sensor="sentinel2"` en `workers/gis/band_mapping.py` (ya existente, no hubo que tocarlo) — el pipeline completo de procesamiento (`procesar_vuelo`, cálculo de índices) no necesita ningún cambio, solo el paso previo de conseguir el archivo.
+
+**Error encontrado — bandas de Sentinel-2 a distinta resolución nativa**
+```
+ValueError: could not broadcast input array from shape (9,9) into shape (17,17)
+```
+Blue/Green/Red/NIR son 10 m/px pero RedEdge (B05) es 20 m/px — leer cada banda a su resolución nativa produce arrays de distinto tamaño para la misma área geográfica, que no se pueden apilar en un único GeoTIFF multibanda. Se resolvió pasando `out_shape` explícito (calculado desde el bbox en metros / 10 m) a cada `src.read()`, forzando remuestreo bilineal de todas las bandas a una grilla común de 10 m sin importar su resolución nativa.
+
+**Verificación:**
+- Búsqueda por fecha: con fecha elegida `2026-08-03` (ventana ±15 días) se encontraron 8 escenas; la más cercana (2026-08-01) tenía 58% de nubes y quedó marcada por sobre el umbral, mostrando como alternativa la del 2026-08-06 con 0.004% de nubes — confirma que el flujo "elegir otra fecha si está nublado" funciona con datos reales.
+- Recorte al polígono: el GeoTIFF de salida tiene 126 píxeles con datos de 256 en la ventana total — 126 × 100 m² = 1.26 ha, coincide con el área real del lote (1.2645 ha) casi exacto.
+- Sanity check agronómico: NDVI promedio ~0.005 (suelo prácticamente desnudo) para una escena de agosto (invierno) — coherente con que los cultivos de verano del NEA (soja/maíz/algodón/sorgo) todavía no están sembrados en esa fecha.
+
+**Pendiente (no es parte de este POC):** conectar esto a un endpoint real (`GET` de escenas disponibles + tarea Celery que descargue, suba a MinIO y encole `procesar_vuelo`) y al frontend (mapa autocentrado en el lote + selector de fecha). Ver desglose completo de tareas en la conversación de esta sesión — no repetido acá para no duplicar.
+
+#### Endpoint + tarea Celery: cargar vuelo real desde imagen satelital
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Conecta el POC (ver tarea anterior) a la aplicación real: dos endpoints nuevos en `app/ingesta/router.py` bajo el mismo prefijo `/lotes` que el resto de ingesta, y una tarea Celery nueva — sin tocar el pipeline de procesamiento existente.
+
+- `GET /lotes/{lote_id}/vuelos/imagenes-satelitales?fecha=...&ventana_dias=...` — corre **síncrono en FastAPI** (no en Celery): solo consulta el catálogo STAC de Earth Search (HTTP + JSON, sin rasterio), no es "procesamiento de GeoTIFF". Devuelve las escenas candidatas con su nubosidad para que el usuario elija.
+- `POST /lotes/{lote_id}/vuelos/desde-satelite` (`{escena_id, fecha_vuelo, estadio_fenologico?}`) — crea el `Vuelo` (sensor=`sentinel2`) y encola `workers.gis.tasks.descargar_satelital`.
+- Nuevo `workers/gis/tasks.py::descargar_satelital` — descarga+recorta la escena elegida (reconsultando el item por id para tener URLs de assets frescas), la sube a MinIO con la misma convención de key que un upload de dron, actualiza `vuelo.task_id` a la tarea de procesamiento que encola después (si no, el polling de `/estado` se queda mirando una tarea ya terminada) y llama a `procesar_vuelo` — de ahí en más, mismo pipeline sin cambios.
+- Módulos nuevos en `workers/gis/`: `satelital_catalogo.py` (solo `urllib`/`json`/`datetime`, sin rasterio — importable también desde FastAPI) y `satelital_descarga.py` (rasterio/numpy, worker-only). Reusan `band_mapping.py::MAPEO_SENSORES["sentinel2"]` como única fuente de verdad del orden de bandas, en vez de duplicar el mapeo como hacía el script del POC.
+
+**Decisiones tomadas:**
+- Separar el módulo de catálogo (liviano) del de descarga (pesado) — el proceso FastAPI deliberadamente no tiene rasterio/numpy instalado (mismo criterio que `app/diagnostico/service.py`/`forma.py`), así que un solo archivo con `import rasterio` a nivel de módulo habría roto el import del endpoint de búsqueda.
+- La búsqueda de escenas no se encolá en Celery — es una consulta HTTP liviana, no viola la regla "el procesamiento de GeoTIFF nunca ocurre en FastAPI" del CLAUDE.md porque no hay GeoTIFF de por medio en ese paso.
+- `descargar_satelital` reconsulta la escena por id en vez de recibir las URLs de los assets por parámetro — evita pasar URLs largas por la cola de Celery y son válidas más tiempo cerca del momento de descarga real.
+
+**Error encontrado — validación de "imagen vacía" rechazaba cualquier GeoTIFF Sentinel-2 real**
+```
+ValueError: La imagen no tiene píxeles con datos válidos — el archivo está vacío.
+```
+`_validar_geotiff_gis_desde_src()` en `workers/gis/tasks.py` siempre muestreaba la **banda 1** para detectar archivos vacíos. Pero el mapeo `sentinel2` de `band_mapping.py` deja la banda 1 sin usar a propósito (BLUE arranca en la posición 2, replicando la numeración real de Sentinel-2 donde la banda 1 es Coastal Aerosol) — cualquier GeoTIFF generado con esa convención se rechazaba como "vacío" aunque el resto de las bandas tuviera datos reales. Bug preexistente (afectaba también a `scripts/descargar_sentinel2_real.py`, nunca ejercitado antes end-to-end), no introducido por esta tarea, pero la bloqueaba por completo. Se corrigió recorriendo todas las bandas hasta encontrar la primera con datos válidos, en vez de asumir que siempre es la banda 1.
+
+**Verificación (end-to-end, contra la app real corriendo, no mocks):**
+- `GET .../imagenes-satelitales?fecha=2026-08-03&ventana_dias=15` contra el lote real "Lote Nuevisimo" → 200, mismas 8 escenas que el POC, con la del 2026-08-01 marcada con 58% de nubes.
+- `POST .../desde-satelite` con la escena del 2026-08-06 (0.004% nubes) → 202, `Vuelo` creado.
+- Polling de `GET .../estado` → `descargar_satelital` completa en ~12s, encola `procesar_vuelo`, que completa sin error tras el fix de validación. Estado final: `completado`.
+- `GET .../resultado` → GeoJSON real con 1 zona, `area_ha=1.71`, `ndvi_promedio=0.59` ("normal") — confirma que el NDVI se calculó de verdad sobre la imagen satelital descargada, no es un mock.
+- **Nota operativa:** el worker Celery no tiene hot-reload — una tarea `@celery_app.task` nueva no se registra hasta reiniciar el proceso (`docker compose restart worker`). El primer intento falló con `KeyError` / "Received unregistered task" hasta reiniciar.
+- `tests/test_satelital_catalogo.py` (6 tests, mockeando la llamada HTTP) + suite existente de ingesta/diagnóstico/lotes (51 tests) + `tests/test_ingesta_worker.py` y `tests/test_ndvi_pipeline.py` (worker) — todos pasan, sin regresiones por el fix de validación.
+
+**Pendiente:** frontend (selector "Dron / Satélite" en el modal, mapa autocentrado en el lote, selector de fecha con las escenas devueltas) — el backend ya está completo y probado.
+
+#### Frontend: opción "Imagen satelital" en el modal de carga
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Cierra la feature de punta a punta: `ModalCargaGeoTIFF.jsx` ahora tiene un selector "🚁 Subir archivo (dron)" / "🛰️ Imagen satelital" (mismo patrón visual que el toggle "Dibujar / Subir GeoJSON" de `ModalLimites.jsx`). En el modo satelital:
+
+- Mapa autocentrado en la geometría real del lote (reusa el patrón `FitBounds`/`boundsDesdePoligono` ya duplicado en `ModalLimites.jsx`/`ModalNuevoLote.jsx`/`MapaDibujoLote.jsx` — cuarta vez que se repite, sin extraerlo a un módulo compartido todavía) — es justo el pedido original: "que aparezca automáticamente un mapa ya con el campo en vista".
+- Selector de fecha + botón "Buscar imágenes" → `GET .../imagenes-satelitales`, muestra las escenas encontradas como tarjetas con fecha, % de nubosidad y distancia en días a la fecha pedida, para que el usuario elija otra si la más cercana está nublada (igual que se probó por API en la tarea anterior).
+- El botón "🛰️ Imagen satelital" se deshabilita (con tooltip explicativo) si el lote elegido no tiene `geometry` cargada — no se puede buscar ni recortar sin un polígono.
+- Paso 2 (configuración de análisis): mismo selector de índices que para dron (Sentinel-2 tiene las mismas bandas disponibles), la fecha del vuelo se autocompleta con la fecha real de la escena y queda no editable (evita que quede una fecha inventada distinta a la captura real).
+- `handleSubmit` llama a `POST .../desde-satelite` en vez de subir un archivo — sin barra de progreso de bytes (no hay upload del lado del cliente), directo a "Descargando y recortando la imagen satelital...".
+
+**Decisiones tomadas:**
+- Sensor forzado a `sentinel2` en modo satelital (sin selector manual) — es lo único que este flujo puede producir.
+- No se armó un componente de mapa reutilizable nuevo — se siguió el patrón ya establecido en el proyecto de duplicar el pequeño `FitBounds` local en cada modal en vez de crear una abstracción compartida prematura.
+
+**Verificación:**
+- `npm run build` (Vite) sin errores.
+- Probado manualmente en el navegador contra la app real: seleccioné "Lote Nuevisimo", el botón satelital estaba habilitado (tiene geometry) y deshabilitado para lotes sin límite (ej. "Lote Sur"); mapa mostró el polígono real sobre imagen Esri World Imagery; busqué escenas para `2026-08-03` y aparecieron las mismas 8 escenas ya validadas por API; elegí la del `2026-08-06` (0% nubes) en vez de la más cercana (58% nubes); completé el wizard → vuelo creado, visible en el dashboard como "Pendiente" y confirmado luego como `completado` vía API, con `fecha_vuelo` igual a la fecha real de la escena elegida.
+
+#### Calendario con fechas marcadas + miniatura real por escena
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Feedback directo tras probar la tarea anterior: el `<input type="date">` nativo no daba ninguna pista de qué fechas tenían imagen disponible, y el mapa de referencia (basemap Esri genérico) no reflejaba la escena elegida — parecía "no actualizarse", pero en realidad nunca estuvo conectado a la escena puntual.
+
+- Nuevo componente `frontend/src/components/CalendarioSatelital.jsx` — reemplaza el input nativo. Al abrirse (o cambiar de mes) busca escenas en una ventana de ~20 días centrada en el día 15 del mes visible y pinta los días: verde si hay imagen con ≤30% de nubes, ámbar si hay imagen pero muy nublada, sin marca si no hay escena ese día. Clic en un día marcado dispara la búsqueda real (±15 días) igual que antes, poblando la lista de tarjetas debajo.
+- `EscenaSatelitalItem` (`app/ingesta/schemas.py`) suma `thumbnail_url` — Earth Search expone un asset `thumbnail` (JPG chico, `preview.jpg`) por escena además de las bandas individuales; no hace falta descargar ni procesar nada para mostrarlo. Cada tarjeta de escena en el modal ahora muestra esa miniatura real junto a la fecha y el % de nubes — se ve literalmente si está nublado o no, no solo el número.
+
+**Decisiones tomadas:**
+- Calendario propio en vez de sumar una librería de datepicker — ningún navegador permite marcar días dentro de su calendario nativo (`<input type="date">`), así que de cualquier forma había que reemplazarlo por un componente propio; dado eso, no se justificaba sumar una dependencia nueva de UI (primera de este tipo en el frontend) para algo que se resuelve con un grid de mes simple.
+- Fechas calculadas con año/mes/día locales a mano (`fechaISOLocal()`), no `Date#toISOString()` — ese método normaliza a UTC y puede correr la fecha un día para atrás en husos horarios positivos.
+- El basemap del mapa de referencia se mantiene genérico (Esri, sin fecha) — mostrar la imagen real de la escena elegida como capa del mapa (no solo como miniatura chica) queda pendiente, requiere renderizar el raster Sentinel-2 real como overlay en vez de una URL de tile fija.
+
+**Verificación:**
+- Probado en el navegador: mes actual (septiembre 2026) marcó los días 2, 5 y 10 en verde; al navegar a agosto 2026 marcó el día 1 en ámbar (58% nubes, confirmado con `curl` contra el endpoint) y varios días en verde (6, 11, 13, 16, 21, 26); clic en un día disparó la búsqueda automática y mostró la lista con miniaturas reales — la escena de 99.9% de nubes se ve directamente blanca, la de 0% se ve el campo verde.
+- Verificado con JS en consola del navegador que las miniaturas cargan (`complete: true`, `naturalWidth: 343`) pese a que el listado de network requests del panel no las mostraba (limitación de esa herramienta con cargas de `<img>`, no señal de un problema real).
+- `npm run build` sin errores; suite de tests backend (`test_ingesta.py`, `test_satelital_catalogo.py`, `test_diagnostico_api.py`, 18 tests) sigue pasando sin cambios.
+
+#### Fix: el worker pisaba la geometry real de un lote con un rectángulo
+**Fecha:** 2026-09-14
+**Rama:** `feat/poc-satelital-earthsearch`
+
+Bug detectado por reporte del usuario: "Lote de cele" perdió su forma real dibujada a mano y quedó como un cuadrado, después de probar la carga satelital sobre ese lote. Investigado y confirmado con datos reales — **afecta también al flujo existente de subida de GeoTIFF por dron**, no es exclusivo de esta feature nueva.
+
+**Causa raíz:** `workers/gis/tasks.py::_actualizar_lote_geometry()` — llamada desde `procesar_vuelo()` cada vez que se procesa un vuelo con `lote_id` — hacía `UPDATE lotes SET geometry = ...` **sin condición**, usando el bounding box rectangular del GeoTIFF procesado. Tenía sentido cuando el único flujo de alta era `/lotes/desde-geotiff` (lote creado con `geometry=NULL`, se completaba recién al procesar el primer vuelo — documentado en migración `0005`). Pero desde que existe `ModalNuevoLote` (el lote se crea primero con el polígono real dibujado a mano, y los vuelos se suben después a un lote ya existente), esta misma función sigue ejecutándose en **cada** vuelo nuevo — dron o satelital — y reemplaza el polígono real por un rectángulo, silenciosamente, sin ningún error ni aviso.
+
+**Impacto real confirmado en esta sesión:** dos lotes quedaron con la geometry pisada — "Lote de cele" (probado por el usuario) y "Lote Nuevisimo" (pisado por las pruebas propias de esta sesión, incluida la primera versión de este mismo trabajo antes de encontrar el bug). En ambos casos el polígono original **no es recuperable** — no hay historial de versiones de `geometry` en la tabla `lotes`, y el `UPDATE` es directo por SQL crudo, sin trigger de auditoría.
+
+**Fix:** se agregó `AND geometry IS NULL` a la cláusula `WHERE` del `UPDATE` — la función ahora solo rellena la geometry si todavía no existe, preservando el flujo legacy de `/lotes/desde-geotiff` intacto, pero sin volver a tocar un polígono ya dibujado.
+
+**Verificación:**
+- Reprocesado un vuelo de "Lote de cele" (ya con la geometry rota) tras el fix → geometry no cambió (correcto, ya no se toca, aunque sigue siendo el rectángulo incorrecto).
+- Creado un lote de prueba nuevo con un polígono real (8 vértices, irregular) → corrida una carga satelital completa de punta a punta → geometry se mantuvo exactamente igual después de `completado`. Confirma que el bug está resuelto para el caso real.
+- Suite completa (`test_ingesta.py`, `test_satelital_catalogo.py`, `test_lotes.py`, `test_ingesta_worker.py`) sigue pasando sin cambios.
+
+**Pendiente / no resuelto:** el polígono original de "Lote de cele" y "Lote Nuevisimo" quedó perdido — hay que redibujarlo a mano con "Límites" si se necesita la forma real de vuelta. Movido a "Problemas abiertos".
+
 ### Problemas abiertos
 
+- **"Lote de cele" y "Lote Nuevisimo" tienen la geometry incorrecta** (quedó como rectángulo por el bug de arriba, ya corregido para el futuro pero sin poder revertir el dato ya pisado) — hay que redibujar el límite real a mano vía el botón "Límites" en cada uno.
 - 6 productos del catálogo (Clorpirifos, Thiamethoxam, Ethephon 48%, Tiidiazurón + Diurón, Sulfato de Magnesio, Boro foliar 17%) no tienen `restricciones_ambientales`/`instrucciones_seguridad` cargados — falta ficha de seguridad específica confirmada. Ver `docs/investigacion_seguridad_fitosanitaria.md` sección 3 (marcados 🔴).
 - Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
+- El mapa de referencia del modal satelital sigue mostrando un basemap genérico (Esri, sin fecha), no la imagen real de la escena elegida como capa — solo se ve como miniatura chica en la tarjeta. Mostrarla como overlay del mapa requeriría renderizar el raster Sentinel-2 real en vez de un tile fijo.
+- Earth Search (Element84) es un servicio "best effort" sin SLA ni garantía de disponibilidad publicada (textual en su propio README: "This public API does not come with any guaranteed service") — los datos en sí (bucket AWS Open Data) son sólidos, pero el catálogo de búsqueda podría estar caído o lento sin aviso. Si la disponibilidad se vuelve un problema para el uso real, evaluar sumar Copernicus Data Space Ecosystem (requiere cuenta OAuth2, pero es infraestructura oficial con más garantías) como fuente alternativa o de respaldo.
 
 ### Problemas encontrados
 

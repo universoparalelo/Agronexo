@@ -110,3 +110,25 @@ class IndicesBatchRequest(BaseModel):
 class IndicesBatchIniciarResponse(BaseModel):
     items: list[IndiceAnalisisIniciarResponse]
     mensaje: str = "Análisis encolados."
+
+
+class EscenaSatelitalItem(BaseModel):
+    """Una escena Sentinel-2 candidata, del catálogo Earth Search — el
+    usuario ve la nubosidad y elige, el sistema no filtra por él."""
+    escena_id: str
+    fecha: str
+    nubes_pct: float | None
+    dias_diferencia: int
+    thumbnail_url: str | None = None
+
+
+class EscenasSatelitalesResponse(BaseModel):
+    items: list[EscenaSatelitalItem]
+    fecha_elegida: str
+    ventana_dias: int
+
+
+class VueloDesdeSateliteRequest(BaseModel):
+    escena_id: str
+    fecha_vuelo: datetime
+    estadio_fenologico: str | None = None

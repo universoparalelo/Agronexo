@@ -128,6 +128,78 @@ async def crear_vuelo_desde_upload(
     return vuelo
 
 
+async def buscar_imagenes_satelitales(lote: Lote, fecha: str, ventana_dias: int = 15) -> list[dict]:
+    """
+    Lista escenas Sentinel-2 candidatas para el lote (vía Earth Search, sin
+    auth) en una ventana de fechas alrededor de `fecha` — no descarga nada,
+    solo consulta el catálogo, así que corre síncrono en threadpool en vez
+    de encolarse en Celery (no es "procesamiento de GeoTIFF", es una
+    consulta HTTP liviana).
+    """
+    from geoalchemy2.shape import to_shape
+    from shapely.geometry import mapping
+
+    from workers.gis.satelital_catalogo import bbox_de_poligono, buscar_escenas
+
+    poligono = mapping(to_shape(lote.geometry))
+    bbox = bbox_de_poligono(poligono)
+
+    features = await run_in_threadpool(buscar_escenas, bbox, fecha, ventana_dias)
+    return [
+        {
+            "escena_id": f["id"],
+            "fecha": f["properties"]["datetime"][:10],
+            "nubes_pct": f["properties"].get("eo:cloud_cover"),
+            "dias_diferencia": f["_dias_de_diferencia"],
+            # Preview JPG liviano (no es la banda completa) — deja ver la
+            # escena real antes de descargar/recortar nada.
+            "thumbnail_url": f.get("assets", {}).get("thumbnail", {}).get("href"),
+        }
+        for f in features
+    ]
+
+
+async def crear_vuelo_desde_satelite(
+    db: AsyncSession,
+    lote_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    escena_id: str,
+    fecha_vuelo: datetime,
+    estadio_fenologico: str | None = None,
+) -> Vuelo:
+    """
+    Crea el Vuelo y encola workers.gis.tasks.descargar_satelital, que
+    descarga+recorta la escena elegida, la sube a MinIO y de ahí encola
+    procesar_vuelo — mismo pipeline final que subir un GeoTIFF de dron.
+    """
+    vuelo = Vuelo(
+        lote_id=lote_id,
+        sensor=SensorEnum.sentinel2,
+        fecha_vuelo=fecha_vuelo,
+        estadio_fenologico=estadio_fenologico,
+        estado=EstadoVueloEnum.pendiente,
+    )
+    db.add(vuelo)
+    await db.flush()
+    await db.refresh(vuelo)
+
+    task = celery_app.send_task(
+        "workers.gis.tasks.descargar_satelital",
+        kwargs={
+            "vuelo_id": str(vuelo.id),
+            "lote_id": str(lote_id),
+            "usuario_id": str(usuario_id),
+            "escena_id": escena_id,
+            "sensor": "sentinel2",
+        },
+        queue="gis",
+    )
+    vuelo.task_id = task.id
+    await db.flush()
+    await db.refresh(vuelo)
+    return vuelo
+
+
 async def listar_vuelos(
     db: AsyncSession,
     lote_id: uuid.UUID,
