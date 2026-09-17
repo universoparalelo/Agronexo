@@ -185,8 +185,8 @@ body {
 .sidebar-logo-mark {
   width: 30px;
   height: 30px;
-  background: #92c270;
   border-radius: 6px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
@@ -379,7 +379,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.83rem;
+  font-size: 0.85rem;
   color: #6b7280;
 }
 
@@ -434,7 +434,7 @@ body {
   border: none;
   border-radius: 7px;
   padding: 0.38rem 0.85rem;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -505,7 +505,7 @@ body {
 }
 
 .kpi-label {
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #6b7280;
@@ -522,7 +522,7 @@ body {
 }
 
 .kpi-delta {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 500;
 }
 
@@ -651,7 +651,7 @@ body {
 }
 
 .indice-switch-btn {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 600;
   padding: 0.25rem 0.7rem;
   border-radius: 999px;
@@ -682,12 +682,12 @@ body {
 .analisis-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
 }
 
 .analisis-table th {
   text-align: left;
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   color: #9ca3af;
@@ -710,11 +710,11 @@ body {
 .td-lote-nombre {
   font-weight: 600;
   color: #1a1a1a;
-  font-size: 0.84rem;
+  font-size: 0.85rem;
 }
 
 .td-lote-info {
-  font-size: 0.71rem;
+  font-size: 0.78rem;
   color: #9ca3af;
   margin-top: 0.1rem;
 }
@@ -745,6 +745,41 @@ body {
 .tbl-btn--danger:hover { border-color: #b91c1c; color: #b91c1c; }
 .tbl-btn--retry:hover { border-color: #d97706; color: #d97706; }
 
+.export-zonas-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.export-zonas-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 130px;
+  background: #fff;
+  border: 1px solid #e5e8df;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.export-zonas-popover button {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  background: none;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  color: #27500a;
+  cursor: pointer;
+}
+
+.export-zonas-popover button:hover:not(:disabled) { background: #f0f4f0; }
+.export-zonas-popover button:disabled { color: #9ca3af; cursor: not-allowed; }
+
 .table-badge {
   display: inline-flex;
   align-items: center;
@@ -773,7 +808,7 @@ body {
 .indice-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
@@ -785,8 +820,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.6rem 0.7rem 0;
-  font-size: 0.75rem;
+  padding: 0.6rem 0.7rem 0.85rem;
+  font-size: 0.78rem;
   color: #9ca3af;
   border-top: 1px solid #f0f2ef;
   margin-top: 0.2rem;
@@ -881,8 +916,8 @@ body {
   min-width: 0;
 }
 
-.accion-label { font-size: 0.82rem; font-weight: 600; }
-.accion-sub   { font-size: 0.7rem; opacity: 0.62; }
+.accion-label { font-size: 0.85rem; font-weight: 600; }
+.accion-sub   { font-size: 0.78rem; opacity: 0.62; }
 
 /* ── Actividad reciente ── */
 .actividad-feed { display: flex; flex-direction: column; }
@@ -919,7 +954,7 @@ body {
 }
 
 .actividad-tiempo {
-  font-size: 0.71rem;
+  font-size: 0.78rem;
   color: #9ca3af;
   margin-top: 0.12rem;
 }
