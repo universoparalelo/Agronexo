@@ -41,6 +41,20 @@ class Settings(BaseSettings):
     minio_bucket: str = "agronexo"
     minio_use_ssl: bool = False
     minio_presigned_url_expiry: int = 3600
+    # Host:puerto alcanzable por el navegador/cliente externo para las URLs
+    # firmadas (presigned_url) — minio_endpoint es el nombre del servicio
+    # Docker ("minio:9000"), válido solo dentro de la red de contenedores.
+    # Sin este valor, una presigned URL generada con minio_endpoint queda
+    # inservible para cualquier cliente fuera del stack. Si no se define,
+    # se usa minio_endpoint (comportamiento previo, roto para uso externo).
+    minio_public_endpoint: str | None = None
+    # minio-py necesita el region del bucket antes de firmar una URL; si no
+    # se le pasa explícito, lo resuelve pegándole al propio MinIO (HTTP GET
+    # ?location=). Ese round-trip revienta cuando el cliente apunta a
+    # minio_public_endpoint (p. ej. "localhost:9000" desde DENTRO del
+    # contenedor de la API, donde "localhost" no es MinIO). MinIO sin
+    # MINIO_REGION configurado en el server usa "us-east-1" por defecto.
+    minio_region: str = "us-east-1"
 
     # JWT
     jwt_secret_key: str

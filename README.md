@@ -295,3 +295,6 @@ Redis debe configurarse como `result_backend` además de broker. Verificá que `
 
 **`ValueError` en vectorización del Worker**
 `rasterio.features.shapes()` rechaza arrays `float64` e `int8`. El worker castea a `float32` automáticamente, pero si agregás un índice nuevo asegurate de hacer el cast antes de llamar a `shapes()`.
+
+**Una URL firmada de MinIO (presigned URL) no carga desde el navegador**
+`MINIO_ENDPOINT` (`minio:9000`) es el nombre del servicio dentro de la red de Docker — no resuelve fuera del stack. Las URLs firmadas para descarga externa (`GET .../zonas/export`) se generan con `MINIO_PUBLIC_ENDPOINT` (`localhost:9000` en desarrollo). Si falta esa variable en el `.env`, la URL queda armada con `minio:9000` y ningún cliente externo puede resolverla.
