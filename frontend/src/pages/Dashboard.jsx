@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
 import { eliminarVuelo, listarIndicesVuelo, reintentarVuelo } from '../api/analisis'
+import { descargarReportePdf, exportarZonas } from '../api/reportes'
+import { descargarBlob, extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
@@ -75,6 +77,12 @@ const IconTrash = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6"/>
     <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+  </svg>
+)
+const IconDescargar = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
   </svg>
 )
 const IconRetry = () => (
@@ -223,6 +231,7 @@ export default function Dashboard() {
   const [loteParaLimites, setLoteParaLimites] = useState(null)
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
   const [reintentandoId, setReintentandoId] = useState(null)
+  const [descargando, setDescargando] = useState(null) // `${vueloId}:pdf|geojson|shapefile`
   const [tablaError, setTablaError] = useState('')
   const [selectedVuelo, setSelectedVuelo] = useState(null)
   const [indicesDisponibles, setIndicesDisponibles] = useState([])
@@ -312,6 +321,34 @@ export default function Dashboard() {
       setTablaError(err.response?.data?.detail || 'Error al reintentar el análisis.')
     } finally {
       setReintentandoId(null)
+    }
+  }
+
+  async function handleDescargarReporte(v) {
+    const key = `${v.vueloId}:pdf`
+    setTablaError('')
+    setDescargando(key)
+    try {
+      const blob = await descargarReportePdf(v.lote.id, v.vueloId)
+      descargarBlob(blob, `reporte_ejecutivo_${v.vueloId}.pdf`)
+    } catch (err) {
+      setTablaError(await extraerMensajeErrorBlob(err, 'No se pudo generar el reporte PDF.'))
+    } finally {
+      setDescargando(null)
+    }
+  }
+
+  async function handleExportarZonas(v, formato) {
+    const key = `${v.vueloId}:${formato}`
+    setTablaError('')
+    setDescargando(key)
+    try {
+      const { url } = await exportarZonas(v.lote.id, v.vueloId, formato)
+      window.open(url, '_blank')
+    } catch (err) {
+      setTablaError(err.response?.data?.detail || `No se pudo exportar en formato ${formato}.`)
+    } finally {
+      setDescargando(null)
     }
   }
 
@@ -529,6 +566,34 @@ export default function Dashboard() {
                                         <IconDiagnostico />
                                       </button>
                                     )}
+                                    {v.estado === 'completado' && (
+                                      <>
+                                        <button
+                                          className="tbl-btn"
+                                          title="Descargar reporte PDF"
+                                          disabled={descargando === `${v.vueloId}:pdf`}
+                                          onClick={() => handleDescargarReporte(v)}
+                                        >
+                                          <IconInformes />
+                                        </button>
+                                        <button
+                                          className="tbl-btn"
+                                          title="Exportar zonas (GeoJSON)"
+                                          disabled={descargando === `${v.vueloId}:geojson`}
+                                          onClick={() => handleExportarZonas(v, 'geojson')}
+                                        >
+                                          <IconDescargar />
+                                        </button>
+                                        <button
+                                          className="tbl-btn"
+                                          title="Exportar zonas (Shapefile)"
+                                          disabled={descargando === `${v.vueloId}:shapefile`}
+                                          onClick={() => handleExportarZonas(v, 'shapefile')}
+                                        >
+                                          <IconDescargar />
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       className="tbl-btn"
                                       title="Límites"
@@ -685,16 +750,6 @@ export default function Dashboard() {
                           ? 'Elegí de qué lote ver los análisis'
                           : 'Cargá un ortomosaico primero'}
                       </span>
-                    </div>
-                    <IconArrow />
-                  </button>
-                  <button className="accion-item" disabled>
-                    <div className="accion-icon">
-                      <IconInformes />
-                    </div>
-                    <div className="accion-text">
-                      <span className="accion-label">Generar Informe PDF</span>
-                      <span className="accion-sub">Exportá resumen de campaña</span>
                     </div>
                     <IconArrow />
                   </button>

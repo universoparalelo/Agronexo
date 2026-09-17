@@ -41,7 +41,9 @@ const CAUSA_LABELS = {
   vigor_excesivo: 'Vigor excesivo',
 }
 
-export default function TablaDiagnostico({ diagnostico, onRecalcular, recalculando }) {
+export default function TablaDiagnostico({
+  diagnostico, onRecalcular, recalculando, onGenerarOrdenTrabajo, generandoOrden,
+}) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
   const [vista, setVista] = useState('tabla')
@@ -70,6 +72,17 @@ export default function TablaDiagnostico({ diagnostico, onRecalcular, recalculan
           >
             {recalculando ? 'Recalculando...' : '↻ Recalcular'}
           </button>
+          {diagnostico?.unidades_manejo?.length > 0 && (
+            <button
+              type="button"
+              className="btn-recalcular-diagnostico"
+              onClick={onGenerarOrdenTrabajo}
+              disabled={generandoOrden}
+              title="Genera el PDF de orden de trabajo con las dosis por unidad de manejo"
+            >
+              {generandoOrden ? 'Generando orden...' : '📋 Generar orden de trabajo'}
+            </button>
+          )}
           <div className="diagnostico-vista-toggle">
             <button
               className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}
