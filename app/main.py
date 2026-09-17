@@ -39,6 +39,7 @@ from app.auth.router import router as auth_router
 from app.diagnostico.router import productos_router, router as diagnostico_router
 from app.ingesta.router import router as ingesta_router
 from app.lotes.router import router as lotes_router
+from app.ordenes_trabajo.router import router as ordenes_trabajo_router
 from app.reportes.router import router as reportes_router
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
@@ -47,3 +48,4 @@ app.include_router(ingesta_router, prefix="/api/v1/lotes", tags=["ingesta"])
 app.include_router(diagnostico_router, prefix="/api/v1/lotes", tags=["diagnostico"])
 app.include_router(productos_router, prefix="/api/v1/productos-fitosanitarios", tags=["productos"])
 app.include_router(reportes_router, prefix="/api/v1/lotes", tags=["reportes"])
+app.include_router(ordenes_trabajo_router, prefix="/api/v1/lotes", tags=["ordenes-trabajo"])

@@ -278,6 +278,7 @@ _(ver errores documentados en las tareas de arriba — todos resueltos)_
 | Tarea | Estado |
 |---|---|
 | Endpoint genérico `GET .../zonas/export` (geojson/shapefile, caché en MinIO + URL firmada) | Completada |
+| Documento y endpoint de orden de trabajo PDF (`GET .../orden-trabajo/pdf`) | Completada |
 
 #### Endpoint genérico de exportación + URLs de descarga firmadas (Trello: "Exportación genérica + URLs de descarga")
 **Fecha:** 2026-09-17
@@ -303,3 +304,25 @@ minio-py resuelve el `region` del bucket pegándole por HTTP al propio endpoint 
 Verificado end-to-end contra el stack real (no solo mockeado): `GET .../zonas/export?formato=geojson` y `?formato=shapefile` devuelven una URL `http://localhost:9000/...` que se descarga correctamente desde fuera del contenedor, con el contenido real (GeoJSON válido / shapefile de 4 archivos). Segunda llamada al mismo vuelo+formato confirma cache hit (no vuelve a llamar a `generar_diagnostico`, responde en ~40ms).
 
 **Resultado:** `app/reportes/router.py`, `app/reportes/schemas.py` (nuevo), `app/core/config.py`, `app/core/storage.py`, `.env`, `.env.example`, `README.md` (sección Problemas comunes), `tests/test_exportacion_api.py` (10 tests nuevos, 28 tests totales del módulo pasando).
+
+#### Documento y endpoint de orden de trabajo PDF (Trello: "Documento y endpoint de orden de trabajo PDF")
+**Fecha:** 2026-09-17
+**Rama:** `feat/orden-trabajo-pdf`
+
+Nuevo endpoint `GET /lotes/{lote_id}/vuelos/{vuelo_id}/orden-trabajo/pdf`, en un módulo propio y separado `app/ordenes_trabajo/` (router + service + template), no dentro de `app/reportes/` — decisión deliberada de duplicar el pipeline Jinja2+WeasyPrint (mismo patrón que `app/reportes/service.py`) en vez de reusarlo, para mantener RFSA-04 (orden de trabajo/prescripción) como dominio propio. Consume `generar_orden_trabajo()` (`app/diagnostico/orden_trabajo.py`, ya implementado en Sprint 11) sobre `diagnostico["unidades_manejo"]`, con un catálogo de dosis nuevo (`cargar_catalogo_dosis()`, indexado por nombre de producto, distinto del catálogo por causa que ya existía para sugerir productos).
+
+**Decisiones tomadas:**
+- Endpoint `GET` (no `POST` como decía el ticket textual) — coherente con el resto de los endpoints de descarga de documentos (`reporte/pdf`, `zonas/export`), que tampoco tienen efectos secundarios. Ver "Problemas abiertos" para la reconsideración a futuro.
+- Módulo separado (`app/ordenes_trabajo/`) aunque duplique el setup de Jinja2/WeasyPrint de `app/reportes/service.py` — decisión explícita de priorizar separación de dominio sobre reuso de código.
+- 404 explícito cuando `unidades_manejo` está vacío (todas las zonas del lote dentro de rangos normales) — no tiene sentido generar una orden de trabajo sin nada que tratar.
+- Sección legal con la tabla de restricciones generales de la Ley 7032 (Chaco), ya investigada en `docs/investigacion_seguridad_fitosanitaria.md`, embebida como HTML estático en el template — marcada explícitamente en el PDF como "PENDIENTE DE REVISIÓN LEGAL" (ver Problemas abiertos, es urgente).
+- El template también advierte, por separado, qué productos de la orden no tienen ficha de seguridad específica cargada (los 6 productos 🔴 de Sprint 11) — para no dar una falsa sensación de completitud.
+
+Verificado: 8 tests nuevos en `tests/test_orden_trabajo_pdf_api.py` (404/401 de ownership + happy path con `generar_diagnostico`/`cargar_catalogo_dosis` mockeados, generando un PDF real vía WeasyPrint) + PDF de muestra generado y revisado visualmente contra el stack real (tablas de dosis, badges de severidad, aviso de dosis pendiente, sección de seguridad y recuadro legal se ven correctamente en las 2 páginas). Contra un vuelo real del stack de desarrollo se confirmó el wiring completo (auth + ownership + 404 por "sin unidades de manejo") — ningún vuelo real disponible en la base de desarrollo tiene unidades de manejo (todas sus zonas ya calculadas son "normal"), así que el camino feliz con datos 100% reales queda sin verificar hasta que exista un vuelo real con zonas problemáticas.
+
+**Resultado:** `app/ordenes_trabajo/__init__.py`, `app/ordenes_trabajo/router.py`, `app/ordenes_trabajo/service.py`, `app/ordenes_trabajo/templates/orden_trabajo.html` (todos nuevos), `app/main.py` (registro del router), `tests/test_orden_trabajo_pdf_api.py` (nuevo).
+
+### Problemas abiertos (Sprint 12)
+
+- **Sección legal del PDF de orden de trabajo pendiente de revisión legal — urgente.** La tabla de restricciones generales de la Ley 7032 (Chaco) en `app/ordenes_trabajo/templates/orden_trabajo.html` es una lectura del texto oficial (ver `docs/investigacion_seguridad_fitosanitaria.md`), no una validación de un abogado ni del ingeniero agrónomo matriculado responsable. Está marcada en el propio PDF como "PENDIENTE DE REVISIÓN LEGAL", pero hay que chequearla formalmente antes de que este documento se use para una aplicación real — **no cerrar esto silenciosamente, es lo más urgente de esta tarjeta.**
+- **`GET` vs `POST` en `/orden-trabajo/pdf`:** se implementó como `GET` (sin efectos secundarios, coherente con el resto de endpoints de descarga), pero el ticket original pedía `POST`. Si en un release futuro se agregan ajustes manuales de dosis antes de generar el documento (el agrónomo corrige una dosis sugerida antes de imprimir la orden), ahí sí va a hacer falta un body — momento en el que convendría pasar a `POST` o agregar un endpoint `POST` aparte para ese caso, sin romper el `GET` existente para el caso simple.
