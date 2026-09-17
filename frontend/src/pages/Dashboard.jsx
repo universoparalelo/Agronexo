@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
 import { eliminarVuelo, listarIndicesVuelo, reintentarVuelo } from '../api/analisis'
+import { descargarReportePdf, exportarZonas } from '../api/reportes'
+import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
@@ -11,6 +13,7 @@ import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import SidebarNav from '../components/SidebarNav'
 
 /* ──────── Icons ──────── */
@@ -18,12 +21,6 @@ const IconLotes = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
     <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
-  </svg>
-)
-const IconCargar = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
   </svg>
 )
 const IconDiagnostico = () => (
@@ -75,6 +72,12 @@ const IconTrash = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6"/>
     <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+  </svg>
+)
+const IconDescargar = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
   </svg>
 )
 const IconRetry = () => (
@@ -223,6 +226,10 @@ export default function Dashboard() {
   const [loteParaLimites, setLoteParaLimites] = useState(null)
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
   const [reintentandoId, setReintentandoId] = useState(null)
+  const [descargando, setDescargando] = useState(null) // `${vueloId}:pdf|geojson|shapefile`
+  const [exportMenuAbierto, setExportMenuAbierto] = useState(null) // vueloId con el menú de exportar abierto
+  const exportMenuRef = useRef(null)
+  const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
   const [tablaError, setTablaError] = useState('')
   const [selectedVuelo, setSelectedVuelo] = useState(null)
   const [indicesDisponibles, setIndicesDisponibles] = useState([])
@@ -238,6 +245,17 @@ export default function Dashboard() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [mapaExpandido])
+
+  useEffect(() => {
+    if (!exportMenuAbierto) return
+    function onClickFuera(e) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setExportMenuAbierto(null)
+      }
+    }
+    document.addEventListener('mousedown', onClickFuera)
+    return () => document.removeEventListener('mousedown', onClickFuera)
+  }, [exportMenuAbierto])
 
   const cargarDatos = useCallback(async () => {
     setLoading(true)
@@ -315,6 +333,38 @@ export default function Dashboard() {
     }
   }
 
+  async function handleDescargarReporte(v) {
+    const key = `${v.vueloId}:pdf`
+    setTablaError('')
+    setDescargando(key)
+    try {
+      const blob = await descargarReportePdf(v.lote.id, v.vueloId)
+      setPreviewPdf({
+        titulo: `Reporte ejecutivo — ${v.lote.nombre}`,
+        blob,
+        filename: `reporte_ejecutivo_${v.vueloId}.pdf`,
+      })
+    } catch (err) {
+      setTablaError(await extraerMensajeErrorBlob(err, 'No se pudo generar el reporte PDF.'))
+    } finally {
+      setDescargando(null)
+    }
+  }
+
+  async function handleExportarZonas(v, formato) {
+    const key = `${v.vueloId}:${formato}`
+    setTablaError('')
+    setDescargando(key)
+    try {
+      const { url } = await exportarZonas(v.lote.id, v.vueloId, formato)
+      window.open(url, '_blank')
+    } catch (err) {
+      setTablaError(err.response?.data?.detail || `No se pudo exportar en formato ${formato}.`)
+    } finally {
+      setDescargando(null)
+    }
+  }
+
   const vueloRows = loteRows
     .flatMap(l => l.vuelos.map(v => ({ ...v, vueloId: v.vuelo_id ?? v.id, lote: l })))
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -355,6 +405,14 @@ export default function Dashboard() {
           lotes={loteRows}
           onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
           onClose={() => setShowModalElegirLote(false)}
+        />
+      )}
+      {previewPdf && (
+        <ModalPreviewPdf
+          titulo={previewPdf.titulo}
+          blob={previewPdf.blob}
+          filename={previewPdf.filename}
+          onClose={() => setPreviewPdf(null)}
         />
       )}
 
@@ -529,6 +587,56 @@ export default function Dashboard() {
                                         <IconDiagnostico />
                                       </button>
                                     )}
+                                    {v.estado === 'completado' && (
+                                      <>
+                                        <button
+                                          className="tbl-btn"
+                                          title="Descargar reporte PDF"
+                                          disabled={descargando === `${v.vueloId}:pdf`}
+                                          onClick={() => handleDescargarReporte(v)}
+                                        >
+                                          <IconInformes />
+                                        </button>
+                                        <div
+                                          className="export-zonas-wrap"
+                                          ref={exportMenuAbierto === v.vueloId ? exportMenuRef : null}
+                                        >
+                                          <button
+                                            className="tbl-btn"
+                                            title="Exportar zonas"
+                                            onClick={() => setExportMenuAbierto(
+                                              (cur) => cur === v.vueloId ? null : v.vueloId
+                                            )}
+                                          >
+                                            <IconDescargar />
+                                          </button>
+                                          {exportMenuAbierto === v.vueloId && (
+                                            <div className="export-zonas-popover">
+                                              <button
+                                                type="button"
+                                                disabled={descargando === `${v.vueloId}:geojson`}
+                                                onClick={() => {
+                                                  setExportMenuAbierto(null)
+                                                  handleExportarZonas(v, 'geojson')
+                                                }}
+                                              >
+                                                GeoJSON
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={descargando === `${v.vueloId}:shapefile`}
+                                                onClick={() => {
+                                                  setExportMenuAbierto(null)
+                                                  handleExportarZonas(v, 'shapefile')
+                                                }}
+                                              >
+                                                Shapefile
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
                                     <button
                                       className="tbl-btn"
                                       title="Límites"
@@ -647,37 +755,26 @@ export default function Dashboard() {
               {/* Acciones Rápidas */}
               <div className="card">
                 <div className="card-header">
-                  <h2 className="card-title">⚡ Acciones Rápidas</h2>
+                  <h2 className="card-title">Acciones Rápidas</h2>
                 </div>
                 <div className="card-body acciones-list">
                   <button className="accion-item accion-item--primary" onClick={() => setShowModalNuevoLote(true)}>
-                    <div className="accion-icon">
-                      <IconLotes />
-                    </div>
                     <div className="accion-text">
                       <span className="accion-label">Nuevo Lote</span>
                       <span className="accion-sub">Registrá una nueva parcela</span>
                     </div>
-                    <IconArrow />
                   </button>
                   <button className="accion-item" onClick={() => setShowModal(true)}>
-                    <div className="accion-icon">
-                      <IconCargar />
-                    </div>
                     <div className="accion-text">
                       <span className="accion-label">Cargar Ortomosaico</span>
                       <span className="accion-sub">Subí imágenes multiespectral</span>
                     </div>
-                    <IconArrow />
                   </button>
                   <button
                     className="accion-item"
                     disabled={!vueloRows.some(v => v.estado === 'completado')}
                     onClick={handleVerDiagnosticos}
                   >
-                    <div className="accion-icon">
-                      <IconDiagnostico />
-                    </div>
                     <div className="accion-text">
                       <span className="accion-label">Ver Diagnósticos</span>
                       <span className="accion-sub">
@@ -686,17 +783,6 @@ export default function Dashboard() {
                           : 'Cargá un ortomosaico primero'}
                       </span>
                     </div>
-                    <IconArrow />
-                  </button>
-                  <button className="accion-item" disabled>
-                    <div className="accion-icon">
-                      <IconInformes />
-                    </div>
-                    <div className="accion-text">
-                      <span className="accion-label">Generar Informe PDF</span>
-                      <span className="accion-sub">Exportá resumen de campaña</span>
-                    </div>
-                    <IconArrow />
                   </button>
                 </div>
               </div>
@@ -704,13 +790,12 @@ export default function Dashboard() {
               {/* Actividad reciente */}
               <div className="card">
                 <div className="card-header">
-                  <h2 className="card-title">🔁 Actividad reciente</h2>
+                  <h2 className="card-title">Actividad reciente</h2>
                 </div>
                 <div className="card-body">
                   <div className="actividad-feed">
                     {buildActivityFeed(loteRows, vueloRows, user?.nombre?.split(' ')[0] || 'el usuario').map((item, i) => (
                       <div key={i} className={`actividad-item actividad-item--${item.tipo}`}>
-                        <span className="actividad-dot" />
                         <div className="actividad-content">
                           <p className="actividad-texto">{item.texto}</p>
                           <p className="actividad-tiempo">{fmtTiempoRelativo(item.fecha)}</p>

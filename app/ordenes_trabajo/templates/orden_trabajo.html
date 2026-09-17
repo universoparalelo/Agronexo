@@ -207,7 +207,7 @@
       <tr>
         <td>{{ total.producto }}</td>
         <td>{{ "%.2f"|format(total.area_ha) }}</td>
-        <td>{{ "%.2f"|format(total.volumen_total) }} {{ total.unidad_dosis }}</td>
+        <td>{{ ("%.2f"|format(total.volumen_total) + " " + total.unidad_dosis) if total.unidad_dosis else "— (completar a mano)" }}</td>
       </tr>
       {% endfor %}
       {% if not totales %}

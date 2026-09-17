@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import client from '../api/client'
 import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
+import { descargarOrdenTrabajoPdf } from '../api/reportes'
+import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import MapaZonas from '../components/MapaZonas'
+import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import TablaDiagnostico from '../components/TablaDiagnostico'
 import TablaZonas from '../components/TablaZonas'
 
@@ -29,6 +32,8 @@ export default function ResultadosVuelo() {
   const [diagnosticoLoading, setDiagnosticoLoading] = useState(false)
   const [diagnosticoError, setDiagnosticoError] = useState('')
   const [recalculando, setRecalculando] = useState(false)
+  const [generandoOrden, setGenerandoOrden] = useState(false)
+  const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
 
   useEffect(() => {
     Promise.all([
@@ -64,6 +69,19 @@ export default function ResultadosVuelo() {
       .finally(() => setRecalculando(false))
   }
 
+  function handleGenerarOrdenTrabajo() {
+    setGenerandoOrden(true)
+    setDiagnosticoError('')
+    descargarOrdenTrabajoPdf(loteId, vueloId)
+      .then((blob) => setPreviewPdf({
+        titulo: `Orden de trabajo — ${lote?.nombre ?? ''}`,
+        blob,
+        filename: `orden_trabajo_${vueloId}.pdf`,
+      }))
+      .catch(async (err) => setDiagnosticoError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
+      .finally(() => setGenerandoOrden(false))
+  }
+
   if (loading) return <div className="page-loading">Cargando resultados...</div>
 
   if (error) return (
@@ -77,6 +95,14 @@ export default function ResultadosVuelo() {
 
   return (
     <div className="resultados-page">
+      {previewPdf && (
+        <ModalPreviewPdf
+          titulo={previewPdf.titulo}
+          blob={previewPdf.blob}
+          filename={previewPdf.filename}
+          onClose={() => setPreviewPdf(null)}
+        />
+      )}
       <header className="resultados-header">
         <div className="resultados-header-left">
           <Link to={`/lotes/${loteId}`} className="btn-back">← Vuelos</Link>
@@ -157,6 +183,8 @@ export default function ResultadosVuelo() {
                   diagnostico={diagnostico}
                   onRecalcular={handleRecalcular}
                   recalculando={recalculando}
+                  onGenerarOrdenTrabajo={handleGenerarOrdenTrabajo}
+                  generandoOrden={generandoOrden}
                 />
               )}
             </>

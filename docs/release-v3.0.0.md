@@ -279,6 +279,8 @@ _(ver errores documentados en las tareas de arriba — todos resueltos)_
 |---|---|
 | Endpoint genérico `GET .../zonas/export` (geojson/shapefile, caché en MinIO + URL firmada) | Completada |
 | Documento y endpoint de orden de trabajo PDF (`GET .../orden-trabajo/pdf`) | Completada |
+| Integración en el dashboard (reporte, exportación y orden de trabajo) | Completada |
+| QA de cierre: reporte end-to-end, GeoJSON/Shapefile, coherencia de dosis/A4 | Completada |
 
 #### Endpoint genérico de exportación + URLs de descarga firmadas (Trello: "Exportación genérica + URLs de descarga")
 **Fecha:** 2026-09-17
@@ -326,3 +328,29 @@ Verificado: 8 tests nuevos en `tests/test_orden_trabajo_pdf_api.py` (404/401 de 
 
 - **Sección legal del PDF de orden de trabajo pendiente de revisión legal — urgente.** La tabla de restricciones generales de la Ley 7032 (Chaco) en `app/ordenes_trabajo/templates/orden_trabajo.html` es una lectura del texto oficial (ver `docs/investigacion_seguridad_fitosanitaria.md`), no una validación de un abogado ni del ingeniero agrónomo matriculado responsable. Está marcada en el propio PDF como "PENDIENTE DE REVISIÓN LEGAL", pero hay que chequearla formalmente antes de que este documento se use para una aplicación real — **no cerrar esto silenciosamente, es lo más urgente de esta tarjeta.**
 - **`GET` vs `POST` en `/orden-trabajo/pdf`:** se implementó como `GET` (sin efectos secundarios, coherente con el resto de endpoints de descarga), pero el ticket original pedía `POST`. Si en un release futuro se agregan ajustes manuales de dosis antes de generar el documento (el agrónomo corrige una dosis sugerida antes de imprimir la orden), ahí sí va a hacer falta un body — momento en el que convendría pasar a `POST` o agregar un endpoint `POST` aparte para ese caso, sin romper el `GET` existente para el caso simple.
+
+#### Integración en el dashboard (reporte, exportación y orden de trabajo)
+**Fecha:** 2026-09-17
+**Rama:** `feat/dashboard-descargas`
+
+Conecta los tres endpoints de descarga (sin UI hasta ahora) al frontend: botón "Descargar reporte PDF" y botón "Exportar zonas" (con menú GeoJSON/Shapefile) por fila en la tabla "Análisis Recientes" del Dashboard, y botón "Generar orden de trabajo" junto a "↻ Recalcular" en `TablaDiagnostico.jsx` (oculto si no hay `unidades_manejo`, mismo criterio que el 404 del backend).
+
+**Decisiones tomadas:**
+- Los tres botones de descarga van en la tabla/vista donde el vuelo ya está en contexto (no en "Acciones Rápidas", que no tiene ningún vuelo asociado) — se sacó el placeholder deshabilitado "Generar Informe PDF" que había ahí por quedar redundante.
+- Exportar GeoJSON/Shapefile es un solo botón con un popover para elegir formato (no dos botones separados) — mismo patrón de popover que ya usa `CalendarioSatelital.jsx`, con cierre al hacer click afuera (`useRef` + listener de `mousedown` en el documento).
+- **Previsualización en vez de descarga directa** para los dos PDF (reporte y orden de trabajo): `ModalPreviewPdf.jsx` nuevo, embebe el PDF con el visor nativo del navegador vía `<iframe src={URL.createObjectURL(blob)}>`. El botón "Descargar PDF" del modal reusa el mismo blob ya traído — WeasyPrint no se ejecuta dos veces por la misma acción del usuario. La exportación de zonas no tiene preview (no es un PDF, es GeoJSON/Shapefile vía URL firmada — se abre directo con `window.open`).
+- Se aprovechó para homogeneizar la tipografía de los componentes exclusivos del Dashboard (antes ~15 tamaños de fuente casi-iguales por drift orgánico — 0.62/0.64/0.71/0.72/0.82/0.83/0.84rem, etc. — normalizados a 3: 0.7/0.78/0.85rem) y sacar los íconos decorativos de "Acciones Rápidas"/"Actividad reciente" a pedido del usuario. El logo del sidebar (antes un cuadrado verde placeholder) ahora usa el mismo PNG que el favicon del navegador.
+
+**Resultado:** `frontend/src/api/reportes.js`, `frontend/src/utils/descargarArchivo.js`, `frontend/src/components/ModalPreviewPdf.jsx` (todos nuevos), `frontend/src/pages/Dashboard.jsx`, `frontend/src/pages/ResultadosVuelo.jsx`, `frontend/src/components/TablaDiagnostico.jsx`, `frontend/src/components/SidebarNav.jsx`, `frontend/src/index.css`. Sin cambios de backend.
+
+#### QA de cierre: reporte end-to-end, GeoJSON/Shapefile y coherencia de la orden de trabajo
+**Fecha:** 2026-09-17
+
+Verificación de cierre de sprint sobre los tres documentos/exportaciones nuevos, con un escenario sintético de 4 zonas (crítica/estrés hídrico, moderada/hongo, normal/sin problema, vigorosa/vigor excesivo) armado a mano pero procesado con las funciones reales del pipeline (`generar_unidades_manejo()`, `generar_orden_trabajo()`, `generar_pdf_reporte()`, `generar_pdf_orden_trabajo()`, `generar_geojson_zonas()`, `generar_shapefile_zip()`) — no se re-testeó el motor de reglas en sí (`app/diagnostico/engine.py`), que ya tiene su propia suite en `test_diagnostico_engine.py`.
+
+- **Reporte PDF end-to-end:** contenido completo verificado — mapa coloreado por severidad, resumen con KPIs, tabla de 4 zonas, sección de diagnóstico narrado (excluye correctamente la zona "sin problema"), footer legal.
+- **GeoJSON/Shapefile:** validación estructural como proxy de abrir en QGIS (no se pudo abrir QGIS real desde acá, sin acceso a GUI de escritorio) — CRS del `.prj` es WGS84 válido, el shapefile tiene los 4 archivos esperados (`.shp/.shx/.dbf/.prj`), los campos coinciden con `_CAMPOS` de `app/reportes/exportacion.py`, tipo de geometría POLYGON, cantidad de registros = cantidad de zonas.
+- **Orden de trabajo:** coherencia de dosis/volumen verificada línea por línea (`área × dosis_referencia = volumen_total`, redondeo a 3 decimales) y en los totales agrupados por producto. Tamaño de página confirmado A4 exacto (210.0 × 297.0 mm, leído con `pypdf` instalado temporalmente solo para esta verificación, no es dependencia del proyecto) en las 2 páginas de ambos PDFs (reporte y orden de trabajo).
+
+**Error encontrado — "Totales por producto" mostraba 0.00 en vez de "—" para un producto sin dosis de referencia**
+Un producto cuya única unidad tiene `sin_dosis_referencia=True` mostraba `0.00` en la fila de "Totales por producto" del PDF de orden de trabajo (el acumulador de `_totales_por_producto()` en `app/diagnostico/orden_trabajo.py` arranca en `0.0` y nunca suma si `volumen_total` es `None`) — inconsistente con la fila individual de esa misma unidad, que sí mostraba "— (completar a mano)". Riesgo real: alguien podría leer "0.00" como "no aplicar nada" en vez de "dosis pendiente de completar a mano". Se corrigió en el template (`app/ordenes_trabajo/templates/orden_trabajo.html`): la celda de volumen total ahora muestra "— (completar a mano)" cuando `total.unidad_dosis` es vacío (ningún ítem de ese producto tenía dosis cargada). No se tocó el cálculo en Python — sigue siendo correcto y ya está cubierto por `test_orden_trabajo.py`, era puramente un problema de presentación.
