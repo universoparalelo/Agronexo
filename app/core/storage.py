@@ -13,6 +13,7 @@ def _client() -> Minio:
         access_key=settings.minio_root_user,
         secret_key=settings.minio_root_password,
         secure=settings.minio_use_ssl,
+        region=settings.minio_region,
     )
 
 
@@ -136,7 +137,24 @@ def upload_file(key: str, local_path: str, content_type: str = "application/octe
 
 
 def presigned_url(key: str) -> str:
-    client = _client()
+    """
+    Genera la URL firmada con un cliente apuntado al endpoint PÚBLICO
+    (settings.minio_public_endpoint), no al endpoint interno de Docker
+    (minio_endpoint = "minio:9000") que usa el resto de este módulo.
+    Si no hay endpoint público configurado, cae al interno (comportamiento
+    previo — la URL solo sirve dentro de la red de Docker). region=
+    explícito es obligatorio acá: sin él, minio-py intenta resolver el
+    region pegándole por HTTP al propio endpoint del cliente — y ese
+    endpoint público (p. ej. "localhost:9000") no es alcanzable DESDE el
+    contenedor de la API, solo desde afuera.
+    """
+    client = Minio(
+        settings.minio_public_endpoint or settings.minio_endpoint,
+        access_key=settings.minio_root_user,
+        secret_key=settings.minio_root_password,
+        secure=settings.minio_use_ssl,
+        region=settings.minio_region,
+    )
     return client.presigned_get_object(
         settings.minio_bucket,
         key,

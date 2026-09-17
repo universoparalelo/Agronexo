@@ -261,7 +261,45 @@ Bug detectado por reporte del usuario: "Lote de cele" perdió su forma real dibu
 - Todo el catálogo de productos fitosanitarios (incluida esta carga) sigue sin la validación de un ingeniero agrónomo matriculado — pendiente desde `esq_datos_prod_fito.md` (Sprint 6, Release 2).
 - El mapa de referencia del modal satelital sigue mostrando un basemap genérico (Esri, sin fecha), no la imagen real de la escena elegida como capa — solo se ve como miniatura chica en la tarjeta. Mostrarla como overlay del mapa requeriría renderizar el raster Sentinel-2 real en vez de un tile fijo.
 - Earth Search (Element84) es un servicio "best effort" sin SLA ni garantía de disponibilidad publicada (textual en su propio README: "This public API does not come with any guaranteed service") — los datos en sí (bucket AWS Open Data) son sólidos, pero el catálogo de búsqueda podría estar caído o lento sin aviso. Si la disponibilidad se vuelve un problema para el uso real, evaluar sumar Copernicus Data Space Ecosystem (requiere cuenta OAuth2, pero es infraestructura oficial con más garantías) como fuente alternativa o de respaldo.
+- **Diagnóstico multi-índice:** el motor de diagnóstico (`app/diagnostico/service.py` + `reglas.py`, RFDR-01) es 1:1 con `vuelo_id` y solo consume las zonas NDVI de ese vuelo — nunca mira `analisis_indices` (NDRE/SAVI/ExG). Un análisis completo de lote con múltiples índices en paralelo (ya soportado para cálculo, ver tabla de estado en CLAUDE.md) no se refleja hoy en el diagnóstico ni en ningún reporte derivado (PDF, geojson, shapefile) — todos quedan acotados a NDVI. Extender el motor de reglas para combinar/ponderar varios índices es un cambio de mayor alcance, fuera de la tarjeta de Trello "Exportación genérica + URLs de descarga"; el endpoint de export nuevo deja un query param `indice` reservado (default `ndvi`) para no tener que romper el contrato de la URL el día que esto se resuelva.
 
 ### Problemas encontrados
 
 _(ver errores documentados en las tareas de arriba — todos resueltos)_
+
+---
+
+## Sprint 12 — Exportación genérica de zonas + URLs de descarga
+
+**Período:** 2026-09-17
+
+### Tareas completadas
+
+| Tarea | Estado |
+|---|---|
+| Endpoint genérico `GET .../zonas/export` (geojson/shapefile, caché en MinIO + URL firmada) | Completada |
+
+#### Endpoint genérico de exportación + URLs de descarga firmadas (Trello: "Exportación genérica + URLs de descarga")
+**Fecha:** 2026-09-17
+**Rama:** `feat/exportacion-zonas`
+
+Nuevo endpoint `GET /lotes/{lote_id}/vuelos/{vuelo_id}/zonas/export?formato=geojson|shapefile` en `app/reportes/router.py`, anidado bajo la misma convención que el resto de la API (no `/zonas/{ciclo_id}/export` plano como decía el ticket textual — "ciclo_id" no existe como entidad en el dominio, ver Problemas abiertos de Sprint 11). Reusa el diagnóstico enriquecido (causa, severidad) igual que `/zonas/geojson` y `/zonas/shapefile` ya existentes, agregando lo que esos dos no tenían: cachea el archivo generado en MinIO (`{usuario_id}/{lote_id}/{vuelo_id}/export_{formato}.{ext}`) y devuelve una URL firmada (`presigned_url()`) en vez de servir el archivo en el body.
+
+**Decisiones tomadas:**
+- Fuente de datos: diagnóstico enriquecido (Opción A), no el GeoJSON crudo del worker — para que sirva de verdad para prescripción diferenciada en maquinaria (causa/severidad por zona), que es el objetivo real detrás del ticket.
+- Query param `indice` reservado (default `ndvi`, único valor soportado hoy — cualquier otro devuelve `501`) para no romper el contrato de la URL el día que el motor de diagnóstico soporte NDRE/SAVI/ExG (ver Problemas abiertos).
+- `_resolver_diagnostico_o_404()` se partió en `_resolver_lote_o_404()` + `_generar_diagnostico_o_404()` para que el endpoint nuevo pueda chequear ownership del lote sin correr el motor de diagnóstico completo en cada request (solo cuando hay cache miss).
+
+**Error encontrado — presigned URL inservible fuera de la red de Docker**
+`presigned_url()` ya existía en `app/core/storage.py` pero no la usaba nadie. Al usarla por primera vez acá, la URL que devolvía tenía como host `minio:9000` (el nombre del servicio en la red de Docker) — inaccesible para cualquier cliente externo (navegador, Postman fuera del stack). Se agregó `MINIO_PUBLIC_ENDPOINT` (`.env`/`.env.example`, `localhost:9000` en desarrollo) y `presigned_url()` ahora arma un cliente de MinIO aparte apuntado a ese endpoint público solo para firmar.
+
+Al resolver eso apareció un segundo error:
+```
+urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=9000): ...
+Failed to establish a new connection: [Errno 111] Connection refused
+```
+minio-py resuelve el `region` del bucket pegándole por HTTP al propio endpoint del cliente si no se lo pasás explícito — y `localhost:9000` no es alcanzable *desde dentro* del contenedor de la API (ahí "localhost" es el propio contenedor, no MinIO). Se agregó `minio_region: str = "us-east-1"` (default real de un server MinIO sin `MINIO_REGION` configurado) y se lo pasa explícito en ambos clientes de `app/core/storage.py`, así minio-py nunca intenta ese round-trip.
+
+Verificado end-to-end contra el stack real (no solo mockeado): `GET .../zonas/export?formato=geojson` y `?formato=shapefile` devuelven una URL `http://localhost:9000/...` que se descarga correctamente desde fuera del contenedor, con el contenido real (GeoJSON válido / shapefile de 4 archivos). Segunda llamada al mismo vuelo+formato confirma cache hit (no vuelve a llamar a `generar_diagnostico`, responde en ~40ms).
+
+**Resultado:** `app/reportes/router.py`, `app/reportes/schemas.py` (nuevo), `app/core/config.py`, `app/core/storage.py`, `.env`, `.env.example`, `README.md` (sección Problemas comunes), `tests/test_exportacion_api.py` (10 tests nuevos, 28 tests totales del módulo pasando).

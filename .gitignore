@@ -43,3 +43,10 @@ tests/fixtures/*.tif
 
 # Salida local de scripts/poc_reporte_pdf.py
 reporte_poc.pdf
+
+# Notas/investigación local, no se trackean
+docs/esq_datos_prod_fito.md
+docs/ind_veg_asoc_causas.md
+docs/investigacion_fitosanitaria.md
+docs/pantallas/
+docs/valid_indices.md
