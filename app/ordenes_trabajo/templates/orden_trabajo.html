@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Orden de trabajo — {{ lote_nombre }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+    @bottom-right {
+      content: "Página " counter(page) " de " counter(pages);
+      font-size: 8pt;
+      color: #888;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    color: #1f2937;
+    font-size: 10.5pt;
+    line-height: 1.4;
+  }
+
+  h1, h2, h3 { margin: 0 0 4mm 0; color: #14532d; }
+  h1 { font-size: 18pt; }
+  h2 { font-size: 13pt; margin-top: 8mm; border-bottom: 1pt solid #d1d5db; padding-bottom: 2mm; }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2pt solid #16a34a;
+    padding-bottom: 4mm;
+    margin-bottom: 6mm;
+  }
+  .header .marca { font-size: 9pt; letter-spacing: 1pt; text-transform: uppercase; color: #16a34a; font-weight: bold; }
+  .header .meta { text-align: right; font-size: 9pt; color: #4b5563; }
+  .header .meta div { margin-bottom: 1mm; }
+
+  .resumen {
+    background: #f0fdf4;
+    border: 1pt solid #bbf7d0;
+    border-radius: 2mm;
+    padding: 3mm 4mm;
+    margin: 4mm 0;
+    font-size: 9.5pt;
+  }
+  .resumen table { width: 100%; border-collapse: collapse; }
+  .resumen td { padding: 1mm 2mm; }
+  .resumen .valor { font-weight: bold; font-size: 12pt; color: #16a34a; }
+  .resumen .etiqueta { color: #4b5563; font-size: 8.5pt; }
+
+  table.dosis, table.totales, table.legal-ley {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-top: 2mm;
+  }
+  table.dosis th, table.totales th, table.legal-ley th {
+    background: #16a34a;
+    color: #fff;
+    text-align: left;
+    padding: 2mm;
+    font-weight: 600;
+  }
+  table.dosis td, table.totales td, table.legal-ley td {
+    padding: 1.8mm 2mm;
+    border-bottom: 0.5pt solid #e5e7eb;
+    vertical-align: top;
+  }
+  table.dosis tr:nth-child(even) td,
+  table.totales tr:nth-child(even) td,
+  table.legal-ley tr:nth-child(even) td { background: #f9fafb; }
+  table.dosis tr.sin-dosis td { color: #92400e; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.5mm 2mm;
+    border-radius: 3mm;
+    font-size: 7.5pt;
+    font-weight: bold;
+    color: #fff;
+  }
+  .badge-critica  { background: #ef4444; }
+  .badge-moderada { background: #f59e0b; }
+  .badge-leve     { background: #fbbf24; color: #1f2937; }
+  .badge-vigorosa { background: #3b82f6; }
+
+  .aviso {
+    margin: 4mm 0;
+    padding: 3mm 4mm;
+    border: 1pt solid #fbbf24;
+    background: #fffbeb;
+    border-radius: 2mm;
+    font-size: 9pt;
+    color: #92400e;
+  }
+
+  .aviso-legal {
+    margin: 4mm 0 2mm 0;
+    padding: 3mm 4mm;
+    border: 1.5pt solid #dc2626;
+    background: #fef2f2;
+    border-radius: 2mm;
+    font-size: 9pt;
+    color: #991b1b;
+    font-weight: bold;
+  }
+
+  .producto-seguridad {
+    margin-bottom: 3mm;
+    padding: 2.5mm 4mm;
+    border-left: 3pt solid #d1d5db;
+    page-break-inside: avoid;
+  }
+  .producto-seguridad h3 { font-size: 10pt; margin-bottom: 1mm; }
+  .producto-seguridad p { margin: 1mm 0; font-size: 9pt; }
+
+  .footer-legal {
+    margin-top: 8mm;
+    font-size: 7.5pt;
+    color: #9ca3af;
+    border-top: 0.5pt solid #e5e7eb;
+    padding-top: 2mm;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <div class="marca">AgroNexo · Orden de trabajo</div>
+      <h1>{{ lote_nombre }}</h1>
+    </div>
+    <div class="meta">
+      <div><strong>Cultivo:</strong> {{ cultivo_label }}</div>
+      <div><strong>Fecha de vuelo:</strong> {{ fecha_vuelo }}</div>
+      <div><strong>Estadio fenológico:</strong> {{ estadio_fenologico or '—' }}</div>
+      <div><strong>Generado:</strong> {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <div class="resumen">
+    <table>
+      <tr>
+        <td>
+          <div class="valor">{{ n_unidades }}</div>
+          <div class="etiqueta">unidades de manejo a tratar</div>
+        </td>
+        <td>
+          <div class="valor">{{ "%.2f"|format(area_total_tratada_ha) }} ha</div>
+          <div class="etiqueta">área total a tratar</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  {% if hay_items_sin_dosis %}
+  <div class="aviso">
+    Una o más unidades no tienen dosis de referencia cargada para el producto sugerido — la cantidad a aplicar queda pendiente de completar a mano antes de ejecutar esta orden (ver filas marcadas abajo).
+  </div>
+  {% endif %}
+
+  <h2>Dosis por unidad de manejo</h2>
+  <table class="dosis">
+    <thead>
+      <tr>
+        <th>Unidad</th>
+        <th>Causa</th>
+        <th>Severidad</th>
+        <th>Área (ha)</th>
+        <th>Zonas</th>
+        <th>Producto</th>
+        <th>Dosis/ha</th>
+        <th>Volumen total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr class="{{ 'sin-dosis' if item.sin_dosis_referencia else '' }}">
+        <td>#{{ item.unidad_id }}</td>
+        <td>{{ item.causa_label }}</td>
+        <td><span class="badge badge-{{ item.severidad }}">{{ item.severidad_label }}</span></td>
+        <td>{{ "%.2f"|format(item.area_ha) }}</td>
+        <td>{{ item.zona_ids_texto }}</td>
+        <td>{{ item.producto }}</td>
+        <td>{{ ("%.2f"|format(item.dosis_por_ha) + " " + item.unidad_dosis) if item.dosis_por_ha is not none else "— (completar a mano)" }}</td>
+        <td>{{ ("%.2f"|format(item.volumen_total) + " " + item.unidad_dosis) if item.volumen_total is not none else "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Totales por producto</h2>
+  <table class="totales">
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th>Área (ha)</th>
+        <th>Volumen total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for total in totales %}
+      <tr>
+        <td>{{ total.producto }}</td>
+        <td>{{ "%.2f"|format(total.area_ha) }}</td>
+        <td>{{ "%.2f"|format(total.volumen_total) }} {{ total.unidad_dosis }}</td>
+      </tr>
+      {% endfor %}
+      {% if not totales %}
+      <tr><td colspan="3">Sin productos con dosis calculable.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <h2>Seguridad y restricciones por producto</h2>
+  {% if productos_con_seguridad %}
+    {% for p in productos_con_seguridad %}
+    <div class="producto-seguridad">
+      <h3>{{ p.producto }}</h3>
+      {% if p.restricciones_ambientales %}<p><strong>Restricciones ambientales:</strong> {{ p.restricciones_ambientales }}</p>{% endif %}
+      {% if p.instrucciones_seguridad %}<p><strong>Instrucciones de seguridad:</strong> {{ p.instrucciones_seguridad }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <p>Sin datos de seguridad específicos cargados para los productos de esta orden.</p>
+  {% endif %}
+
+  {% if productos_sin_seguridad_cargada %}
+  <div class="aviso">
+    Sin ficha de seguridad específica confirmada para: {{ productos_sin_seguridad_cargada | join(", ") }}. Confirmar restricciones e instrucciones con el ingeniero agrónomo responsable antes de aplicar.
+  </div>
+  {% endif %}
+
+  <h2>Restricciones generales de aplicación — Ley 7032 (Chaco)</h2>
+  <div class="aviso-legal">
+    PENDIENTE DE REVISIÓN LEGAL — el siguiente resumen es una lectura del texto oficial de la Ley 7032, no una opinión legal. Debe ser validado por un asesor legal o el ingeniero agrónomo matriculado responsable antes de usarse como base normativa definitiva.
+  </div>
+  <table class="legal-ley">
+    <thead>
+      <tr><th>Artículo</th><th>Restricción</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Art. 26</td><td>Prohibida la aplicación aérea a menos de 1.500 m de centros urbanos, establecimientos educativos/sanitarios, reservas y fuentes/reservorios de agua. Prohibida la aplicación terrestre a menos de 500 m de los mismos puntos.</td></tr>
+      <tr><td>Art. 30</td><td>El aplicador debe informar la tarea al municipio y a la comunidad cercana con 48 hs de anticipación (lugar, día, hora de inicio/fin, producto).</td></tr>
+      <tr><td>Art. 35</td><td>Prohibida la venta y la intervención en tareas de aplicación/manipulación a menores de 18 años y a mujeres embarazadas o en lactancia.</td></tr>
+      <tr><td>Art. 21, 40–44</td><td>Toda aplicación requiere receta agronómica firmada por ingeniero agrónomo matriculado, que debe especificar producto, dosis, período de carencia (PC) y período de reingreso (PR) — archivada 5 años.</td></tr>
+      <tr><td>Art. 39</td><td>Obligación de contar permanentemente con asesoramiento técnico de un ingeniero agrónomo matriculado en el Consejo Profesional de Chaco.</td></tr>
+      <tr><td>Art. 32</td><td>Quienes se dediquen al expendio/aplicación deben someterse a examen toxicológico y control semestral.</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size: 7.5pt; color: #6b7280;">Fuente: Ley 7032 — Ley de Biocidas, Chaco (texto completo, CASAFE).</p>
+
+  <div class="footer-legal">
+    Orden de trabajo generada automáticamente por AgroNexo a partir del diagnóstico agronómico del vuelo. Las dosis son de referencia — la decisión final de aplicación queda a criterio del ingeniero agrónomo responsable (RFDR-04).
+  </div>
+
+</body>
+</html>
