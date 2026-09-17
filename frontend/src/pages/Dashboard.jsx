@@ -5,7 +5,7 @@ import { useVueloProgreso } from '../hooks/useVueloProgreso'
 import client from '../api/client'
 import { eliminarVuelo, listarIndicesVuelo, reintentarVuelo } from '../api/analisis'
 import { descargarReportePdf, exportarZonas } from '../api/reportes'
-import { descargarBlob, extraerMensajeErrorBlob } from '../utils/descargarArchivo'
+import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
@@ -13,6 +13,7 @@ import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import SidebarNav from '../components/SidebarNav'
 
 /* ──────── Icons ──────── */
@@ -228,6 +229,7 @@ export default function Dashboard() {
   const [descargando, setDescargando] = useState(null) // `${vueloId}:pdf|geojson|shapefile`
   const [exportMenuAbierto, setExportMenuAbierto] = useState(null) // vueloId con el menú de exportar abierto
   const exportMenuRef = useRef(null)
+  const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
   const [tablaError, setTablaError] = useState('')
   const [selectedVuelo, setSelectedVuelo] = useState(null)
   const [indicesDisponibles, setIndicesDisponibles] = useState([])
@@ -337,7 +339,11 @@ export default function Dashboard() {
     setDescargando(key)
     try {
       const blob = await descargarReportePdf(v.lote.id, v.vueloId)
-      descargarBlob(blob, `reporte_ejecutivo_${v.vueloId}.pdf`)
+      setPreviewPdf({
+        titulo: `Reporte ejecutivo — ${v.lote.nombre}`,
+        blob,
+        filename: `reporte_ejecutivo_${v.vueloId}.pdf`,
+      })
     } catch (err) {
       setTablaError(await extraerMensajeErrorBlob(err, 'No se pudo generar el reporte PDF.'))
     } finally {
@@ -399,6 +405,14 @@ export default function Dashboard() {
           lotes={loteRows}
           onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
           onClose={() => setShowModalElegirLote(false)}
+        />
+      )}
+      {previewPdf && (
+        <ModalPreviewPdf
+          titulo={previewPdf.titulo}
+          blob={previewPdf.blob}
+          filename={previewPdf.filename}
+          onClose={() => setPreviewPdf(null)}
         />
       )}
 
