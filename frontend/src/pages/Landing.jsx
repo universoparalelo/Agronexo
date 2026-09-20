@@ -1,88 +1,64 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-/* ── Animated Counter ── */
-function AnimatedCounter({ value }) {
-  const [display, setDisplay] = useState('0')
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return
-        const numStr = value.replace(/[^0-9.]/g, '')
-        const unit = value.replace(/[0-9.]/g, '')
-        const target = parseFloat(numStr)
-        let current = 0
-        const increment = target / 60
-        const interval = setInterval(() => {
-          current += increment
-          if (current >= target) {
-            setDisplay(`${target}${unit}`)
-            clearInterval(interval)
-          } else {
-            setDisplay(`${current.toFixed(1)}${unit}`.replace('.0', ''))
-          }
-        }, 16)
-        observer.disconnect()
-      },
-      { threshold: 0.5 }
-    )
-    if (ref.current) observer.observe(ref.current)
-    return () => observer.disconnect()
-  }, [value])
-
-  return <div className="l2nd-counter-num" ref={ref}>{display}</div>
-}
-
 /* ── Data ── */
 const DYNAMIC_WORDS = ['cultivos', 'lotes', 'datos', 'rendimiento', 'recursos']
 
-const METRICS = [
-  { label: 'LOTES ANALIZADOS',    value: '1.2K', desc: 'campos procesados',      accent: 'green' },
-  { label: 'ÍNDICES CALCULADOS',  value: '38K',  desc: 'análisis NDVI / NDRE',   accent: 'teal'  },
-  { label: 'REDUCCIÓN INSUMOS',   value: '30%',  desc: 'fertilizante ahorrado',  accent: 'green' },
-  { label: 'PRECISIÓN DETECCIÓN', value: '99%',  desc: 'accuracy del modelo IA', accent: 'teal'  },
-]
+const FALLBACK_IMAGE = '/fondo.jpeg'
+
+const handleImageError = e => {
+  const img = e.currentTarget
+  if (!img.src.endsWith(FALLBACK_IMAGE)) img.src = FALLBACK_IMAGE
+}
+
+const imageStyle = f => (f.imageFit ? { objectFit: f.imageFit, background: f.imageBg } : undefined)
 
 const FEATURES = [
   {
-    title: 'Captura Multiespectral',
-    desc: 'Drones y satélites capturan bandas NIR, RE y Green con sincronización GPS RTK centimétrica.',
+    title: 'Ortomosaico del lote',
+    desc: 'Subís el ortomosaico de tu lote y nuestro sistema lo procesa.',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
       </svg>
     ),
+    image: '/feature_ortomosaico.jpg',
+    imageFit: 'contain',
+    imageBg: '#e9ebd6',
   },
   {
-    title: 'Análisis IA en tiempo real',
-    desc: 'Red neuronal que procesa ortomosaicos y genera índices de vegetación precisos al instante.',
+    title: 'Cálculo de índices',
+    desc: 'NDVI, NDRE y SAVI se calculan automáticamente para medir la salud de cada zona.',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
       </svg>
     ),
+    image: '/feature_indices.jpg',
+    imageFit: 'contain',
+    imageBg: '#e9ebd6',
   },
   {
-    title: 'Diagnóstico de Anomalías',
-    desc: 'Detecta focos de estrés hídrico, plagas y deficiencias nutricionales semanas antes que el ojo humano.',
+    title: 'Diagnóstico por zona',
+    desc: 'Te muestra qué sectores necesitan atención, con la severidad y la causa probable.',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
       </svg>
     ),
+    image: '/feature_diagnostico.jpg',
   },
   {
-    title: 'Prescripción Diferenciada',
-    desc: 'Genera órdenes de trabajo ISO-XML para maquinaria de aplicación variable con buffer geométrico.',
+    title: 'Mapa interactivo',
+    desc: 'Visualizá cada zona coloreada según su estado, directo desde el navegador.',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
       </svg>
     ),
+    image: '/feature_mapa.jpg',
   },
 ]
 
@@ -101,19 +77,17 @@ const FAQS = [
   },
   {
     question: '¿Puedo integrar AgroNexo con mis sistemas existentes?',
-    answer: 'Sí. AgroNexo expone una API REST completa con endpoints GeoJSON y exportación a Shapefile, ISO-XML e integración IoT. Compatible con sistemas de autoguiado John Deere y Case IH mediante RTK.',
+    answer: 'Sí. AgroNexo expone una API REST completa con endpoints GeoJSON y exportación a Shapefile e integración IoT. Compatible con sistemas de autoguiado John Deere y Case IH mediante RTK.',
   },
   {
     question: '¿Cuánto tiempo tarda el procesamiento de un lote?',
     answer: 'El pipeline GIS completo (carga GeoTIFF → índices → vectorización → diagnóstico) tarda entre 2 y 8 minutos según el tamaño del archivo. El progreso es visible en tiempo real mediante polling cada 2 segundos.',
   },
   {
-    question: '¿Cómo accedo a los reportes y prescripciones?',
-    answer: 'Desde el dashboard podés descargar reportes PDF (WeasyPrint), archivos Shapefile.zip para maquinaria y órdenes ISO-XML para ISOBUS. También están disponibles via API para integración automática con tu flujo de trabajo.',
+    question: '¿Cómo accedo a los reportes?',
+    answer: 'Desde el dashboard podés descargar reportes PDF (WeasyPrint), archivos Shapefile.zip para maquinaria. También están disponibles via API para integración automática con tu flujo de trabajo.',
   },
 ]
-
-const LOGOS = ['TERRA AGRO', 'CAMPO+', 'AGROVIA', 'NEXO SAT', 'GEO-CAMPO', 'AGROTECH', 'SOJA360', 'NEA PROD']
 
 /* ── Component ── */
 export default function Landing() {
@@ -126,10 +100,8 @@ export default function Landing() {
   const [autoRotationKey, setAutoRotationKey] = useState(0)
   const [wordIndex, setWordIndex] = useState(0)
   const [wordFade, setWordFade] = useState(true)
-  const [dashTilt, setDashTilt] = useState(0)
   const [openFaq, setOpenFaq] = useState(null)
 
-  const dashRef = useRef(null)
   const observerRef = useRef(null)
 
   // Word rotation
@@ -144,20 +116,9 @@ export default function Landing() {
     return () => clearInterval(interval)
   }, [])
 
-  // Scroll: parallax + dashboard tilt
+  // Scroll: parallax
   useEffect(() => {
-    const onScroll = () => {
-      setScrollY(window.scrollY)
-      if (dashRef.current) {
-        const rect = dashRef.current.getBoundingClientRect()
-        const vh = window.innerHeight
-        const start = vh * 0.8
-        const end = vh * 0.2
-        if (rect.top >= start) setDashTilt(0)
-        else if (rect.top <= end) setDashTilt(15)
-        else setDashTilt(((start - rect.top) / (start - end)) * 15)
-      }
-    }
+    const onScroll = () => setScrollY(window.scrollY)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -204,7 +165,7 @@ export default function Landing() {
           </button>
 
           <nav className="l2nd-nav">
-            {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
+            {[['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
               <button key={id} className="l2nd-nav-link" onClick={() => scrollTo(id)}>{label}</button>
             ))}
           </nav>
@@ -228,7 +189,7 @@ export default function Landing() {
       {/* ── Mobile menu overlay ── */}
       {isMenuOpen && (
         <div className="l2nd-mobile-menu">
-          {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
+          {[['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
             <button key={id} className="l2nd-mobile-menu-link" onClick={() => scrollTo(id)}>{label}</button>
           ))}
           <button className="l2nd-mobile-menu-cta" onClick={() => { goLogin(); setIsMenuOpen(false) }}>Ingresar a la plataforma</button>
@@ -237,88 +198,50 @@ export default function Landing() {
 
       {/* ── Hero ── */}
       <section className="l2nd-hero">
-        <div
-          className="l2nd-hero-parallax"
-          style={{ transform: `translateY(${scrollY * 0.4}px)` }}
-        />
-        <div className="l2nd-hero-gradient" />
+        <div className="l2nd-hero-top">
+          <div
+            className="l2nd-hero-parallax"
+            style={{ transform: `translateY(${scrollY * 0.4}px)` }}
+          />
+          <div className="l2nd-hero-gradient" />
 
-        <div
-          className="l2nd-hero-content"
-          style={{ transform: `translateY(${scrollY * 0.15}px)` }}
-        >
-          <div className="l2nd-hero-text">
-            <h1 className="l2nd-hero-title">
+          <div
+            className="l2nd-hero-headline-wrap"
+            style={{ transform: `translateY(${scrollY * 0.15}px)` }}
+          >
+            <h1 className="l2nd-hero-headline">
               <span className={`l2nd-hero-word l2nd-stagger${wordFade ? '' : ' l2nd-word-hidden'}`}>
                 Gestioná <span className="l2nd-hero-accent">{DYNAMIC_WORDS[wordIndex]}</span>
               </span>
               <span className="l2nd-stagger l2nd-stagger-2">a escala</span>
             </h1>
-            <p className="l2nd-hero-desc l2nd-stagger l2nd-stagger-3">
-              Monitoreo de cultivos con IA. Detectá amenazas, calculá índices de vegetación
-              y tomá decisiones agronómicas en tiempo real.
+            <p className="l2nd-hero-subtitle l2nd-stagger l2nd-stagger-3">
+              Análisis simple y aplicación selectiva
             </p>
-            <div className="l2nd-stagger l2nd-stagger-4">
+          </div>
+        </div>
+
+        <div className="l2nd-hero-bottom">
+          <div className="l2nd-hero-card l2nd-stagger l2nd-stagger-3">
+            <div className="l2nd-hero-text">
+              <span className="l2nd-hero-eyebrow">Diagnóstico agronómico con IA</span>
+              <h2 className="l2nd-hero-title">Lo que ocurre en tu lote</h2>
+              <p className="l2nd-hero-desc">
+                Cada lote se divide en zonas. Para cada una, calculamos su NDVI, medimos la
+                severidad, te decimos la causa probable y acción recomendable.
+              </p>
               <button className="l2nd-btn-hero" onClick={goLogin}>
-                Comenzar ahora
+                Analizar mi primer lote
               </button>
             </div>
-          </div>
 
-          {/* Dashboard mock */}
-          <div className="l2nd-stagger l2nd-stagger-5 l2nd-dashboard-wrap" ref={dashRef}>
-            <div style={{ perspective: '1200px' }}>
-              <div
-                className="l2nd-dashboard-frame"
-                style={{ transform: `rotateX(${dashTilt}deg)`, transition: 'transform 0.05s linear' }}
-              >
-                <img src="/fondo.jpeg" alt="AgroNexo Dashboard" className="l2nd-dashboard-img" />
-                {/* Overlay chip */}
-                <div className="l2nd-dashboard-chip">
-                  <div className="l2nd-chip-dot" />
-                  <span className="l2nd-chip-label">NDVI · FIELD_042</span>
-                  <span className="l2nd-chip-value">84% SALUD</span>
-                  <div className="l2nd-chip-bar"><div className="l2nd-chip-fill" /></div>
-                </div>
-              </div>
+            <div className="l2nd-hero-visual">
+              <img
+                src="/dashboard.jpeg"
+                alt="Dashboard de diagnóstico de AgroNexo en un laptop"
+                className="l2nd-hero-laptop"
+              />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Marquee ── */}
-      <section className="l2nd-marquee-section">
-        <p className="l2nd-marquee-label">Empresas líderes que confían en AgroNexo</p>
-        <div className="l2nd-marquee">
-          <div className="l2nd-marquee-track">
-            {[...LOGOS, ...LOGOS].map((l, i) => (
-              <span key={i} className="l2nd-marquee-item">{l}</span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Metrics ── */}
-      <section id="metrics" className="l2nd-section l2nd-anim">
-        <div className="l2nd-container">
-          <h2 className="l2nd-section-title">
-            Impacto <span className="l2nd-gradient-text">Agronómico</span> a Escala
-          </h2>
-          <p className="l2nd-section-desc">
-            Respaldado por datos reales de campo en el NEA argentino.
-          </p>
-
-          <div className="l2nd-metrics-grid">
-            {METRICS.map((m, i) => (
-              <div key={i} className="l2nd-metric-card">
-                <div className="l2nd-metric-label">
-                  <span className={`l2nd-metric-dot l2nd-dot-${m.accent}`} />
-                  {m.label}
-                </div>
-                <AnimatedCounter value={m.value} />
-                <div className="l2nd-metric-desc">{m.desc}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -345,9 +268,10 @@ export default function Landing() {
               {/* Mobile: single image */}
               <div className="l2nd-features-img-mobile">
                 <img
-                  src="/fondo.jpeg"
-                  alt="Feature"
-                  style={{ opacity: imageFade ? 1 : 0, transition: 'opacity 0.3s' }}
+                  src={FEATURES[selectedFeature].image}
+                  alt={FEATURES[selectedFeature].title}
+                  onError={handleImageError}
+                  style={{ ...imageStyle(FEATURES[selectedFeature]), opacity: imageFade ? 1 : 0, transition: 'opacity 0.3s' }}
                 />
               </div>
 
@@ -393,7 +317,7 @@ export default function Landing() {
                       transition: 'all 0.6s cubic-bezier(0.16,1,0.3,1)',
                     }}
                   >
-                    <img src="/fondo.jpeg" alt={FEATURES[i].title} />
+                    <img src={FEATURES[i].image} alt={FEATURES[i].title} style={imageStyle(FEATURES[i])} onError={handleImageError} />
                   </div>
                 )
               })}
