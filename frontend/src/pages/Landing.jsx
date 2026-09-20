@@ -1,49 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-/* ── Animated Counter ── */
-function AnimatedCounter({ value }) {
-  const [display, setDisplay] = useState('0')
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return
-        const numStr = value.replace(/[^0-9.]/g, '')
-        const unit = value.replace(/[0-9.]/g, '')
-        const target = parseFloat(numStr)
-        let current = 0
-        const increment = target / 60
-        const interval = setInterval(() => {
-          current += increment
-          if (current >= target) {
-            setDisplay(`${target}${unit}`)
-            clearInterval(interval)
-          } else {
-            setDisplay(`${current.toFixed(1)}${unit}`.replace('.0', ''))
-          }
-        }, 16)
-        observer.disconnect()
-      },
-      { threshold: 0.5 }
-    )
-    if (ref.current) observer.observe(ref.current)
-    return () => observer.disconnect()
-  }, [value])
-
-  return <div className="l2nd-counter-num" ref={ref}>{display}</div>
-}
-
 /* ── Data ── */
 const DYNAMIC_WORDS = ['cultivos', 'lotes', 'datos', 'rendimiento', 'recursos']
-
-const METRICS = [
-  { label: 'LOTES ANALIZADOS',    value: '1.2K', desc: 'campos procesados',      accent: 'green' },
-  { label: 'ÍNDICES CALCULADOS',  value: '38K',  desc: 'análisis NDVI / NDRE',   accent: 'teal'  },
-  { label: 'REDUCCIÓN INSUMOS',   value: '30%',  desc: 'fertilizante ahorrado',  accent: 'green' },
-  { label: 'PRECISIÓN DETECCIÓN', value: '99%',  desc: 'accuracy del modelo IA', accent: 'teal'  },
-]
 
 const FEATURES = [
   {
@@ -113,8 +72,6 @@ const FAQS = [
   },
 ]
 
-const LOGOS = ['TERRA AGRO', 'CAMPO+', 'AGROVIA', 'NEXO SAT', 'GEO-CAMPO', 'AGROTECH', 'SOJA360', 'NEA PROD']
-
 /* ── Component ── */
 export default function Landing() {
   const navigate = useNavigate()
@@ -126,10 +83,8 @@ export default function Landing() {
   const [autoRotationKey, setAutoRotationKey] = useState(0)
   const [wordIndex, setWordIndex] = useState(0)
   const [wordFade, setWordFade] = useState(true)
-  const [dashTilt, setDashTilt] = useState(0)
   const [openFaq, setOpenFaq] = useState(null)
 
-  const dashRef = useRef(null)
   const observerRef = useRef(null)
 
   // Word rotation
@@ -144,20 +99,9 @@ export default function Landing() {
     return () => clearInterval(interval)
   }, [])
 
-  // Scroll: parallax + dashboard tilt
+  // Scroll: parallax
   useEffect(() => {
-    const onScroll = () => {
-      setScrollY(window.scrollY)
-      if (dashRef.current) {
-        const rect = dashRef.current.getBoundingClientRect()
-        const vh = window.innerHeight
-        const start = vh * 0.8
-        const end = vh * 0.2
-        if (rect.top >= start) setDashTilt(0)
-        else if (rect.top <= end) setDashTilt(15)
-        else setDashTilt(((start - rect.top) / (start - end)) * 15)
-      }
-    }
+    const onScroll = () => setScrollY(window.scrollY)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -204,7 +148,7 @@ export default function Landing() {
           </button>
 
           <nav className="l2nd-nav">
-            {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
+            {[['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
               <button key={id} className="l2nd-nav-link" onClick={() => scrollTo(id)}>{label}</button>
             ))}
           </nav>
@@ -228,7 +172,7 @@ export default function Landing() {
       {/* ── Mobile menu overlay ── */}
       {isMenuOpen && (
         <div className="l2nd-mobile-menu">
-          {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
+          {[['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
             <button key={id} className="l2nd-mobile-menu-link" onClick={() => scrollTo(id)}>{label}</button>
           ))}
           <button className="l2nd-mobile-menu-cta" onClick={() => { goLogin(); setIsMenuOpen(false) }}>Ingresar a la plataforma</button>
@@ -237,88 +181,45 @@ export default function Landing() {
 
       {/* ── Hero ── */}
       <section className="l2nd-hero">
-        <div
-          className="l2nd-hero-parallax"
-          style={{ transform: `translateY(${scrollY * 0.4}px)` }}
-        />
-        <div className="l2nd-hero-gradient" />
+        <div className="l2nd-hero-top">
+          <div
+            className="l2nd-hero-parallax"
+            style={{ transform: `translateY(${scrollY * 0.4}px)` }}
+          />
+          <div className="l2nd-hero-gradient" />
 
-        <div
-          className="l2nd-hero-content"
-          style={{ transform: `translateY(${scrollY * 0.15}px)` }}
-        >
-          <div className="l2nd-hero-text">
-            <h1 className="l2nd-hero-title">
-              <span className={`l2nd-hero-word l2nd-stagger${wordFade ? '' : ' l2nd-word-hidden'}`}>
-                Gestioná <span className="l2nd-hero-accent">{DYNAMIC_WORDS[wordIndex]}</span>
-              </span>
-              <span className="l2nd-stagger l2nd-stagger-2">a escala</span>
-            </h1>
-            <p className="l2nd-hero-desc l2nd-stagger l2nd-stagger-3">
-              Monitoreo de cultivos con IA. Detectá amenazas, calculá índices de vegetación
-              y tomá decisiones agronómicas en tiempo real.
-            </p>
-            <div className="l2nd-stagger l2nd-stagger-4">
+          <h1
+            className="l2nd-hero-headline"
+            style={{ transform: `translateY(${scrollY * 0.15}px)` }}
+          >
+            <span className={`l2nd-hero-word l2nd-stagger${wordFade ? '' : ' l2nd-word-hidden'}`}>
+              Gestioná <span className="l2nd-hero-accent">{DYNAMIC_WORDS[wordIndex]}</span>
+            </span>
+            <span className="l2nd-stagger l2nd-stagger-2">a escala</span>
+          </h1>
+        </div>
+
+        <div className="l2nd-hero-bottom">
+          <div className="l2nd-hero-card l2nd-stagger l2nd-stagger-3">
+            <div className="l2nd-hero-text">
+              <span className="l2nd-hero-eyebrow">Diagnóstico agronómico con IA</span>
+              <h2 className="l2nd-hero-title">Lo que ocurre en tu lote</h2>
+              <p className="l2nd-hero-desc">
+                Ortomosaicos de dron + índices espectrales (NDVI, NDRE, SAVI) que detectan
+                estrés hídrico, plagas y enfermedades por zona, no por lote entero.
+              </p>
               <button className="l2nd-btn-hero" onClick={goLogin}>
-                Comenzar ahora
+                Analizar mi primer lote
               </button>
             </div>
-          </div>
 
-          {/* Dashboard mock */}
-          <div className="l2nd-stagger l2nd-stagger-5 l2nd-dashboard-wrap" ref={dashRef}>
-            <div style={{ perspective: '1200px' }}>
-              <div
-                className="l2nd-dashboard-frame"
-                style={{ transform: `rotateX(${dashTilt}deg)`, transition: 'transform 0.05s linear' }}
-              >
-                <img src="/fondo.jpeg" alt="AgroNexo Dashboard" className="l2nd-dashboard-img" />
-                {/* Overlay chip */}
-                <div className="l2nd-dashboard-chip">
-                  <div className="l2nd-chip-dot" />
-                  <span className="l2nd-chip-label">NDVI · FIELD_042</span>
-                  <span className="l2nd-chip-value">84% SALUD</span>
-                  <div className="l2nd-chip-bar"><div className="l2nd-chip-fill" /></div>
-                </div>
-              </div>
+            <div className="l2nd-hero-visual">
+              <img
+                src="/dashboard.jpeg"
+                alt="Dashboard de diagnóstico de AgroNexo en un laptop"
+                className="l2nd-hero-laptop"
+              />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Marquee ── */}
-      <section className="l2nd-marquee-section">
-        <p className="l2nd-marquee-label">Empresas líderes que confían en AgroNexo</p>
-        <div className="l2nd-marquee">
-          <div className="l2nd-marquee-track">
-            {[...LOGOS, ...LOGOS].map((l, i) => (
-              <span key={i} className="l2nd-marquee-item">{l}</span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Metrics ── */}
-      <section id="metrics" className="l2nd-section l2nd-anim">
-        <div className="l2nd-container">
-          <h2 className="l2nd-section-title">
-            Impacto <span className="l2nd-gradient-text">Agronómico</span> a Escala
-          </h2>
-          <p className="l2nd-section-desc">
-            Respaldado por datos reales de campo en el NEA argentino.
-          </p>
-
-          <div className="l2nd-metrics-grid">
-            {METRICS.map((m, i) => (
-              <div key={i} className="l2nd-metric-card">
-                <div className="l2nd-metric-label">
-                  <span className={`l2nd-metric-dot l2nd-dot-${m.accent}`} />
-                  {m.label}
-                </div>
-                <AnimatedCounter value={m.value} />
-                <div className="l2nd-metric-desc">{m.desc}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
