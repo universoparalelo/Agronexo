@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-/* ── Animated Counter ── */
-function AnimatedCounter({ value }) {
+/* ── Animated Counter Component ── */
+function AnimatedCounter({ value, prefix = '', suffix = '' }) {
   const [display, setDisplay] = useState('0')
   const ref = useRef(null)
 
@@ -11,510 +11,925 @@ function AnimatedCounter({ value }) {
       ([entry]) => {
         if (!entry.isIntersecting) return
         const numStr = value.replace(/[^0-9.]/g, '')
-        const unit = value.replace(/[0-9.]/g, '')
         const target = parseFloat(numStr)
+        if (isNaN(target)) {
+          setDisplay(value)
+          return
+        }
         let current = 0
-        const increment = target / 60
+        const step = target / 50
         const interval = setInterval(() => {
-          current += increment
+          current += step
           if (current >= target) {
-            setDisplay(`${target}${unit}`)
+            setDisplay(target % 1 === 0 ? target.toString() : target.toFixed(1))
             clearInterval(interval)
           } else {
-            setDisplay(`${current.toFixed(1)}${unit}`.replace('.0', ''))
+            setDisplay(current >= 10 ? Math.floor(current).toString() : current.toFixed(1))
           }
-        }, 16)
+        }, 20)
         observer.disconnect()
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 }
     )
     if (ref.current) observer.observe(ref.current)
     return () => observer.disconnect()
   }, [value])
 
-  return <div className="l2nd-counter-num" ref={ref}>{display}</div>
+  return (
+    <span ref={ref} className="l2nd-counter-val">
+      {prefix}{display}{suffix}
+    </span>
+  )
 }
 
-/* ── Data ── */
-const DYNAMIC_WORDS = ['cultivos', 'lotes', 'datos', 'rendimiento', 'recursos']
+/* ── Data Constants ── */
+const DYNAMIC_WORDS = ['cultivos', 'lotes agrícolas', 'rendimientos', 'recursos', 'decisiones']
 
 const METRICS = [
-  { label: 'LOTES ANALIZADOS',    value: '1.2K', desc: 'campos procesados',      accent: 'green' },
-  { label: 'ÍNDICES CALCULADOS',  value: '38K',  desc: 'análisis NDVI / NDRE',   accent: 'teal'  },
-  { label: 'REDUCCIÓN INSUMOS',   value: '30%',  desc: 'fertilizante ahorrado',  accent: 'green' },
-  { label: 'PRECISIÓN DETECCIÓN', value: '99%',  desc: 'accuracy del modelo IA', accent: 'teal'  },
+  { label: 'Lotes Procesados', num: '1250', suffix: '+', desc: 'campos monitoreados en el NEA', accent: 'emerald' },
+  { label: 'Índices Calculados', num: '45', suffix: 'K', desc: 'análisis NDVI, NDRE y SAVI', accent: 'lime' },
+  { label: 'Ahorro de Insumos', num: '28', suffix: '%', desc: 'reducción promedio en fertilizantes', accent: 'cyan' },
+  { label: 'Precisión Diagnóstica', num: '99.4', suffix: '%', desc: 'exactitud en detección de anomalías', accent: 'emerald' },
 ]
 
-const FEATURES = [
+const PIPELINE_STEPS = [
   {
+    id: 'captura',
+    step: '01',
     title: 'Captura Multiespectral',
-    desc: 'Drones y satélites capturan bandas NIR, RE y Green con sincronización GPS RTK centimétrica.',
+    subtitle: 'Satélite Sentinel-2 & Drones RTK',
+    desc: 'Integración continua de pasadas satelitales cada 5 días y vuelos de drones con sensores multiespectrales (NIR, Red Edge, Green). Georreferenciación centimétrica en proyección EPSG:32721.',
+    badge: 'Resolución Centimétrica',
+    features: ['Soporte GeoTIFF multibanda', 'Pasadas Sentinel-2 automáticas', 'Corrección atmosférica BOA'],
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
       </svg>
     ),
   },
   {
-    title: 'Análisis IA en tiempo real',
-    desc: 'Red neuronal que procesa ortomosaicos y genera índices de vegetación precisos al instante.',
+    id: 'indices',
+    step: '02',
+    title: 'Procesamiento GIS & Índices',
+    subtitle: 'Pipeline Celery + Rasterio en Paralelo',
+    desc: 'Cálculo simultáneo de NDVI, NDRE, SAVI y ExG. Umbralización adaptativa (Otsu y percentil) y vectorización de polígonos homogéneos con filtrado de ruido y conectividad 8.',
+    badge: 'Multi-índice Paralelo',
+    features: ['NDVI / NDRE / SAVI / ExG', 'Umbralización Otsu / Fija / Percentil', 'Detección de Zonas Atípicas (Z-Score)'],
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <path d="M3 9h18M9 21V9" />
       </svg>
     ),
   },
   {
-    title: 'Diagnóstico de Anomalías',
-    desc: 'Detecta focos de estrés hídrico, plagas y deficiencias nutricionales semanas antes que el ojo humano.',
+    id: 'diagnostico',
+    step: '03',
+    title: 'Motor de Diagnóstico con IA',
+    subtitle: '20+ Reglas Agronómicas Regionales',
+    desc: 'Evaluación inteligente que combina morfología de manchas, variabilidad espacial y base de datos fitosanitaria para identificar estrés hídrico, compactación, malezas o deficiencias nutricionales.',
+    badge: 'Expertise NEA',
+    features: ['Clasificación por severidad (Crítica, Media, Leve)', 'Zonificación de Unidades de Manejo', 'Prescripción de fitosanitarios por causa'],
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
       </svg>
     ),
   },
   {
-    title: 'Prescripción Diferenciada',
-    desc: 'Genera órdenes de trabajo ISO-XML para maquinaria de aplicación variable con buffer geométrico.',
+    id: 'prescripcion',
+    step: '04',
+    title: 'Prescripción & Aplicación Variable',
+    subtitle: 'Compatibilidad con Maquinaria & Reportes',
+    desc: 'Exportación instantánea de prescripciones de dosis variable en formatos estándar Shapefile e ISO-XML para computadoras de pulverizadoras y sembradoras, junto a reportes ejecutivos en PDF.',
+    badge: 'Listo para Campo',
+    features: ['Reportes PDF automáticos', 'Exportación Shapefile / GeoJSON', 'Compatible con John Deere, Case IH y Trimble'],
     icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
       </svg>
     ),
   },
+]
+
+const CROPS_DATA = [
+  { id: 'soja', name: 'Soja', baseCostHa: 180, potentialSavingPct: 0.22, yieldGainPct: 0.08, priceTon: 340, avgYieldHa: 3.2 },
+  { id: 'maiz', name: 'Maíz', baseCostHa: 260, potentialSavingPct: 0.25, yieldGainPct: 0.10, priceTon: 190, avgYieldHa: 8.5 },
+  { id: 'algodon', name: 'Algodón', baseCostHa: 310, potentialSavingPct: 0.28, yieldGainPct: 0.12, priceTon: 620, avgYieldHa: 2.8 },
+  { id: 'sorgo', name: 'Sorgo', baseCostHa: 140, potentialSavingPct: 0.20, yieldGainPct: 0.07, priceTon: 160, avgYieldHa: 5.5 },
+]
+
+const HOTSPOTS_DATA = [
+  { id: 1, top: '28%', left: '32%', label: 'Zona Norte', status: 'Estrés Hídrico', ndvi: '0.38', color: '#ef4444', desc: 'Déficit hídrico detectado en vertisol con pendiente leve.' },
+  { id: 2, top: '45%', left: '68%', label: 'Zona Este', status: 'Óptimo', ndvi: '0.84', color: '#6db88a', desc: 'Vigor vegetal alto. Excelente respuesta a fertilización nitrogenada.' },
+  { id: 3, top: '72%', left: '40%', label: 'Bajo Central', status: 'Anomalía Media', ndvi: '0.52', color: '#f59e0b', desc: 'Posible enmalezamiento localizado en cabecera.' },
 ]
 
 const FAQS = [
   {
-    question: '¿Cómo funciona el monitoreo satelital de AgroNexo?',
-    answer: 'Procesamos imágenes multiespectrales de Sentinel-2 y drones DJI Mavic 3 Multispectral. Nuestro pipeline extrae bandas NIR, RED y GREEN para calcular NDVI, NDRE y SAVI con resolución centimétrica, generando alertas automáticas ante variaciones superiores al umbral configurado.',
+    q: '¿Cómo se procesan las imágenes satelitales y de drones en AgroNexo?',
+    a: 'Nuestra plataforma ingesta ortomosaicos GeoTIFF de drones (DJI, eBee, etc.) y pasadas satelitales Sentinel-2 de la ESA. El motor de procesamiento en Celery extrae las bandas espectrales (NIR, Red, RedEdge, Green), calcula los índices de vegetación a nivel de píxel y vectoriza automáticamente las zonas con umbrales adaptativos.',
   },
   {
-    question: '¿Qué cultivos y regiones cubre la plataforma?',
-    answer: 'AgroNexo está optimizado para soja, algodón, maíz y sorgo en el NEA argentino (Chaco, Formosa, Corrientes). El sistema contempla las particularidades edáficas de vertisoles y suelos sódico-salinos de la región.',
+    q: '¿Qué diferencia a AgroNexo de otros visores NDVI convencionales?',
+    a: 'AgroNexo no se limita a mostrar mapas de colores; incorpora un motor de diagnóstico agronómico entrenado con más de 20 reglas específicas para suelos y cultivos del NEA argentino (Chaco, Formosa, Corrientes, Santa Fe Norte), agrupando polígonos contiguos en Unidades de Manejo accionables y recomendando productos fitosanitarios específicos.',
   },
   {
-    question: '¿Qué precisión tiene la detección de anomalías?',
-    answer: 'Nuestro modelo alcanza 99% de precisión en la clasificación de zonas. Clasificamos patrones espaciales (circulares, lineales, difusos) para diferenciar enfermedades fúngicas, compactación, déficit hídrico y plagas con scoring probabilístico.',
+    q: '¿Qué formatos de exportación son compatibles con mi maquinaria?',
+    a: 'Podés exportar prescripciones en formato Shapefile (.shp / .zip) e ISO-XML compatibles con monitores y controladores de aplicación variable de marcas líderes como John Deere (GS3, Gen4), Case IH (AFS Pro), Trimble, Raven y Yomel, además de reportes PDF ejecutivos listos para imprimir.',
   },
   {
-    question: '¿Puedo integrar AgroNexo con mis sistemas existentes?',
-    answer: 'Sí. AgroNexo expone una API REST completa con endpoints GeoJSON y exportación a Shapefile, ISO-XML e integración IoT. Compatible con sistemas de autoguiado John Deere y Case IH mediante RTK.',
+    q: '¿Cuánto tiempo tarda en procesarse un vuelo completo?',
+    a: 'Un GeoTIFF de 500 MB (100 a 300 hectáreas a resolución centimétrica) se procesa en segundo plano en menos de 2 a 4 minutos, calculando simultáneamente NDVI, NDRE, SAVI y ExG con barra de progreso en vivo.',
   },
   {
-    question: '¿Cuánto tiempo tarda el procesamiento de un lote?',
-    answer: 'El pipeline GIS completo (carga GeoTIFF → índices → vectorización → diagnóstico) tarda entre 2 y 8 minutos según el tamaño del archivo. El progreso es visible en tiempo real mediante polling cada 2 segundos.',
-  },
-  {
-    question: '¿Cómo accedo a los reportes y prescripciones?',
-    answer: 'Desde el dashboard podés descargar reportes PDF (WeasyPrint), archivos Shapefile.zip para maquinaria y órdenes ISO-XML para ISOBUS. También están disponibles via API para integración automática con tu flujo de trabajo.',
+    q: '¿Puedo dibujar o importar los límites de mis lotes?',
+    a: 'Sí. Podés dibujar tus lotes directamente sobre el mapa satelital interactivo, ingresar coordenadas de vértices, o dejar que el sistema extraiga automáticamente el límite geográfico a partir del bounding box del ortomosaico cargado.',
   },
 ]
 
-const LOGOS = ['TERRA AGRO', 'CAMPO+', 'AGROVIA', 'NEXO SAT', 'GEO-CAMPO', 'AGROTECH', 'SOJA360', 'NEA PROD']
+const INTEGRATIONS = [
+  'Sentinel-2 ESA',
+  'DJI Enterprise',
+  'John Deere Operations',
+  'Case IH AFS',
+  'Trimble Agriculture',
+  'PostGIS & GDAL',
+  'WeasyPrint PDF',
+  'ISO-XML Standards'
+]
 
-/* ── Component ── */
 export default function Landing() {
   const navigate = useNavigate()
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [scrollY, setScrollY] = useState(0)
-  const [selectedFeature, setSelectedFeature] = useState(0)
-  const [imageFade, setImageFade] = useState(true)
-  const [autoRotationKey, setAutoRotationKey] = useState(0)
+  const [activeLayer, setActiveLayer] = useState('ndvi') // 'rgb' | 'ndvi' | 'ndre' | 'zonas'
+  const [selectedHotspot, setSelectedHotspot] = useState(HOTSPOTS_DATA[1])
+  const [sliderPosition, setSliderPosition] = useState(50)
+  const [isDraggingSlider, setIsDraggingSlider] = useState(false)
+  const [activeStep, setActiveStep] = useState(0)
   const [wordIndex, setWordIndex] = useState(0)
   const [wordFade, setWordFade] = useState(true)
-  const [dashTilt, setDashTilt] = useState(0)
-  const [openFaq, setOpenFaq] = useState(null)
+  const [selectedCrop, setSelectedCrop] = useState(CROPS_DATA[0])
+  const [hectares, setHectares] = useState(350)
+  const [openFaq, setOpenFaq] = useState(0)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const dashRef = useRef(null)
-  const observerRef = useRef(null)
+  const sliderContainerRef = useRef(null)
 
-  // Word rotation
+  // Dynamic word rotation
   useEffect(() => {
-    const interval = setInterval(() => {
+    const timer = setInterval(() => {
       setWordFade(false)
       setTimeout(() => {
-        setWordIndex(i => (i + 1) % DYNAMIC_WORDS.length)
+        setWordIndex((prev) => (prev + 1) % DYNAMIC_WORDS.length)
         setWordFade(true)
       }, 300)
-    }, 3000)
-    return () => clearInterval(interval)
+    }, 3200)
+    return () => clearInterval(timer)
   }, [])
 
-  // Scroll: parallax + dashboard tilt
+  // Auto step rotation in pipeline
   useEffect(() => {
-    const onScroll = () => {
-      setScrollY(window.scrollY)
-      if (dashRef.current) {
-        const rect = dashRef.current.getBoundingClientRect()
-        const vh = window.innerHeight
-        const start = vh * 0.8
-        const end = vh * 0.2
-        if (rect.top >= start) setDashTilt(0)
-        else if (rect.top <= end) setDashTilt(15)
-        else setDashTilt(((start - rect.top) / (start - end)) * 15)
-      }
-    }
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    const timer = setInterval(() => {
+      setActiveStep((prev) => (prev + 1) % PIPELINE_STEPS.length)
+    }, 7000)
+    return () => clearInterval(timer)
   }, [])
 
-  // Scroll-reveal IntersectionObserver
-  useEffect(() => {
-    setIsLoaded(true)
-    observerRef.current = new IntersectionObserver(
-      entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('l2nd-anim-in') }),
-      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
-    )
-    document.querySelectorAll('.l2nd-anim').forEach(el => observerRef.current.observe(el))
-    return () => observerRef.current?.disconnect()
-  }, [])
-
-  // Feature auto-rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setImageFade(false)
-      setTimeout(() => {
-        setSelectedFeature(i => (i + 1) % FEATURES.length)
-        setImageFade(true)
-      }, 300)
-    }, 6000)
-    return () => clearInterval(interval)
-  }, [autoRotationKey])
-
-  const scrollTo = id => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-    setIsMenuOpen(false)
+  // Slider drag handler
+  const handleSliderMove = (e) => {
+    if (!sliderContainerRef.current) return
+    const rect = sliderContainerRef.current.getBoundingClientRect()
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX
+    const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width))
+    const pct = Math.round((offsetX / rect.width) * 100)
+    setSliderPosition(pct)
   }
 
-  const goLogin = () => navigate('/login')
+  const handleTouchMove = (e) => {
+    if (isDraggingSlider) handleSliderMove(e)
+  }
+
+  useEffect(() => {
+    const onMouseUp = () => setIsDraggingSlider(false)
+    const onMouseMove = (e) => {
+      if (isDraggingSlider) handleSliderMove(e)
+    }
+
+    if (isDraggingSlider) {
+      window.addEventListener('mousemove', onMouseMove)
+      window.addEventListener('mouseup', onMouseUp)
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDraggingSlider])
+
+  // ROI calculations
+  const roiResults = useMemo(() => {
+    const inputSaving = hectares * selectedCrop.baseCostHa * selectedCrop.potentialSavingPct
+    const yieldIncrementTons = hectares * (selectedCrop.avgYieldHa * selectedCrop.yieldGainPct)
+    const extraRevenue = yieldIncrementTons * selectedCrop.priceTon
+    const totalBenefit = inputSaving + extraRevenue
+    const platformCostYear = Math.max(480, hectares * 2.5)
+    const netProfit = totalBenefit - platformCostYear
+    const roiMultiplier = (totalBenefit / platformCostYear).toFixed(1)
+
+    return {
+      inputSaving: Math.round(inputSaving).toLocaleString('es-AR'),
+      extraRevenue: Math.round(extraRevenue).toLocaleString('es-AR'),
+      totalBenefit: Math.round(totalBenefit).toLocaleString('es-AR'),
+      netProfit: Math.round(netProfit).toLocaleString('es-AR'),
+      roiMultiplier,
+    }
+  }, [hectares, selectedCrop])
+
+  const scrollToSection = (id) => {
+    setMobileMenuOpen(false)
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   return (
-    <div className={`l2nd-root${isLoaded ? ' l2nd-loaded' : ''}`}>
+    <div className="l2nd-page">
+      {/* ── Background Glow Elements ── */}
+      <div className="l2nd-bg-glow l2nd-bg-glow-top" />
+      <div className="l2nd-bg-glow l2nd-bg-glow-center" />
+      <div className="l2nd-grid-overlay" />
 
-      {/* ── Header ── */}
-      <header className="l2nd-header">
-        <div className="l2nd-header-inner">
-          <button className="l2nd-header-logo-btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-            <img src="/logo.png" alt="AgroNexo" className="l2nd-logo-img" />
-          </button>
+      {/* ── Navigation Bar ── */}
+      <header className="l2nd-navbar-wrap">
+        <div className="l2nd-navbar">
+          <div className="l2nd-nav-brand" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <img src="/logo_hoja.png" alt="AgroNexo Leaf" className="l2nd-nav-logo-icon" />
+            <span className="l2nd-nav-brand-text">
+              Agro<span className="l2nd-accent-text">Nexo</span>
+            </span>
+            <span className="l2nd-nav-tag">GIS v3.0</span>
+          </div>
 
-          <nav className="l2nd-nav">
-            {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
-              <button key={id} className="l2nd-nav-link" onClick={() => scrollTo(id)}>{label}</button>
-            ))}
+          <nav className="l2nd-nav-links">
+            <button className="l2nd-nav-btn" onClick={() => scrollToSection('demo-interactiva')}>Simulador</button>
+            <button className="l2nd-nav-btn" onClick={() => scrollToSection('comparador')}>Comparador</button>
+            <button className="l2nd-nav-btn" onClick={() => scrollToSection('pipeline')}>Tecnología</button>
+            <button className="l2nd-nav-btn" onClick={() => scrollToSection('roi-calculator')}>Calculadora ROI</button>
+            <button className="l2nd-nav-btn" onClick={() => scrollToSection('faq')}>Preguntas</button>
           </nav>
 
-          <button className="l2nd-btn-acceder" onClick={goLogin}>
-            Ingresar
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </button>
-
-          <button className="l2nd-menu-btn" onClick={() => setIsMenuOpen(v => !v)} aria-label="Menú">
-            {isMenuOpen
-              ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            }
-          </button>
+          <div className="l2nd-nav-actions">
+            <button className="l2nd-btn-ghost" onClick={() => navigate('/login')}>
+              Iniciar Sesión
+            </button>
+            <button className="l2nd-btn-primary l2nd-btn-nav" onClick={() => navigate('/login')}>
+              <span>Acceder al Sistema</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              className="l2nd-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Abrir menú"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {mobileMenuOpen ? (
+                  <path d="M18 6L6 18M6 6l12 12" />
+                ) : (
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
-      </header>
 
-      {/* ── Mobile menu overlay ── */}
-      {isMenuOpen && (
-        <div className="l2nd-mobile-menu">
-          {[['metrics','Impacto'],['features','Tecnología'],['faq','FAQ'],['cta','Acceso']].map(([id, label]) => (
-            <button key={id} className="l2nd-mobile-menu-link" onClick={() => scrollTo(id)}>{label}</button>
-          ))}
-          <button className="l2nd-mobile-menu-cta" onClick={() => { goLogin(); setIsMenuOpen(false) }}>Ingresar a la plataforma</button>
-        </div>
-      )}
-
-      {/* ── Hero ── */}
-      <section className="l2nd-hero">
-        <div
-          className="l2nd-hero-parallax"
-          style={{ transform: `translateY(${scrollY * 0.4}px)` }}
-        />
-        <div className="l2nd-hero-gradient" />
-
-        <div
-          className="l2nd-hero-content"
-          style={{ transform: `translateY(${scrollY * 0.15}px)` }}
-        >
-          <div className="l2nd-hero-text">
-            <h1 className="l2nd-hero-title">
-              <span className={`l2nd-hero-word l2nd-stagger${wordFade ? '' : ' l2nd-word-hidden'}`}>
-                Gestioná <span className="l2nd-hero-accent">{DYNAMIC_WORDS[wordIndex]}</span>
-              </span>
-              <span className="l2nd-stagger l2nd-stagger-2">a escala</span>
-            </h1>
-            <p className="l2nd-hero-desc l2nd-stagger l2nd-stagger-3">
-              Monitoreo de cultivos con IA. Detectá amenazas, calculá índices de vegetación
-              y tomá decisiones agronómicas en tiempo real.
-            </p>
-            <div className="l2nd-stagger l2nd-stagger-4">
-              <button className="l2nd-btn-hero" onClick={goLogin}>
-                Comenzar ahora
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="l2nd-mobile-nav">
+            <button className="l2nd-mobile-nav-link" onClick={() => scrollToSection('demo-interactiva')}>Simulador de Índices</button>
+            <button className="l2nd-mobile-nav-link" onClick={() => scrollToSection('comparador')}>Comparador RGB vs NDVI</button>
+            <button className="l2nd-mobile-nav-link" onClick={() => scrollToSection('pipeline')}>Pipeline GIS</button>
+            <button className="l2nd-mobile-nav-link" onClick={() => scrollToSection('roi-calculator')}>Calculadora de Ahorro</button>
+            <button className="l2nd-mobile-nav-link" onClick={() => scrollToSection('faq')}>Preguntas Frecuentes</button>
+            <div className="l2nd-mobile-nav-footer">
+              <button className="l2nd-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => navigate('/login')}>
+                Ingresar a la Plataforma
               </button>
             </div>
           </div>
+        )}
+      </header>
 
-          {/* Dashboard mock */}
-          <div className="l2nd-stagger l2nd-stagger-5 l2nd-dashboard-wrap" ref={dashRef}>
-            <div style={{ perspective: '1200px' }}>
-              <div
-                className="l2nd-dashboard-frame"
-                style={{ transform: `rotateX(${dashTilt}deg)`, transition: 'transform 0.05s linear' }}
-              >
-                <img src="/fondo.jpeg" alt="AgroNexo Dashboard" className="l2nd-dashboard-img" />
-                {/* Overlay chip */}
-                <div className="l2nd-dashboard-chip">
-                  <div className="l2nd-chip-dot" />
-                  <span className="l2nd-chip-label">NDVI · FIELD_042</span>
-                  <span className="l2nd-chip-value">84% SALUD</span>
-                  <div className="l2nd-chip-bar"><div className="l2nd-chip-fill" /></div>
-                </div>
-              </div>
+      {/* ── HERO SECTION ── */}
+      <section className="l2nd-hero-section">
+        <div className="l2nd-hero-container">
+          <div className="l2nd-hero-badge">
+            <span className="l2nd-badge-pulse" />
+            <span>Monitoreo Satelital & Drones en el NEA</span>
+            <span className="l2nd-badge-pill">IA Agronómica</span>
+          </div>
+
+          <h1 className="l2nd-hero-heading">
+            Gestioná tus{' '}
+            <span className={`l2nd-dynamic-word ${wordFade ? 'l2nd-word-visible' : 'l2nd-word-fading'}`}>
+              {DYNAMIC_WORDS[wordIndex]}
+            </span>
+            <br />
+            con precisión geoespacial.
+          </h1>
+
+          <p className="l2nd-hero-subheading">
+            Transformá ortomosaicos multiespectrales y pasadas Sentinel-2 en diagnósticos agronómicos
+            precisos, zonificaciones automáticas y prescripciones de dosis variable en tiempo real.
+          </p>
+
+          <div className="l2nd-hero-cta-group">
+            <button className="l2nd-btn-primary l2nd-btn-hero" onClick={() => navigate('/login')}>
+              <span>Comenzar Ahora</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button className="l2nd-btn-secondary l2nd-btn-hero" onClick={() => scrollToSection('demo-interactiva')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              <span>Ver Demo Interactiva</span>
+            </button>
+          </div>
+
+          {/* Quick stats ribbon */}
+          <div className="l2nd-hero-ribbon">
+            <div className="l2nd-ribbon-item">
+              <span className="l2nd-ribbon-val">Sentinel-2 & Dron</span>
+              <span className="l2nd-ribbon-lbl">Entrada Dual de Imágenes</span>
+            </div>
+            <div className="l2nd-ribbon-divider" />
+            <div className="l2nd-ribbon-item">
+              <span className="l2nd-ribbon-val">NDVI · NDRE · SAVI · ExG</span>
+              <span className="l2nd-ribbon-lbl">Multi-Índice Paralelo</span>
+            </div>
+            <div className="l2nd-ribbon-divider" />
+            <div className="l2nd-ribbon-item">
+              <span className="l2nd-ribbon-val">ISO-XML & Shapefile</span>
+              <span className="l2nd-ribbon-lbl">Exportación a Maquinaria</span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Marquee ── */}
-      <section className="l2nd-marquee-section">
-        <p className="l2nd-marquee-label">Empresas líderes que confían en AgroNexo</p>
-        <div className="l2nd-marquee">
-          <div className="l2nd-marquee-track">
-            {[...LOGOS, ...LOGOS].map((l, i) => (
-              <span key={i} className="l2nd-marquee-item">{l}</span>
-            ))}
+      {/* ── INTERACTIVE DEMO (HERO VISUALIZER) ── */}
+      <section id="demo-interactiva" className="l2nd-section l2nd-visualizer-section">
+        <div className="l2nd-section-header">
+          <div className="l2nd-section-tag">SIMULADOR EN VIVO</div>
+          <h2 className="l2nd-section-title">Visualizador Geoespacial Multiespectral</h2>
+          <p className="l2nd-section-desc">
+            Alterná entre capas satelitales e interactuá con los focos de diagnóstico detectados por nuestro motor IA.
+          </p>
+        </div>
+
+        <div className="l2nd-visualizer-card">
+          {/* Top Control Bar */}
+          <div className="l2nd-viz-toolbar">
+            <div className="l2nd-viz-meta">
+              <div className="l2nd-viz-live-indicator">
+                <span className="l2nd-live-dot" />
+                <span>LOTE "LA ESPERANZA #04" · 142.8 ha · SOJA R3</span>
+              </div>
+            </div>
+
+            {/* Layer Switcher */}
+            <div className="l2nd-viz-layers">
+              {[
+                { id: 'rgb', label: 'Color Real (RGB)', tag: 'Sensor' },
+                { id: 'ndvi', label: 'NDVI (Vigor)', tag: 'Índice' },
+                { id: 'ndre', label: 'NDRE (Clorofila)', tag: 'Estrés' },
+                { id: 'zonas', label: 'Zonificación', tag: 'Manejo' },
+              ].map((layer) => (
+                <button
+                  key={layer.id}
+                  className={`l2nd-layer-tab ${activeLayer === layer.id ? 'l2nd-layer-tab--active' : ''}`}
+                  onClick={() => setActiveLayer(layer.id)}
+                >
+                  <span className="l2nd-layer-label">{layer.label}</span>
+                  <span className="l2nd-layer-tag">{layer.tag}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Map & Visual Canvas */}
+          <div className="l2nd-viz-canvas">
+            {/* Background Map Simulation depending on layer */}
+            <div className={`l2nd-map-viewport l2nd-layer-${activeLayer}`}>
+              <img
+                src="/fondo.jpeg"
+                alt="Simulación Geoespacial AgroNexo"
+                className="l2nd-map-bg-img"
+              />
+              <div className={`l2nd-map-spectral-filter l2nd-filter-${activeLayer}`} />
+
+              {/* Vector Grid & Contours simulation */}
+              <div className="l2nd-map-vector-overlay" />
+
+              {/* Hotspots */}
+              {HOTSPOTS_DATA.map((spot) => (
+                <div
+                  key={spot.id}
+                  className={`l2nd-hotspot ${selectedHotspot.id === spot.id ? 'l2nd-hotspot--active' : ''}`}
+                  style={{ top: spot.top, left: spot.left }}
+                  onClick={() => setSelectedHotspot(spot)}
+                >
+                  <div className="l2nd-hotspot-beacon" style={{ borderColor: spot.color }} />
+                  <div className="l2nd-hotspot-core" style={{ backgroundColor: spot.color }} />
+                  <div className="l2nd-hotspot-pulse" style={{ backgroundColor: spot.color }} />
+                  <span className="l2nd-hotspot-badge">{spot.label}</span>
+                </div>
+              ))}
+
+              {/* Floating Live Telemetry HUD */}
+              <div className="l2nd-viz-hud">
+                <div className="l2nd-hud-header">
+                  <span className="l2nd-hud-title">Telemetría de Vuelo</span>
+                  <span className="l2nd-hud-status">PROCESADO · 100%</span>
+                </div>
+                <div className="l2nd-hud-grid">
+                  <div className="l2nd-hud-stat">
+                    <span className="l2nd-hud-stat-lbl">Índice Promedio</span>
+                    <span className="l2nd-hud-stat-val">
+                      {activeLayer === 'ndvi' ? '0.74 NDVI' : activeLayer === 'ndre' ? '0.62 NDRE' : '0.68 SAVI'}
+                    </span>
+                  </div>
+                  <div className="l2nd-hud-stat">
+                    <span className="l2nd-hud-stat-lbl">Zonas Homogéneas</span>
+                    <span className="l2nd-hud-stat-val">5 Unidades</span>
+                  </div>
+                  <div className="l2nd-hud-stat">
+                    <span className="l2nd-hud-stat-lbl">Variabilidad (CV)</span>
+                    <span className="l2nd-hud-stat-val">14.2%</span>
+                  </div>
+                  <div className="l2nd-hud-stat">
+                    <span className="l2nd-hud-stat-lbl">Resolución</span>
+                    <span className="l2nd-hud-stat-val">4.5 cm/px</span>
+                  </div>
+                </div>
+
+                {/* Color Legend Scale */}
+                <div className="l2nd-hud-legend">
+                  <div className="l2nd-legend-labels">
+                    <span>Bajo Vigor (0.1)</span>
+                    <span>Medio (0.5)</span>
+                    <span>Óptimo (0.9)</span>
+                  </div>
+                  <div className={`l2nd-legend-bar l2nd-legend-${activeLayer}`} />
+                </div>
+              </div>
+
+              {/* Selected Hotspot Detail Card */}
+              {selectedHotspot && (
+                <div className="l2nd-hotspot-card">
+                  <div className="l2nd-hotspot-card-header">
+                    <div>
+                      <span className="l2nd-hotspot-card-zone">{selectedHotspot.label}</span>
+                      <h4 className="l2nd-hotspot-card-status" style={{ color: selectedHotspot.color }}>
+                        {selectedHotspot.status}
+                      </h4>
+                    </div>
+                    <div className="l2nd-hotspot-card-badge">
+                      <span>NDVI</span>
+                      <strong>{selectedHotspot.ndvi}</strong>
+                    </div>
+                  </div>
+                  <p className="l2nd-hotspot-card-desc">{selectedHotspot.desc}</p>
+                  <div className="l2nd-hotspot-card-action">
+                    <button className="l2nd-btn-link" onClick={() => navigate('/login')}>
+                      Generar prescripción para este sector →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Metrics ── */}
-      <section id="metrics" className="l2nd-section l2nd-anim">
-        <div className="l2nd-container">
-          <h2 className="l2nd-section-title">
-            Impacto <span className="l2nd-gradient-text">Agronómico</span> a Escala
-          </h2>
+      {/* ── BEFORE & AFTER INTERACTIVE SLIDER ── */}
+      <section id="comparador" className="l2nd-section l2nd-slider-section">
+        <div className="l2nd-section-header">
+          <div className="l2nd-section-tag">TECNOLOGÍA DE DETECCIÓN</div>
+          <h2 className="l2nd-section-title">De Imagen Aérea a Diagnóstico Agronómico</h2>
           <p className="l2nd-section-desc">
-            Respaldado por datos reales de campo en el NEA argentino.
+            Arrastrá el divisor interactivo para comparar la vista en color natural frente al mapa térmico de índice NDVI procesado con vectorización.
           </p>
+        </div>
 
+        <div
+          ref={sliderContainerRef}
+          className="l2nd-split-container"
+          onMouseDown={() => setIsDraggingSlider(true)}
+          onTouchStart={() => setIsDraggingSlider(true)}
+          onTouchMove={handleTouchMove}
+        >
+          {/* Background Left: RGB Image */}
+          <div className="l2nd-split-layer l2nd-split-rgb">
+            <img src="/fondo.jpeg" alt="Fotografía RGB convencional" className="l2nd-split-img" />
+            <div className="l2nd-split-tag l2nd-split-tag-left">
+              <span>📷 CÁMARA RGB CONVENCIONAL</span>
+              <small>El estrés hídrico y las deficiencias son casi imperceptibles a simple vista</small>
+            </div>
+          </div>
+
+          {/* Foreground Right: NDVI Analyzed (Clipped) */}
+          <div
+            className="l2nd-split-layer l2nd-split-ndvi"
+            style={{ clipPath: `polygon(${sliderPosition}% 0, 100% 0, 100% 100%, ${sliderPosition}% 100%)` }}
+          >
+            <img src="/fondo.jpeg" alt="Análisis multiespectral NDVI" className="l2nd-split-img" />
+            <div className="l2nd-split-ndvi-overlay" />
+            <div className="l2nd-split-tag l2nd-split-tag-right">
+              <span>🛰️ ANÁLISIS MULTIESPECTRAL AGRONEXO</span>
+              <small>Detección anticipada de anomalías con clasificación de severidad y prescripción</small>
+            </div>
+          </div>
+
+          {/* Draggable Divider Handle */}
+          <div
+            className="l2nd-split-handle"
+            style={{ left: `${sliderPosition}%` }}
+          >
+            <div className="l2nd-split-handle-line" />
+            <div className="l2nd-split-handle-button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="15 18 9 12 15 6" />
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
+            <div className="l2nd-split-handle-line" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── METRICS & IMPACT ── */}
+      <section className="l2nd-section l2nd-metrics-section">
+        <div className="l2nd-container">
           <div className="l2nd-metrics-grid">
             {METRICS.map((m, i) => (
-              <div key={i} className="l2nd-metric-card">
-                <div className="l2nd-metric-label">
-                  <span className={`l2nd-metric-dot l2nd-dot-${m.accent}`} />
-                  {m.label}
+              <div key={i} className={`l2nd-metric-card l2nd-metric-card--${m.accent}`}>
+                <div className="l2nd-metric-header">
+                  <span className={`l2nd-metric-indicator l2nd-ind-${m.accent}`} />
+                  <span className="l2nd-metric-title">{m.label}</span>
                 </div>
-                <AnimatedCounter value={m.value} />
-                <div className="l2nd-metric-desc">{m.desc}</div>
+                <div className="l2nd-metric-counter">
+                  <AnimatedCounter value={m.num} suffix={m.suffix} />
+                </div>
+                <p className="l2nd-metric-description">{m.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="l2nd-section l2nd-anim">
+      {/* ── PIPELINE WORKFLOW (4 STEPS) ── */}
+      <section id="pipeline" className="l2nd-section l2nd-pipeline-section">
+        <div className="l2nd-section-header">
+          <div className="l2nd-section-tag">ARQUITECTURA DE PROCESAMIENTO</div>
+          <h2 className="l2nd-section-title">El Pipeline Agronómico en 4 Etapas</h2>
+          <p className="l2nd-section-desc">
+            Diseñado con tecnología GIS de alto rendimiento, workers asíncronos y algoritmos probados en el campo.
+          </p>
+        </div>
+
         <div className="l2nd-container">
-          <div className="l2nd-features-grid">
-            {/* Left: text + feature list */}
-            <div>
-              <div className="l2nd-eyebrow">
-                <span className="l2nd-eyebrow-dot" />
-                TECNOLOGÍA GIS
-              </div>
-              <h2 className="l2nd-features-title">
-                Cada lote agrícola{' '}
-                <span className="l2nd-gradient-text">importa</span>
-              </h2>
-              <p className="l2nd-features-desc">
-                Nuestra plataforma satelital con IA monitorea la biodiversidad del suelo, detecta
-                anomalías fitosanitarias, y alerta en tiempo real. Precisión al ritmo que exige el campo.
-              </p>
-
-              {/* Mobile: single image */}
-              <div className="l2nd-features-img-mobile">
-                <img
-                  src="/fondo.jpeg"
-                  alt="Feature"
-                  style={{ opacity: imageFade ? 1 : 0, transition: 'opacity 0.3s' }}
-                />
-              </div>
-
-              <div className="l2nd-features-list">
-                {FEATURES.map((f, i) => (
-                  <button
-                    key={i}
-                    className={`l2nd-feature-item${selectedFeature === i ? ' l2nd-feature-item--active' : ''}`}
-                    onClick={() => {
-                      setImageFade(false)
-                      setTimeout(() => { setSelectedFeature(i); setImageFade(true); setAutoRotationKey(k => k + 1) }, 300)
-                    }}
-                  >
-                    <span className={`l2nd-feature-icon${selectedFeature === i ? ' l2nd-feature-icon--active' : ''}`}>
-                      {f.icon}
-                    </span>
-                    <div>
-                      <h3 className="l2nd-feature-title">{f.title}</h3>
-                      <p className="l2nd-feature-desc">{f.desc}</p>
+          <div className="l2nd-pipeline-grid">
+            {/* Step Selection List */}
+            <div className="l2nd-pipeline-nav">
+              {PIPELINE_STEPS.map((step, idx) => (
+                <button
+                  key={step.id}
+                  className={`l2nd-step-card ${activeStep === idx ? 'l2nd-step-card--active' : ''}`}
+                  onClick={() => setActiveStep(idx)}
+                >
+                  <div className="l2nd-step-num">{step.step}</div>
+                  <div className="l2nd-step-body">
+                    <div className="l2nd-step-title-row">
+                      <span className="l2nd-step-title">{step.title}</span>
+                      <span className="l2nd-step-badge">{step.badge}</span>
                     </div>
-                    {selectedFeature === i && (
-                      <div className="l2nd-progress-track">
-                        <div className="l2nd-progress-bar" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                    <p className="l2nd-step-sub">{step.subtitle}</p>
+                  </div>
+                  <div className="l2nd-step-icon">{step.icon}</div>
+                  {activeStep === idx && <div className="l2nd-step-indicator-bar" />}
+                </button>
+              ))}
             </div>
 
-            {/* Right: image stack */}
-            <div className="l2nd-img-stack">
-              {FEATURES.map((_, i) => {
-                const pos = (i - selectedFeature + FEATURES.length) % FEATURES.length
-                return (
-                  <div
-                    key={i}
-                    className="l2nd-img-stack-item"
-                    style={{
-                      zIndex: FEATURES.length - pos,
-                      transform: `translateX(${pos * 18}px) scale(${1 - pos * 0.025})`,
-                      opacity: pos === 0 ? (imageFade ? 1 : 0.8) : Math.max(0, 0.55 - pos * 0.15),
-                      transition: 'all 0.6s cubic-bezier(0.16,1,0.3,1)',
-                    }}
-                  >
-                    <img src="/fondo.jpeg" alt={FEATURES[i].title} />
-                  </div>
-                )
-              })}
+            {/* Step Dynamic Preview Display */}
+            <div className="l2nd-pipeline-display">
+              <div className="l2nd-pipeline-preview-card">
+                <div className="l2nd-preview-header">
+                  <div className="l2nd-preview-phase">ETAPA {PIPELINE_STEPS[activeStep].step}</div>
+                  <h3 className="l2nd-preview-title">{PIPELINE_STEPS[activeStep].title}</h3>
+                  <p className="l2nd-preview-desc">{PIPELINE_STEPS[activeStep].desc}</p>
+                </div>
+
+                <div className="l2nd-preview-features">
+                  <span className="l2nd-preview-feat-lbl">Capacidades Destacadas:</span>
+                  <ul className="l2nd-preview-feat-list">
+                    {PIPELINE_STEPS[activeStep].features.map((feat, i) => (
+                      <li key={i} className="l2nd-preview-feat-item">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6db88a" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="l2nd-preview-action">
+                  <button className="l2nd-btn-primary" onClick={() => navigate('/login')}>
+                    <span>Explorar en el Dashboard</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── FAQ ── */}
-      <section id="faq" className="l2nd-section l2nd-anim">
-        <div className="l2nd-container l2nd-container--narrow">
-          <div className="l2nd-section-center">
-            <div className="l2nd-eyebrow l2nd-eyebrow--center">
-              <span className="l2nd-eyebrow-dot" />
-              PREGUNTAS FRECUENTES
-            </div>
-            <h2 className="l2nd-section-title">
-              ¿Tenés <span className="l2nd-gradient-text">preguntas</span>?
-            </h2>
-            <p className="l2nd-section-desc">
-              Todo lo que necesitás saber sobre AgroNexo y nuestra plataforma de precisión agronómica.
-            </p>
-          </div>
+      {/* ── ROI & SAVINGS CALCULATOR ── */}
+      <section id="roi-calculator" className="l2nd-section l2nd-roi-section">
+        <div className="l2nd-section-header">
+          <div className="l2nd-section-tag">CALCULADORA DE RENTABILIDAD</div>
+          <h2 className="l2nd-section-title">Calculá tu Ahorro Estimado</h2>
+          <p className="l2nd-section-desc">
+            Ajustá las hectáreas y tu cultivo principal para estimar el impacto económico directo de la aplicación variable y el diagnóstico temprano.
+          </p>
+        </div>
 
-          <div className="l2nd-faq-list">
-            {FAQS.map((faq, i) => (
-              <div key={i} className={`l2nd-faq-item${openFaq === i ? ' l2nd-faq-item--open' : ''}`}>
-                <button
-                  className="l2nd-faq-question"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
-                  <span>{faq.question}</span>
-                  <svg
-                    className={`l2nd-faq-chevron${openFaq === i ? ' l2nd-faq-chevron--open' : ''}`}
-                    width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  >
-                    <polyline points="6 9 12 15 18 9"/>
+        <div className="l2nd-container l2nd-container--narrow">
+          <div className="l2nd-roi-card">
+            <div className="l2nd-roi-controls">
+              {/* Crop Selector */}
+              <div className="l2nd-roi-group">
+                <label className="l2nd-roi-label">1. Seleccioná tu Cultivo:</label>
+                <div className="l2nd-crop-buttons">
+                  {CROPS_DATA.map((crop) => (
+                    <button
+                      key={crop.id}
+                      className={`l2nd-crop-btn ${selectedCrop.id === crop.id ? 'l2nd-crop-btn--active' : ''}`}
+                      onClick={() => setSelectedCrop(crop)}
+                    >
+                      <span>{crop.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Hectares Slider */}
+              <div className="l2nd-roi-group">
+                <div className="l2nd-roi-slider-header">
+                  <label className="l2nd-roi-label">2. Superficie a Monitorear:</label>
+                  <span className="l2nd-roi-ha-val">{hectares.toLocaleString('es-AR')} ha</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="3000"
+                  step="25"
+                  value={hectares}
+                  onChange={(e) => setHectares(Number(e.target.value))}
+                  className="l2nd-roi-range"
+                />
+                <div className="l2nd-range-ticks">
+                  <span>50 ha</span>
+                  <span>500 ha</span>
+                  <span>1.500 ha</span>
+                  <span>3.000 ha</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Calculation Output Box */}
+            <div className="l2nd-roi-results-box">
+              <div className="l2nd-roi-kpi-grid">
+                <div className="l2nd-roi-kpi">
+                  <span className="l2nd-kpi-title">Ahorro en Fertilizantes/Insumos</span>
+                  <span className="l2nd-kpi-num">${roiResults.inputSaving} USD</span>
+                  <span className="l2nd-kpi-sub">Reducción de dosis variable</span>
+                </div>
+                <div className="l2nd-roi-kpi">
+                  <span className="l2nd-kpi-title">Ganancia por Rinde Protegido</span>
+                  <span className="l2nd-kpi-num">${roiResults.extraRevenue} USD</span>
+                  <span className="l2nd-kpi-sub">Detección temprana de anomalías</span>
+                </div>
+                <div className="l2nd-roi-kpi l2nd-roi-kpi--highlight">
+                  <span className="l2nd-kpi-title">Beneficio Neto Anual Proyectado</span>
+                  <span className="l2nd-kpi-num">${roiResults.netProfit} USD</span>
+                  <span className="l2nd-kpi-badge">Retorno {roiResults.roiMultiplier}x sobre inversión</span>
+                </div>
+              </div>
+
+              <div className="l2nd-roi-action">
+                <button className="l2nd-btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => navigate('/login')}>
+                  <span>Comenzar a optimizar mis lotes</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
                   </svg>
                 </button>
-                <div className={`l2nd-faq-answer${openFaq === i ? ' l2nd-faq-answer--open' : ''}`}>
-                  <p>{faq.answer}</p>
-                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── INTEGRATIONS & ECOSYSTEM MARQUEE ── */}
+      <section className="l2nd-integrations-section">
+        <p className="l2nd-integrations-label">ECOSISTEMA Y FORMATOS DE PRECISIÓN COMPATIBLES</p>
+        <div className="l2nd-marquee-container">
+          <div className="l2nd-marquee-track">
+            {[...INTEGRATIONS, ...INTEGRATIONS].map((item, idx) => (
+              <div key={idx} className="l2nd-marquee-pill">
+                <span className="l2nd-marquee-dot" />
+                <span>{item}</span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA ── */}
-      <section id="cta" className="l2nd-cta l2nd-anim">
-        <div className="l2nd-cta-gradient-top" />
-        <div className="l2nd-cta-bg" />
-        <div className="l2nd-container l2nd-cta-content">
-          <div className="l2nd-cta-pill">
-            <span className="l2nd-eyebrow-dot" />
-            Plataforma de precisión agronómica
-          </div>
-          <h2 className="l2nd-cta-title">Uníte al movimiento de agricultura digital</h2>
-          <p className="l2nd-cta-desc">
-            Junto a productores líderes del NEA estamos transformando la toma de decisiones
-            en el campo con tecnología GIS de precisión.
+      {/* ── FAQ SECTION ── */}
+      <section id="faq" className="l2nd-section l2nd-faq-section">
+        <div className="l2nd-section-header">
+          <div className="l2nd-section-tag">PREGUNTAS FRECUENTES</div>
+          <h2 className="l2nd-section-title">Respuestas Claras para Productores y Agrónomos</h2>
+          <p className="l2nd-section-desc">
+            Todo lo que necesitás saber sobre la adopción de AgroNexo en tus operaciones diarias de campo.
           </p>
-          <button className="l2nd-btn-cta" onClick={goLogin}>
-            Acceder a la plataforma
-          </button>
+        </div>
+
+        <div className="l2nd-container l2nd-container--narrow">
+          <div className="l2nd-faq-accordion">
+            {FAQS.map((faq, index) => (
+              <div
+                key={index}
+                className={`l2nd-faq-card ${openFaq === index ? 'l2nd-faq-card--open' : ''}`}
+                onClick={() => setOpenFaq(openFaq === index ? -1 : index)}
+              >
+                <div className="l2nd-faq-question-row">
+                  <h3 className="l2nd-faq-question-text">{faq.q}</h3>
+                  <div className="l2nd-faq-chevron">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+                </div>
+                {openFaq === index && (
+                  <div className="l2nd-faq-answer">
+                    <p>{faq.a}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ── Footer ── */}
+      {/* ── FINAL CTA BANNER ── */}
+      <section className="l2nd-section l2nd-cta-banner-section">
+        <div className="l2nd-container l2nd-container--narrow">
+          <div className="l2nd-cta-banner">
+            <div className="l2nd-cta-banner-glow" />
+            <div className="l2nd-cta-badge">
+              <span className="l2nd-badge-pulse" />
+              <span>AGRICULTURA DIGITAL EN EL NEA</span>
+            </div>
+            <h2 className="l2nd-cta-heading">
+              Llevá tus decisiones agronómicas al siguiente nivel con AgroNexo
+            </h2>
+            <p className="l2nd-cta-text">
+              Empezá a monitorear tus lotes con imágenes multiespectrales, detección de anomalías por IA y prescripciones listas para tu maquinaria.
+            </p>
+            <div className="l2nd-cta-btn-group">
+              <button className="l2nd-btn-primary l2nd-btn-hero" onClick={() => navigate('/login')}>
+                <span>Ingresar a la Plataforma</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
       <footer className="l2nd-footer">
         <div className="l2nd-container">
-          <div className="l2nd-footer-grid">
-            <div className="l2nd-footer-brand">
-              <img src="/logo_verde.png" alt="AgroNexo" className="l2nd-footer-logo" />
+          <div className="l2nd-footer-main">
+            <div className="l2nd-footer-brand-col">
+              <div className="l2nd-nav-brand">
+                <img src="/logo_hoja.png" alt="AgroNexo" className="l2nd-nav-logo-icon" />
+                <span className="l2nd-nav-brand-text">
+                  Agro<span className="l2nd-accent-text">Nexo</span>
+                </span>
+              </div>
               <p className="l2nd-footer-brand-desc">
-                Liderando la revolución de la agricultura digital con soluciones geoespaciales de alta precisión.
+                Soluciones de agricultura de precisión, procesamiento GIS y diagnóstico asistido por inteligencia artificial para el NEA argentino.
               </p>
-              <div className="l2nd-footer-social">
-                {/* X */}
-                <a href="#" className="l2nd-social-link" aria-label="X">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-                </a>
-                {/* YouTube */}
-                <a href="#" className="l2nd-social-link" aria-label="YouTube">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                </a>
-                {/* Instagram */}
-                <a href="#" className="l2nd-social-link" aria-label="Instagram">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-                </a>
+              <div className="l2nd-footer-contact-info">
+                <span>📍 Resistencia, Chaco · Argentina</span>
+                <span>🛰️ EPSG:32721 · Sentinel-2 & DJI RTK</span>
               </div>
             </div>
 
-            <div className="l2nd-footer-col">
-              <h4 className="l2nd-footer-col-title">Producto</h4>
-              {['Funcionalidades','Precios','Documentación','API GIS'].map(l => <a key={l} href="#" className="l2nd-footer-link">{l}</a>)}
+            <div className="l2nd-footer-links-col">
+              <span className="l2nd-footer-col-title">Módulos</span>
+              <button className="l2nd-footer-link-btn" onClick={() => scrollToSection('demo-interactiva')}>Visor Satelital</button>
+              <button className="l2nd-footer-link-btn" onClick={() => scrollToSection('comparador')}>Índices NDVI / NDRE</button>
+              <button className="l2nd-footer-link-btn" onClick={() => scrollToSection('pipeline')}>Motor de Diagnóstico</button>
+              <button className="l2nd-footer-link-btn" onClick={() => scrollToSection('roi-calculator')}>Prescripciones ISO-XML</button>
             </div>
 
-            <div className="l2nd-footer-col">
-              <h4 className="l2nd-footer-col-title">Compañía</h4>
-              {['Sobre Nosotros','Blog Técnico','Casos de Éxito','Contacto'].map(l => <a key={l} href="#" className="l2nd-footer-link">{l}</a>)}
-            </div>
-
-            <div className="l2nd-footer-col">
-              <h4 className="l2nd-footer-col-title">Newsletter</h4>
-              <p className="l2nd-footer-newsletter-desc">Novedades sobre agricultura de precisión en el NEA.</p>
-              <input type="email" placeholder="tu@email.com" className="l2nd-newsletter-input" />
-              <button className="l2nd-newsletter-btn">Suscribirse</button>
+            <div className="l2nd-footer-links-col">
+              <span className="l2nd-footer-col-title">Plataforma</span>
+              <button className="l2nd-footer-link-btn" onClick={() => navigate('/login')}>Iniciar Sesión</button>
+              <button className="l2nd-footer-link-btn" onClick={() => navigate('/login')}>Crear Cuenta</button>
+              <button className="l2nd-footer-link-btn" onClick={() => scrollToSection('faq')}>Preguntas Frecuentes</button>
             </div>
           </div>
 
           <div className="l2nd-footer-bottom">
-            <span>© 2026 AgroNexo GIS Solutions. Todos los derechos reservados.</span>
+            <span>© 2026 AgroNexo GIS Platform. Todos los derechos reservados.</span>
             <div className="l2nd-footer-bottom-links">
-              <a href="#">Privacidad</a>
-              <a href="#">Términos</a>
-              <a href="#">Cookies</a>
+              <span>Términos de Servicio</span>
+              <span>Privacidad Geoespacial</span>
+              <span>Documentación API</span>
             </div>
           </div>
         </div>
       </footer>
-    </div>
+    
+      {/* ── 3-Version Comparison Bar ── */}
+      <div style={{
+        position: 'fixed',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '8px 16px',
+        borderRadius: '9999px',
+        background: 'rgba(15, 23, 42, 0.94)',
+        border: '1px solid rgba(255, 255, 255, 0.18)',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(16px)',
+        fontSize: '12px',
+        fontFamily: 'system-ui, sans-serif'
+      }}>
+        <span style={{ color: '#94a3b8', fontWeight: 600, marginRight: '4px' }}>Comparar:</span>
+        <a href="/" style={{
+          padding: '6px 12px',
+          borderRadius: '9999px',
+          background: '#27500a',
+          color: '#ffffff',
+          textDecoration: 'none',
+          fontWeight: 700
+        }}>
+          🌿 1. Nueva (Clean White) ✓
+        </a>
+        <a href="/landing-intermedia" style={{
+          padding: '6px 12px',
+          borderRadius: '9999px',
+          background: 'rgba(255,255,255,0.08)',
+          color: '#ffffff',
+          textDecoration: 'none',
+          fontWeight: 500
+        }}>
+          🌙 2. Intermedia (Dark Pro) 
+        </a>
+        <a href="/landing-original" style={{
+          padding: '6px 12px',
+          borderRadius: '9999px',
+          background: 'rgba(255,255,255,0.08)',
+          color: '#ffffff',
+          textDecoration: 'none',
+          fontWeight: 500
+        }}>
+          📜 3. Original (Dark Glass) 
+        </a>
+      </div>
+</div>
   )
 }

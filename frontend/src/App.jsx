@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Landing from './pages/Landing'
+import LandingIntermediate from './pages/LandingIntermediate'
+import LandingOriginal from './pages/LandingOriginal'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Lotes from './pages/Lotes'
@@ -12,6 +14,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/landing-intermedia" element={<LandingIntermediate />} />
+        <Route path="/landing-original" element={<LandingOriginal />} />
         <Route path="/login" element={<Login />} />
         <Route
           path="/dashboard"
