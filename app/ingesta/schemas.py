@@ -132,3 +132,4 @@ class VueloDesdeSateliteRequest(BaseModel):
     escena_id: str
     fecha_vuelo: datetime
     estadio_fenologico: str | None = None
+    indices: list[IndiceEnum] = []

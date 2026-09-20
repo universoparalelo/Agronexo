@@ -582,7 +582,10 @@ def _actualizar_vuelo_archivo_y_task(vuelo_id: str, minio_key: str, task_id: str
     max_retries=3,
     default_retry_delay=30,
 )
-def descargar_satelital(self, vuelo_id: str, lote_id: str, usuario_id: str, escena_id: str, sensor: str = "sentinel2") -> dict:
+def descargar_satelital(
+    self, vuelo_id: str, lote_id: str, usuario_id: str, escena_id: str, sensor: str = "sentinel2",
+    analisis_ids: dict | None = None,
+) -> dict:
     """
     Descarga la escena Sentinel-2 `escena_id` (elegida por el usuario en
     GET .../imagenes-satelitales), la recorta al polígono real del lote,
@@ -641,6 +644,19 @@ def descargar_satelital(self, vuelo_id: str, lote_id: str, usuario_id: str, esce
     # apuntarlo a la tarea nueva (procesar_vuelo). Si no, el frontend vería
     # esta tarea (ya terminada) en vez del progreso real del procesamiento.
     _actualizar_vuelo_archivo_y_task(vuelo_id, key, tarea_procesamiento.id)
+
+    if analisis_ids:
+        celery_app.send_task(
+            "workers.gis.tasks.analizar_indices_batch",
+            kwargs={
+                "analisis_ids": analisis_ids,
+                "minio_key": key,
+                "sensor": sensor,
+                "indices": list(analisis_ids.keys()),
+                "metodo_umbral": "fijo",
+            },
+            queue="gis",
+        )
 
     return {
         "vuelo_id": vuelo_id,

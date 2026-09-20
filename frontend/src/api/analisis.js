@@ -23,11 +23,12 @@ export const buscarImagenesSatelitales = (loteId, fecha, ventanaDias = 15) =>
     params: { fecha, ventana_dias: ventanaDias },
   }).then(r => r.data)
 
-export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFenologico) =>
+export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFenologico, indices = []) =>
   client.post(`/lotes/${loteId}/vuelos/desde-satelite`, {
     escena_id: escenaId,
     fecha_vuelo: fechaVuelo,
     estadio_fenologico: estadioFenologico || null,
+    indices,
   }).then(r => r.data)
 
 export const inspeccionarGeotiff = (archivo, sensor) => {

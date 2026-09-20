@@ -166,6 +166,7 @@ async def crear_vuelo_desde_satelite(
     escena_id: str,
     fecha_vuelo: datetime,
     estadio_fenologico: str | None = None,
+    indices: list[IndiceEnum] | None = None,
 ) -> Vuelo:
     """
     Crea el Vuelo y encola workers.gis.tasks.descargar_satelital, que
@@ -183,9 +184,15 @@ async def crear_vuelo_desde_satelite(
     await db.flush()
     await db.refresh(vuelo)
 
+    # El archivo recién existe cuando el worker termina de descargar, así que
+    # el batch de índices adicionales lo encola descargar_satelital, no la API.
+    indices_adicionales = [i for i in (indices or []) if i != IndiceEnum.ndvi]
+    filas = await _preparar_filas_indices(db, vuelo, indices_adicionales) if indices_adicionales else {}
+
     task = celery_app.send_task(
         "workers.gis.tasks.descargar_satelital",
         kwargs={
+            "analisis_ids": {indice: str(fila.id) for indice, fila in filas.items()},
             "vuelo_id": str(vuelo.id),
             "lote_id": str(lote_id),
             "usuario_id": str(usuario_id),
@@ -383,16 +390,9 @@ async def crear_analisis_indice(
     return analisis
 
 
-async def crear_analisis_indices_batch(
-    db: AsyncSession, vuelo: Vuelo, indices: list[IndiceEnum], metodo_umbral: str = "fijo",
-) -> list[AnalisisIndice]:
-    """
-    Crea (o reencola) una fila AnalisisIndice por cada índice pedido y
-    encola UNA sola task de Celery que los calcula todos en una corrida
-    (descarga y lectura de bandas compartida), en lugar de una task por
-    índice como hace crear_analisis_indice. Pensada para cuando el usuario
-    tilda varios índices a la vez al subir un vuelo.
-    """
+async def _preparar_filas_indices(
+    db: AsyncSession, vuelo: Vuelo, indices: list[IndiceEnum],
+) -> dict[str, AnalisisIndice]:
     filas: dict[str, AnalisisIndice] = {}
     for indice in indices:
         analisis = await obtener_analisis_indice(db, vuelo.id, indice)
@@ -406,6 +406,20 @@ async def crear_analisis_indices_batch(
     await db.flush()
     for analisis in filas.values():
         await db.refresh(analisis)
+    return filas
+
+
+async def crear_analisis_indices_batch(
+    db: AsyncSession, vuelo: Vuelo, indices: list[IndiceEnum], metodo_umbral: str = "fijo",
+) -> list[AnalisisIndice]:
+    """
+    Crea (o reencola) una fila AnalisisIndice por cada índice pedido y
+    encola UNA sola task de Celery que los calcula todos en una corrida
+    (descarga y lectura de bandas compartida), en lugar de una task por
+    índice como hace crear_analisis_indice. Pensada para cuando el usuario
+    tilda varios índices a la vez al subir un vuelo.
+    """
+    filas = await _preparar_filas_indices(db, vuelo, indices)
 
     task = celery_app.send_task(
         "workers.gis.tasks.analizar_indices_batch",
