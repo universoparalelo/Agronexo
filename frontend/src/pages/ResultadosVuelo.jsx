@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import client from '../api/client'
 import { etiquetaTipoCultivo } from '../utils/cultivos'
 import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
 import { descargarOrdenTrabajoPdf } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import MapaZonas from '../components/MapaZonas'
+import BotonVolver from '../components/BotonVolver'
 import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import TablaDiagnostico from '../components/TablaDiagnostico'
 import TablaZonas from '../components/TablaZonas'
@@ -84,7 +85,7 @@ export default function ResultadosVuelo() {
   if (error) return (
     <div className="page-error">
       <p>{error}</p>
-      <Link to={`/lotes/${loteId}`} className="btn-back">← Vuelos</Link>
+      <BotonVolver to={`/lotes/${loteId}`} claro>Volver a los vuelos</BotonVolver>
     </div>
   )
 
@@ -102,7 +103,7 @@ export default function ResultadosVuelo() {
       )}
       <header className="resultados-header">
         <div className="resultados-header-left">
-          <Link to={`/lotes/${loteId}`} className="btn-back">← Vuelos</Link>
+          <BotonVolver to={`/lotes/${loteId}`}>Volver a los vuelos</BotonVolver>
           <div className="resultados-titulo">
             <h1>{lote?.nombre}</h1>
             {vuelo?.cultivo && (

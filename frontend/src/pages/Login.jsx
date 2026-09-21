@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import BotonVolver from '../components/BotonVolver'
 
 const FEATURES = [
   {
@@ -85,12 +86,7 @@ export default function Login() {
           <button type="button" className="l2-header-logo-btn" onClick={() => navigate('/')}>
             <img src="/logo.png" alt="AgroNexo" className="l2-logo" />
           </button>
-          <button type="button" className="l2-btn-back" onClick={() => navigate('/')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-            </svg>
-            Volver al inicio
-          </button>
+          <BotonVolver onClick={() => navigate('/')}>Volver al inicio</BotonVolver>
         </div>
       </header>
 

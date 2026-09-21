@@ -4,6 +4,7 @@ import client from '../api/client'
 import CalendarioSatelital from './CalendarioSatelital'
 import MapaDibujoLote from './MapaDibujoLote'
 import MapaNEA from './MapaNEA'
+import { FlechaAtras, FlechaAdelante } from './BotonVolver'
 import { geotiffCercaDelLote, leerLimitesGeotiff } from '../utils/geotiffLimites'
 import { AREA_MIN_HA, AREA_MAX_HA } from '../utils/geometria'
 import { TIPOS_SUELO } from '../utils/suelos'
@@ -914,7 +915,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 onClick={handleSiguiente}
                 disabled={fuente === 'dron' ? !archivo || geotiffFueraDelLote : !escenaSeleccionada}
               >
-                Siguiente →
+                Siguiente
+                <FlechaAdelante />
               </button>
             </div>
           </div>
@@ -1029,10 +1031,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
 
             <div className="modal-actions modal-actions--wizard">
               <button type="button" className="btn-secondary" onClick={() => { setError(''); setStep('carga') }}>
-                ← Atrás
+                <FlechaAtras />
+                Atrás
               </button>
               <button type="button" className="btn-primary" onClick={handleContinuarCultivo}>
-                Continuar →
+                Continuar
+                <FlechaAdelante />
               </button>
             </div>
           </div>
@@ -1111,10 +1115,11 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
 
             <div className="modal-actions modal-actions--wizard">
               <button type="button" className="btn-secondary" onClick={() => setStep('cultivo')} disabled={loading}>
-                ← Atrás
+                <FlechaAtras />
+                Atrás
               </button>
               <button type="button" className="btn-primary" onClick={handleSubmit} disabled={loading}>
-                {loading ? 'Subiendo...' : 'Iniciar Análisis →'}
+                {loading ? 'Subiendo...' : <>Iniciar Análisis <FlechaAdelante /></>}
               </button>
             </div>
           </div>

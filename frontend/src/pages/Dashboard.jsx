@@ -118,6 +118,14 @@ function fmtFecha(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function saludoSegunHora() {
+  const h = new Date().getHours()
+  if (h < 6) return 'Buenas noches'
+  if (h < 13) return 'Buen día'
+  if (h < 20) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
 function fmtFechaHoy() {
   return new Date().toLocaleDateString('es-AR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -380,7 +388,7 @@ export default function Dashboard() {
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
 
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard--resumen">
       {showModal && (
         <ModalCargaGeoTIFF
           lotes={loteRows}
@@ -453,15 +461,28 @@ export default function Dashboard() {
         </header>
 
         <main className="dashboard-main">
-          {/* Welcome */}
-          <div className="welcome-section">
-            <h1 className="welcome-title">
-              Bienvenido, {user?.nombre?.split(' ')[0] ?? 'Usuario'} 👋
+          {/* Portada */}
+          <section className="hero-panel">
+            <h1 className="hero-panel-titulo">
+              {saludoSegunHora()}, {user?.nombre?.split(' ')[0] ?? 'Usuario'}
             </h1>
-            <p className="welcome-sub">
-              Resumen del estado de tus cultivos y análisis recientes en la región de Chaco.
-            </p>
-          </div>
+            <div className="hero-panel-acciones">
+              <button type="button" className="hero-btn hero-btn--principal" onClick={() => setShowModal(true)}>
+                Cargar nuevo análisis <IconArrow />
+              </button>
+              <button type="button" className="hero-btn" onClick={() => setShowModalNuevoLote(true)}>
+                Nuevo lote
+              </button>
+              <button
+                type="button"
+                className="hero-btn"
+                disabled={!vueloRows.some(v => v.estado === 'completado')}
+                onClick={handleVerDiagnosticos}
+              >
+                Ver diagnósticos
+              </button>
+            </div>
+          </section>
 
           {/* KPI cards */}
           <div className="kpi-row">
@@ -760,41 +781,6 @@ export default function Dashboard() {
 
             {/* Columna derecha */}
             <div className="dashboard-col-side">
-              {/* Acciones Rápidas */}
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Acciones Rápidas</h2>
-                </div>
-                <div className="card-body acciones-list">
-                  <button className="accion-item accion-item--primary" onClick={() => setShowModal(true)}>
-                    <div className="accion-text">
-                      <span className="accion-label">Cargar Nuevo Análisis</span>
-                      <span className="accion-sub">Subí imágenes multiespectral</span>
-                    </div>
-                  </button>
-                  <button className="accion-item" onClick={() => setShowModalNuevoLote(true)}>
-                    <div className="accion-text">
-                      <span className="accion-label">Nuevo Lote</span>
-                      <span className="accion-sub">Registrá una nueva parcela</span>
-                    </div>
-                  </button>
-                  <button
-                    className="accion-item"
-                    disabled={!vueloRows.some(v => v.estado === 'completado')}
-                    onClick={handleVerDiagnosticos}
-                  >
-                    <div className="accion-text">
-                      <span className="accion-label">Ver Diagnósticos</span>
-                      <span className="accion-sub">
-                        {vueloRows.some(v => v.estado === 'completado')
-                          ? 'Elegí de qué lote ver los análisis'
-                          : 'Cargá un ortomosaico primero'}
-                      </span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
               {/* Actividad reciente */}
               <div className="card">
                 <div className="card-header">

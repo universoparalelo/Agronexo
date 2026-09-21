@@ -486,3 +486,26 @@ El worker ya rellenaba `lotes.geometry` con el rectángulo del primer GeoTIFF cu
 
 - **No hay pantalla dedicada para dar de baja un cultivo** — la API (`DELETE /lotes/{id}/cultivos/{id}`) está lista y testeada. Crear y editar cultivos solo se puede desde el paso "Información de cultivo" al iniciar un análisis; no hay vista para cargar la `fecha_cosecha` sin iniciar uno.
 - **La validación de ubicación del GeoTIFF no está en el servidor** (ver más arriba).
+
+## Sprint 14 — Identidad visual unificada (landing, login y panel)
+
+#### Landing única, login y panel con el mismo lenguaje visual
+**Fecha:** 2026-09-21
+**Rama:** `main`
+
+Se unificó el aspecto de la landing, el login y el panel (dashboard, lotes, detalle y resultados).
+
+**Decisiones tomadas:**
+- **Una sola landing en `/`**: `LandingOriginal`. Se eliminaron `Landing.jsx` (la versión rediseñada en el PR #14 de `feat/landing-hero`, descartada a propósito al resolver el merge) y `LandingIntermediate`, junto con ~1.660 líneas de estilos `l2nd-*` de `index.css`. Las rutas `/landing-original` y `/landing-intermedia` ya no existen (caen a `/`).
+- **Landing**: foto `fondozaira1.jpeg` con degradado oscuro, palabra dinámica con efecto de tipeo y cursor, barra superior que se achica al hacer scroll. Se quitaron las secciones de preguntas frecuentes, CTA final e impacto agronómico (con sus links de la barra y del footer).
+- **Login**: mismo vidrio oscuro y foto que la landing, con barra superior y botón "Volver al inicio".
+- **Panel**: fondo claro (`#f3f6f3`) con barra lateral y barra superior oscuras, en `frontend/src/panel-tema.css` (se carga después de `index.css`). Se probaron tres variantes con un selector temporal (híbrido, híbrido con barra clara, oscuro completo) y quedó la híbrida con barra oscura; el selector y las otras variantes se eliminaron. La foto de fondo se descartó en el panel porque competía con el contenido de tarjetas y tablas.
+- **Animación de entrada** en todas las pantallas del panel (aparece con desenfoque y sube, escalonada como en la landing y el login), en `panel-tema.css`. Usa `animation-fill-mode: backwards` a propósito: al terminar no queda ningún `transform`/`filter` sobre los contenedores, porque eso cambiaría el contenedor de los modales `position: fixed`. Respeta `prefers-reduced-motion`.
+- **Dashboard (pantalla Resumen)** rediseñado: portada con la foto de la landing, saludo según la hora y los tres botones de acción (por eso se eliminó la tarjeta "Acciones Rápidas"), tarjetas redondeadas con sombra suave y actividad reciente como línea de tiempo. La tabla y el mapa ocupan las mismas 3 columnas que los KPIs y la actividad la cuarta, de modo que los bordes coinciden. Los estilos van bajo `.dashboard--resumen` para no afectar a Lotes, que comparte clases. Se comparó contra el diseño anterior con un selector temporal y se eligió el nuevo; el selector y el diseño viejo se eliminaron. Se probó también una textura (`textura.jpeg`) como fondo de la portada y se descartó; el archivo sigue en `frontend/public`.
+- **Botones unificados**: un solo botón de "volver" (`BotonVolver.jsx`, con versión oscura para las barras y clara para fondos claros) usado en login, detalle, resultados y el asistente de carga; primario, secundario y de peligro comparten tamaño y tipografía.
+- **Barra lateral**: usa el mismo `logo.png` que la landing y el login, en una franja de 52 px que alinea su línea inferior con la de la barra superior.
+- **Paleta**: el verde lima fluor (`#b7f473`) se reemplazó por verde salvia (`#9cc2a8`) en las barras del panel, alineado con la landing.
+
+**Problemas a tener en cuenta:**
+- El merge con `origin/main` trajo la dependencia `geotiff`; hubo que reconstruir la imagen (`docker compose build frontend`), porque `npm install` dentro del contenedor no ve el `package.json` nuevo (solo `src` está montado).
+- Los estilos inline de algunos componentes (mapas, leyendas) no siguen la paleta; quedan con sus colores propios.

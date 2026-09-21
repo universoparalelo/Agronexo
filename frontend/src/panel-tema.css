@@ -1,0 +1,400 @@
+/* Panel (dashboard, lotes, detalle, resultados): fondo claro con barras oscuras, con los
+   acentos verde salvia de la landing y el login. Se importa después de index.css. */
+
+:root {
+  --panel-vidrio: 7, 15, 9;
+}
+
+.dashboard,
+.detalle-page,
+.resultados-page {
+  background: #f3f6f3;
+  color: #1a1a1a;
+}
+
+/* Barra lateral */
+.sidebar-nav {
+  background: rgba(var(--panel-vidrio), 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-logo-wrap,
+.sidebar-user {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-beta {
+  background: rgba(156, 194, 168, 0.18);
+  color: #9cc2a8;
+}
+
+.sidebar-link--active,
+.sidebar-link--active:hover {
+  background: rgba(156, 194, 168, 0.14);
+  color: #c4dccb;
+  border-left-color: #9cc2a8;
+}
+
+.sidebar-badge {
+  background: #9cc2a8;
+  color: #0b1a10;
+}
+
+.sidebar-user-avatar {
+  background: #3a6650;
+}
+
+/* Barra superior */
+.topbar {
+  background: rgba(var(--panel-vidrio), 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbar-breadcrumb {
+  color: #a9bfb0;
+}
+
+.breadcrumb-sep {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.breadcrumb-active {
+  color: #e8f0ea;
+}
+
+.topbar-icon-btn {
+  color: #a9bfb0;
+}
+
+.topbar-icon-btn:hover {
+  color: #e8f0ea;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.topbar-date {
+  color: #a9bfb0;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn-salir {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #eef4ef;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-salir:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+/* Cabeceras de Detalle de lote y Resultados de vuelo */
+.detalle-header,
+.resultados-header {
+  background: rgba(var(--panel-vidrio), 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+/* Tarjetas */
+.card,
+.kpi-card,
+.lote-card,
+.vuelo-card {
+  background: #fff;
+  border-color: #e5e8df;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Animación de entrada (igual que la landing y el login) ──
+   fill-mode "backwards": al terminar no queda ningún transform/filter aplicado, así los
+   modales con position: fixed y el mapa no cambian de contenedor. */
+@keyframes panel-revelar {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes panel-aparecer {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar-nav,
+.topbar,
+.detalle-header,
+.resultados-header {
+  animation: panel-aparecer 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.dashboard-main > *,
+.detalle-main > *,
+.resultados-sidebar {
+  animation: panel-revelar 0.85s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.dashboard-main > :nth-child(1),
+.detalle-main > :nth-child(1) {
+  animation-delay: 60ms;
+}
+
+.dashboard-main > :nth-child(2),
+.detalle-main > :nth-child(2),
+.resultados-sidebar {
+  animation-delay: 150ms;
+}
+
+.dashboard-main > :nth-child(3),
+.detalle-main > :nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.dashboard-main > :nth-child(n + 4),
+.detalle-main > :nth-child(n + 4) {
+  animation-delay: 320ms;
+}
+
+.resultados-mapa {
+  animation: panel-aparecer 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav,
+  .topbar,
+  .detalle-header,
+  .resultados-header,
+  .dashboard-main > *,
+  .detalle-main > *,
+  .resultados-sidebar,
+  .resultados-mapa {
+    animation: none;
+  }
+}
+
+/* ── Dashboard (pantalla Resumen): portada + tarjetas suaves ──
+   Todo va bajo .dashboard--resumen para no afectar a Lotes, que comparte estilos. */
+.dashboard--resumen {
+  background: linear-gradient(180deg, #e6eee7 0%, #f4f7f4 360px);
+}
+
+.hero-panel {
+  position: relative;
+  border-radius: 20px;
+  padding: 2.25rem 2.25rem 2.5rem;
+  color: #f0f6f1;
+  background:
+    linear-gradient(105deg, rgba(7, 15, 9, 0.9) 0%, rgba(12, 30, 21, 0.72) 55%, rgba(12, 30, 21, 0.4) 100%),
+    url('/fondozaira1.jpeg') center / cover;
+  box-shadow: 0 12px 40px rgba(7, 15, 9, 0.2);
+}
+
+.hero-panel-titulo {
+  margin: 0;
+  font-size: clamp(1.7rem, 3.2vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f0f6f1;
+}
+
+.hero-panel-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef4ef;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.hero-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+.hero-btn--principal {
+  background: rgba(156, 194, 168, 0.28);
+  border-color: rgba(156, 194, 168, 0.6);
+}
+
+.hero-btn--principal:hover:not(:disabled) {
+  background: rgba(156, 194, 168, 0.4);
+  border-color: rgba(156, 194, 168, 0.8);
+}
+
+.hero-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* KPIs */
+.dashboard--resumen .kpi-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dashboard--resumen .kpi-card {
+  border: none;
+  border-radius: 16px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 8px 28px rgba(15, 40, 25, 0.1);
+}
+
+.dashboard--resumen .kpi-card-top {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dashboard--resumen .kpi-label {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 1300px) {
+  .dashboard--resumen .kpi-card-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+}
+
+.dashboard--resumen .kpi-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  background: #e6f0e8;
+  color: #3a6650;
+}
+
+.dashboard--resumen .kpi-value {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  color: #12261a;
+}
+
+.dashboard--resumen .kpi-card--highlight {
+  background: linear-gradient(135deg, #eaf4ec 0%, #fff 70%);
+}
+
+/* La grilla de abajo usa las mismas 4 columnas que los KPIs: tabla y mapa ocupan 3
+   (terminan donde "Análisis completados") y la actividad la cuarta ("Área monitoreada"). */
+.dashboard--resumen .dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard--resumen .dashboard-col-main {
+  grid-column: span 3;
+}
+
+.dashboard--resumen .dashboard-col-side {
+  grid-column: span 1;
+}
+
+/* Tarjetas */
+.dashboard--resumen .card {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15, 40, 25, 0.07);
+}
+
+.dashboard--resumen .card-header {
+  padding: 1.15rem 1.3rem 0.7rem;
+  border-bottom: none;
+}
+
+.dashboard--resumen .card-title {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: #12261a;
+}
+
+.dashboard--resumen .card-link {
+  color: #3a6650;
+}
+
+/* Tabla */
+.dashboard--resumen .analisis-table th {
+  border-bottom: 1px solid #edf1ed;
+  background: #f7faf7;
+}
+
+.dashboard--resumen .analisis-table td {
+  border-bottom: 1px solid #f1f4f1;
+}
+
+.dashboard--resumen .analisis-table tbody tr:hover td {
+  background: #f6faf6;
+}
+
+/* Actividad como línea de tiempo */
+.dashboard--resumen .actividad-item {
+  position: relative;
+  border-bottom: none;
+  padding: 0.6rem 0 0.6rem 1.35rem;
+}
+
+.dashboard--resumen .actividad-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.95rem;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #9ca3af;
+  box-shadow: 0 0 0 3px #f1f4f1;
+}
+
+.dashboard--resumen .actividad-item::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1.75rem;
+  bottom: -0.5rem;
+  width: 1px;
+  background: #e5e8df;
+}
+
+.dashboard--resumen .actividad-item:last-child::after {
+  display: none;
+}
+
+.dashboard--resumen .actividad-item--ok::before { background: #16a34a; }
+.dashboard--resumen .actividad-item--upload::before { background: #2563eb; }
+.dashboard--resumen .actividad-item--alerta::before { background: #d97706; }

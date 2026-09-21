@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
 import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import { listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
+import BotonVolver from '../components/BotonVolver'
 
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
@@ -71,7 +72,7 @@ export default function DetalleLote() {
   if (error) return (
     <div className="page-error">
       <p>{error}</p>
-      <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
+      <BotonVolver to="/dashboard" claro>Volver a mis lotes</BotonVolver>
     </div>
   )
 
@@ -79,7 +80,7 @@ export default function DetalleLote() {
     <div className="detalle-page">
       <header className="detalle-header">
         <div className="detalle-header-left">
-          <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
+          <BotonVolver to="/dashboard">Volver a mis lotes</BotonVolver>
           <div className="detalle-titulo">
             <h1>{lote.nombre}</h1>
             {cultivoMasReciente(lote) && (
