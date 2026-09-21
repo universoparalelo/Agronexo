@@ -265,30 +265,35 @@
 }
 
 .dashboard--resumen .kpi-card {
-  border: none;
+  border: 1px solid #e7ede5;
   border-radius: 16px;
-  padding: 1.1rem 1.25rem;
-  box-shadow: 0 8px 28px rgba(15, 40, 25, 0.1);
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 4px 18px rgba(15, 40, 25, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard--resumen .kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 40, 25, 0.08);
 }
 
 .dashboard--resumen .kpi-card-top {
-  flex-direction: row-reverse;
-  justify-content: flex-end;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
   align-items: center;
   gap: 0.65rem;
 }
 
 .dashboard--resumen .kpi-label {
-  min-width: 0;
-  overflow-wrap: break-word;
-}
-
-@media (max-width: 1300px) {
-  .dashboard--resumen .kpi-card-top {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.55rem;
-  }
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  text-transform: uppercase;
 }
 
 .dashboard--resumen .kpi-icon {
@@ -306,6 +311,30 @@
   font-size: 2rem;
   letter-spacing: -0.02em;
   color: #12261a;
+}
+
+.dashboard--resumen .kpi-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dashboard--resumen .kpi-delta--up {
+  color: #256b46;
+}
+
+.dashboard--resumen .kpi-delta--neutral {
+  color: #64748b;
+}
+
+.dashboard--resumen .kpi-delta--warn {
+  color: #b45309;
+}
+
+.dashboard--resumen .kpi-delta--down {
+  color: #b91c1c;
 }
 
 .dashboard--resumen .kpi-card--highlight {
@@ -366,7 +395,7 @@
 .dashboard--resumen .actividad-item {
   position: relative;
   border-bottom: none;
-  padding: 0.6rem 0 0.6rem 1.35rem;
+  padding: 0.65rem 0 0.65rem 1.45rem;
 }
 
 .dashboard--resumen .actividad-item::before {
@@ -377,7 +406,7 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #9ca3af;
+  background: #94a3b8; /* Gris para eventos anteriores */
   box-shadow: 0 0 0 3px #f1f4f1;
 }
 
@@ -388,13 +417,111 @@
   top: 1.75rem;
   bottom: -0.5rem;
   width: 1px;
-  background: #e5e8df;
+  background: #e2e8df;
 }
 
 .dashboard--resumen .actividad-item:last-child::after {
   display: none;
 }
 
-.dashboard--resumen .actividad-item--ok::before { background: #16a34a; }
-.dashboard--resumen .actividad-item--upload::before { background: #2563eb; }
-.dashboard--resumen .actividad-item--alerta::before { background: #d97706; }
+/* El evento más reciente (superior) es el que lleva el verde activo */
+.dashboard--resumen .actividad-item:first-child::before {
+  background: #256b46;
+  box-shadow: 0 0 0 4px rgba(37, 107, 70, 0.2);
+}
+
+.dashboard--resumen .actividad-item:first-child .actividad-texto {
+  font-weight: 600;
+  color: #12261a;
+}
+
+.dashboard--resumen .actividad-item--alerta::before {
+  background: #d97706 !important;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15) !important;
+}
+
+/* ── KPIs: franja única ── */
+.kpi-franja {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15, 40, 25, 0.08);
+}
+
+.kpi-franja-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1.3rem 1.6rem;
+}
+
+.kpi-franja-item + .kpi-franja-item {
+  border-left: 1px solid #edf1ed;
+}
+
+.kpi-franja-etiqueta {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #7a887f;
+}
+
+.kpi-franja-valor {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #12261a;
+}
+
+.kpi-franja-unidad {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #6b7a70;
+}
+
+.kpi-franja-nota {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: #6b7a70;
+}
+
+.kpi-franja-nota::before {
+  content: '';
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b6c0b9;
+}
+
+.kpi-franja-nota--ok::before {
+  background: #2e9e5b;
+}
+
+.kpi-franja-nota--aviso::before {
+  background: #d9930d;
+}
+
+@media (max-width: 1100px) {
+  .kpi-franja {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi-franja-item:nth-child(odd) {
+    border-left: none;
+  }
+
+  .kpi-franja-item:nth-child(n + 3) {
+    border-top: 1px solid #edf1ed;
+  }
+}
+

@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import BotonVolver from '../components/BotonVolver'
 
+// Usuario de desarrollo (ver README): solo se ofrece con el servidor de desarrollo, no en el build.
+const CREDENCIALES_DEMO = { email: 'admin@agronexo.com', password: 'password123' }
+
 const FEATURES = [
   {
     icon: (
@@ -186,6 +189,23 @@ export default function Login() {
           <button type="button" className="l2-register-link">Registrarse</button>
         </p>
       </div>
+
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          className="l2-demo l2-stagger l2-stagger-6"
+          onClick={() => {
+            setEmail(CREDENCIALES_DEMO.email)
+            setPassword(CREDENCIALES_DEMO.password)
+            setError('')
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" />
+          </svg>
+          Credenciales demo
+        </button>
+      )}
 
       {/* Pie */}
       <div className="l2-footer">

@@ -197,6 +197,23 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
   )
 }
 
+function KpiFranja({ items }) {
+  return (
+    <div className="kpi-franja">
+      {items.map(it => (
+        <div key={it.etiqueta} className="kpi-franja-item">
+          <span className="kpi-franja-etiqueta">{it.etiqueta}</span>
+          <div className="kpi-franja-valor">
+            {it.valor}
+            {it.unidad && <span className="kpi-franja-unidad">{it.unidad}</span>}
+          </div>
+          <span className={`kpi-franja-nota kpi-franja-nota--${it.tono}`}>{it.nota}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ──────── Mapa de análisis (panel inferior) ──────── */
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
@@ -387,6 +404,11 @@ export default function Dashboard() {
   const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
 
+  const vuelosCompletados = vueloRows.filter(v => v.estado === 'completado').length
+  const vuelosEnProceso = vueloRows.filter(v => v.estado === 'pendiente' || v.estado === 'procesando').length
+  const areaTotalHa = loteRows.reduce((suma, l) => suma + (l.area_ha || 0), 0)
+  const lotesConLimite = loteRows.filter(l => l.area_ha > 0).length
+
   return (
     <div className="dashboard dashboard--resumen">
       {showModal && (
@@ -496,26 +518,27 @@ export default function Dashboard() {
             <KpiCard
               label="ANÁLISIS REALIZADOS"
               value={vueloRows.length || '—'}
-              delta={vueloRows.filter(v => v.estado === 'completado').length > 0 ? `${vueloRows.filter(v => v.estado === 'completado').length} completados` : null}
+              delta={vuelosCompletados > 0 ? `${vuelosCompletados} completados` : null}
               deltaType="up"
               icon={<IconDiagnostico />}
             />
             <KpiCard
               label="ANÁLISIS COMPLETADOS"
-              value={vueloRows.filter(v => v.estado === 'completado').length || '—'}
-              delta={vueloRows.some(v => v.estado === 'completado') ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
-              deltaType={vueloRows.some(v => v.estado === 'completado') ? 'up' : 'neutral'}
+              value={vuelosCompletados || '—'}
+              delta={vuelosCompletados > 0 ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
+              deltaType={vuelosCompletados > 0 ? 'up' : 'neutral'}
               icon={<IconInformes />}
             />
             <KpiCard
               label="ÁREA MONITOREADA"
-              value={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? `${Math.round(loteRows.reduce((s, l) => s + (l.area_ha || 0), 0))}` : '—'}
-              delta={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'hectáreas totales' : 'Registrá un lote para comenzar'}
-              deltaType={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'up' : 'neutral'}
+              value={areaTotalHa > 0 ? `${Math.round(areaTotalHa).toLocaleString('es-AR')}` : '—'}
+              delta={areaTotalHa > 0 ? 'hectáreas totales' : 'Registrá un lote para comenzar'}
+              deltaType={areaTotalHa > 0 ? 'up' : 'neutral'}
               icon={<IconConfig />}
-              highlight={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0}
+              highlight={areaTotalHa > 0}
             />
           </div>
+
 
           {/* Grid principal */}
           <div className="dashboard-grid">
@@ -719,7 +742,7 @@ export default function Dashboard() {
               <div className={`card card--mapa${mapaExpandido ? ' card--mapa-expandido' : ''}`}>
                 <div className="card-header">
                   <div>
-                    <h2 className="card-title">📍 Vista geoespacial</h2>
+                    <h2 className="card-title">Vista geoespacial</h2>
                     <p className="card-sub">
                       {selectedVuelo
                         ? (selectedVueloRow
