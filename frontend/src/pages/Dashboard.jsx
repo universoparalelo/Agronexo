@@ -8,6 +8,7 @@ import { descargarReportePdf, exportarZonas } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
@@ -104,7 +105,6 @@ const IconContraer = () => (
 )
 
 /* ──────── Helpers ──────── */
-const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
 const ESTADO_BADGE = {
   completado: { label: 'Completado', cls: 'badge-optimo' },
@@ -192,13 +192,20 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
 /* ──────── Mapa de análisis (panel inferior) ──────── */
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
-function AnalisisMap({ loteId, vueloId, indice }) {
+function AnalisisMap({ loteId, vueloId, indice, limite, onCompletado }) {
   const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
+
+  // Un lote sin límite lo recibe del worker al procesar el GeoTIFF: al terminar
+  // hay que recargar los lotes para que aparezcan el límite y la superficie.
+  const completado = estado?.estado === 'completado'
+  useEffect(() => {
+    if (completado) onCompletado?.()
+  }, [completado]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
   const estadoActual = estado.estado
-  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} />
+  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} limite={limite} />
   if (estadoActual === 'error' || errorMsg) {
     return (
       <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>
@@ -379,6 +386,7 @@ export default function Dashboard() {
           lotes={loteRows}
           loteIdInicial={selectedVuelo?.loteId ?? null}
           onSuccess={handleCargaExitosa}
+          onLoteCreado={cargarDatos}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -515,7 +523,7 @@ export default function Dashboard() {
                   ) : vueloRows.length === 0 ? (
                     <div className="empty-state">
                       <p>No hay vuelos cargados todavía.</p>
-                      <p className="empty-hint">Usá "Cargar Ortomosaico" para subir el primer vuelo de un lote.</p>
+                      <p className="empty-hint">Usá "Cargar Nuevo Análisis" para subir el primer vuelo de un lote.</p>
                     </div>
                   ) : (
                     <>
@@ -538,7 +546,7 @@ export default function Dashboard() {
                                 <td>
                                   <div className="td-lote-nombre">{v.lote.nombre}</div>
                                   <div className="td-lote-info">
-                                    {CULTIVO_LABEL[v.lote.cultivo] ?? v.lote.cultivo}
+                                    {etiquetaTipoCultivo(v.cultivo?.tipo_cultivo ?? cultivoMasReciente(v.lote)?.tipo_cultivo) || 'Sin cultivo'}
                                     {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>
@@ -734,7 +742,7 @@ export default function Dashboard() {
                 )}
                 <div className="card-mapa-body">
                   {selectedVuelo
-                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} />
+                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry} onCompletado={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry ? undefined : cargarDatos} />
                     : (
                       <div className="mapa-placeholder">
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c2c9b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -758,16 +766,16 @@ export default function Dashboard() {
                   <h2 className="card-title">Acciones Rápidas</h2>
                 </div>
                 <div className="card-body acciones-list">
-                  <button className="accion-item accion-item--primary" onClick={() => setShowModalNuevoLote(true)}>
+                  <button className="accion-item accion-item--primary" onClick={() => setShowModal(true)}>
+                    <div className="accion-text">
+                      <span className="accion-label">Cargar Nuevo Análisis</span>
+                      <span className="accion-sub">Subí imágenes multiespectral</span>
+                    </div>
+                  </button>
+                  <button className="accion-item" onClick={() => setShowModalNuevoLote(true)}>
                     <div className="accion-text">
                       <span className="accion-label">Nuevo Lote</span>
                       <span className="accion-sub">Registrá una nueva parcela</span>
-                    </div>
-                  </button>
-                  <button className="accion-item" onClick={() => setShowModal(true)}>
-                    <div className="accion-text">
-                      <span className="accion-label">Cargar Ortomosaico</span>
-                      <span className="accion-sub">Subí imágenes multiespectral</span>
                     </div>
                   </button>
                   <button

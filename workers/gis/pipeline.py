@@ -127,6 +127,7 @@ def _procesar_indice_desde_bandas(
     metodo_umbral: str,
     area_minima_m2: int,
     t0: float | None = None,
+    limite_wgs84: dict | None = None,
 ) -> dict:
     """
     Núcleo del pipeline a partir de bandas ya leídas (a la resolución que
@@ -169,7 +170,7 @@ def _procesar_indice_desde_bandas(
     logger.info("[pipeline] clasificacion (%s): %.2fs", metodo_efectivo, time.perf_counter() - t4)
 
     t5 = time.perf_counter()
-    gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2)
+    gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2, limite=limite_wgs84)
     logger.info("[pipeline] vectorizacion (%d poligonos): %.2fs", len(gdf), time.perf_counter() - t5)
 
     t6 = time.perf_counter()
@@ -264,6 +265,7 @@ def ejecutar_pipeline_archivo(
     geojson_destino: str,
     metodo_umbral: str = "fijo",
     area_minima_m2: int = 10_000,
+    limite_wgs84: dict | None = None,
 ) -> dict:
     """
     Variante de ejecutar_pipeline para archivos grandes (> 500 MB / 3 GB+).
@@ -311,6 +313,7 @@ def ejecutar_pipeline_archivo(
 
         return _procesar_indice_desde_bandas(
             indice, sensor, bandas, nodata, meta, geojson_destino, metodo_umbral, area_minima_m2, t0=t0,
+            limite_wgs84=limite_wgs84,
         )
 
     finally:
@@ -328,6 +331,7 @@ def ejecutar_pipeline_multi_indice_archivo(
     area_minima_m2: int = 10_000,
     on_indice_completado=None,
     on_indice_error=None,
+    limite_wgs84: dict | None = None,
 ) -> dict[str, dict]:
     """
     Variante batch de ejecutar_pipeline_archivo: reproyecta y abre el
@@ -393,6 +397,7 @@ def ejecutar_pipeline_multi_indice_archivo(
                     estadisticas = _procesar_indice_desde_bandas(
                         indice, sensor, bandas_indice, meta["nodata"], meta,
                         geojson_destino_por_indice[indice], metodo_umbral, area_minima_m2,
+                        limite_wgs84=limite_wgs84,
                     )
                     resultados[indice] = estadisticas
                     if on_indice_completado is not None:

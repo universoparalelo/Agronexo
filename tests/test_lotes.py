@@ -90,9 +90,9 @@ def _auth() -> dict:
     return {"Authorization": f"Bearer {_token}"}
 
 
-def _crear_lote(nombre: str = "Lote Test", cultivo: str = "soja") -> dict:
+def _crear_lote(nombre: str = "Lote Test") -> dict:
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": nombre, "cultivo": cultivo, "geometry": _GEOM,
+        "nombre": nombre, "geometry": _GEOM,
     }, headers=_auth())
     assert r.status_code == 201, f"No se pudo crear lote auxiliar: {r.text}"
     return r.json()
@@ -103,13 +103,13 @@ def _crear_lote(nombre: str = "Lote Test", cultivo: str = "soja") -> dict:
 def test_crear_lote():
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Norte Principal",
-        "cultivo": "soja",
         "geometry": _GEOM,
     }, headers=_auth())
     assert r.status_code == 201
     body = r.json()
     assert body["nombre"] == "Lote Norte Principal"
-    assert body["cultivo"] == "soja"
+    assert "cultivo" not in body and "variedad" not in body and "fecha_siembra" not in body
+    assert body["cultivos"] == []
     assert body["geometry"] is not None
     assert body["area_ha"] is not None
     assert body["area_ha"] > 0
@@ -118,7 +118,7 @@ def test_crear_lote():
 
 def test_crear_lote_sin_auth():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Sin Auth", "cultivo": "maiz", "geometry": _GEOM,
+        "nombre": "Sin Auth", "geometry": _GEOM,
     })
     assert r.status_code == 401
     print("✓ POST /lotes sin token → 401")
@@ -127,7 +127,7 @@ def test_crear_lote_sin_auth():
 def test_crear_lote_geometry_invalida():
     geom_invalida = {"type": "Polygon", "coordinates": [[[0, 0], [1, 1]]]}
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Geom Rota", "cultivo": "soja", "geometry": geom_invalida,
+        "nombre": "Lote Geom Rota", "geometry": geom_invalida,
     }, headers=_auth())
     assert r.status_code == 422
     print("✓ POST /lotes con geometry inválida → 422")
@@ -135,7 +135,7 @@ def test_crear_lote_geometry_invalida():
 
 def test_crear_lote_geometry_autointersectada():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Bowtie", "cultivo": "soja", "geometry": _GEOM_AUTOINTERSECTADA,
+        "nombre": "Lote Bowtie", "geometry": _GEOM_AUTOINTERSECTADA,
     }, headers=_auth())
     assert r.status_code == 422
     print("✓ POST /lotes con geometry autointersectada (bowtie) → 422")
@@ -143,7 +143,7 @@ def test_crear_lote_geometry_autointersectada():
 
 def test_crear_lote_area_muy_chica():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Diminuto", "cultivo": "soja", "geometry": _GEOM_MUY_CHICA,
+        "nombre": "Lote Diminuto", "geometry": _GEOM_MUY_CHICA,
     }, headers=_auth())
     assert r.status_code == 400
     print(f"✓ POST /lotes con área < 0.5 ha → 400 ({r.json()['detail']})")
@@ -151,20 +151,21 @@ def test_crear_lote_area_muy_chica():
 
 def test_crear_lote_area_muy_grande():
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Gigante", "cultivo": "soja", "geometry": _GEOM_MUY_GRANDE,
+        "nombre": "Lote Gigante", "geometry": _GEOM_MUY_GRANDE,
     }, headers=_auth())
     assert r.status_code == 400
     print(f"✓ POST /lotes con área > 5000 ha → 400 ({r.json()['detail']})")
 
 
-def test_crear_lote_cultivo_invalido():
+def test_crear_lote_ignora_campos_de_cultivo():
+    # cultivo/variedad/fecha_siembra/estadio ya no son del lote (viven en /cultivos)
     r = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Cultivo Raro",
-        "cultivo": "trigo",
-        "geometry": _GEOM,
+        "nombre": "Lote Con Campos Viejos", "cultivo": "soja", "variedad": "X",
+        "fecha_siembra": "2026-11-15T00:00:00Z", "estadio_fenologico": "R2", "geometry": _GEOM,
     }, headers=_auth())
-    assert r.status_code == 422
-    print("✓ POST /lotes con cultivo inválido → 422")
+    assert r.status_code == 201
+    assert "cultivo" not in r.json()
+    print("✓ POST /lotes ignora campos de cultivo")
 
 
 # ── Listar ────────────────────────────────────────────────────────────
@@ -208,17 +209,17 @@ def test_obtener_lote_inexistente():
 
 # ── Actualizar ────────────────────────────────────────────────────────
 
-def test_actualizar_lote_nombre_y_cultivo():
-    lote = _crear_lote("Lote Original", "soja")
+def test_actualizar_lote_nombre_y_suelo():
+    lote = _crear_lote("Lote Original")
     r = _tc.put(f"/api/v1/lotes/{lote['id']}", json={
         "nombre": "Lote Actualizado",
-        "cultivo": "maiz",
+        "tipo_suelo": "vertisol",
     }, headers=_auth())
     assert r.status_code == 200
     body = r.json()
     assert body["nombre"] == "Lote Actualizado"
-    assert body["cultivo"] == "maiz"
-    print("✓ PUT /lotes/{id} → 200 con nombre y cultivo actualizados")
+    assert body["tipo_suelo"] == "vertisol"
+    print("✓ PUT /lotes/{id} → 200 con nombre y tipo de suelo actualizados")
 
 
 def test_actualizar_lote_agrega_geometry():
@@ -296,7 +297,7 @@ def test_lote_de_otro_usuario_no_accesible():
     headers2 = {"Authorization": f"Bearer {token2}"}
 
     lote_ajeno = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote de Otro", "cultivo": "soja", "geometry": _GEOM,
+        "nombre": "Lote de Otro", "geometry": _GEOM,
     }, headers=headers2).json()
 
     r = _tc.get(f"/api/v1/lotes/{lote_ajeno['id']}", headers=_auth())
@@ -314,7 +315,7 @@ def test_lote_de_otro_usuario_no_aparece_en_lista():
     }).json()["access_token"]
 
     lote_ajeno = _tc.post("/api/v1/lotes", json={
-        "nombre": "Lote Privado", "cultivo": "maiz", "geometry": _GEOM,
+        "nombre": "Lote Privado", "geometry": _GEOM,
     }, headers={"Authorization": f"Bearer {token3}"}).json()
 
     items = _tc.get("/api/v1/lotes", headers=_auth()).json()["items"]
@@ -333,12 +334,12 @@ if __name__ == "__main__":
         test_crear_lote_geometry_autointersectada()
         test_crear_lote_area_muy_chica()
         test_crear_lote_area_muy_grande()
-        test_crear_lote_cultivo_invalido()
+        test_crear_lote_ignora_campos_de_cultivo()
         test_listar_lotes()
         test_listar_lotes_sin_auth()
         test_obtener_lote_por_id()
         test_obtener_lote_inexistente()
-        test_actualizar_lote_nombre_y_cultivo()
+        test_actualizar_lote_nombre_y_suelo()
         test_actualizar_lote_agrega_geometry()
         test_actualizar_lote_geometry_area_fuera_de_rango()
         test_actualizar_lote_inexistente()
