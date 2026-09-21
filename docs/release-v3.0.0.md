@@ -533,6 +533,21 @@ El worker ya rellenaba `lotes.geometry` con el rectángulo del primer GeoTIFF cu
 
 **Límite conocido:** el límite tomado de un GeoTIFF es una envolvente convexa, no el contorno exacto del campo — sirve para empezar; para el contorno real hay que dibujarlo o cargarlo desde "Límites".
 
+#### Fix: los mapas de vuelos de dron no cargaban (`?absorber=true` tardaba minutos)
+**Fecha:** 2026-09-21
+**Rama:** `fix/absorber-huecos-dron`
+
+**Error encontrado — el mapa del Dashboard se quedaba cargando solo con vuelos de dron**
+`GET /lotes/{id}/vuelos/{id}/resultado?absorber=true` tardó 347 s (sin `absorber`: 0,7 s) sobre un vuelo `dji_mavic3` con 3 zonas de ~22.000 vértices y ~3.200 huecos. `absorber_huecos` comparaba cada hueco contra el borde completo de cada zona (`boundary.intersection` + `buffer`), costo que con píxeles de cm explota; con Sentinel-2 (10 m) no se notaba.
+
+**Decisiones tomadas:**
+- El borde de todas las zonas se parte una vez en segmentos indexados con `STRtree`; cada hueco suma solo los segmentos que toca y se lo lleva la zona con más borde compartido (antes: intersección exacta). Se mide el largo del segmento entero, no su intersección con el buffer del hueco: elige la misma zona vecina y evita el `intersection`, que era el costo dominante.
+- Legado sin `sin_datos`: el filtro de "hueco chico" usa área aproximada en m² por factor de latitud en vez de reproyectar cada hueco.
+- Resultado sobre el vuelo real: 347 s → 4,7 s, mismas zonas (áreas iguales salvo ±0,0002 ha). Queda como costo restante el `unary_union` de la cobertura (~2,7 s).
+- Test de regresión en `tests/test_absorcion.py` (muchos huecos + borde denso).
+
+**Pendiente:** calcular la versión absorbida una sola vez en el worker en vez de en cada request.
+
 ### Problemas abiertos (Sprint 13)
 
 - **No hay pantalla dedicada para dar de baja un cultivo** — la API (`DELETE /lotes/{id}/cultivos/{id}`) está lista y testeada. Crear y editar cultivos solo se puede desde el paso "Información de cultivo" al iniciar un análisis; no hay vista para cargar la `fecha_cosecha` sin iniciar uno.

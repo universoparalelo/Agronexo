@@ -18,8 +18,12 @@ huecos chicos (AREA_MAX_HUECO_M2), por prudencia.
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 
+import numpy as np
+import shapely
+from shapely import STRtree
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
@@ -44,6 +48,20 @@ def _poligonos(geom: BaseGeometry) -> list[BaseGeometry]:
     if hasattr(geom, "geoms"):
         return [p for g in geom.geoms for p in _poligonos(g)]
     return []
+
+
+def _segmentos_de_borde(geoms: list[BaseGeometry]) -> tuple[np.ndarray, np.ndarray]:
+    """Segmentos de 2 puntos de todos los bordes, y el índice de la zona a la que pertenece cada uno."""
+    partes, dueno = [], []
+    for i, geom in enumerate(geoms):
+        for linea in shapely.get_parts(geom.boundary):
+            c = shapely.get_coordinates(linea)
+            if len(c) < 2:
+                continue
+            tramos = shapely.linestrings(np.stack([c[:-1], c[1:]], axis=1))
+            partes.append(tramos)
+            dueno.append(np.full(len(tramos), i))
+    return np.concatenate(partes), np.concatenate(dueno)
 
 
 def absorber_huecos(geojson: dict, limite_4326: BaseGeometry | None = None) -> dict:
@@ -72,17 +90,26 @@ def absorber_huecos(geojson: dict, limite_4326: BaseGeometry | None = None) -> d
     huecos = region.difference(cobertura)
     if sin_datos is not None:
         huecos = huecos.difference(sin_datos)
+
+    # Un ortomosaico de dron deja miles de huecos contra zonas de decenas de miles
+    # de vértices: comparar cada hueco con el borde completo de cada zona tardaba
+    # minutos. Se parte el borde de todas las zonas en segmentos indexados
+    # espacialmente, y cada hueco solo mide contra los segmentos que toca.
+    segmentos, dueno = _segmentos_de_borde(geoms)
+    arbol = STRtree(segmentos)
+    m2_por_grado2 = 111_320.0 * math.cos(math.radians(lat0)) * 110_540.0
     for hueco in _poligonos(huecos):
-        if not registrado and proyectar_a_metros_locales(hueco, lon0, lat0).area > AREA_MAX_HUECO_M2:
+        if not registrado and hueco.area * m2_por_grado2 > AREA_MAX_HUECO_M2:
             continue
-        zona_vecina, borde_compartido = None, 0.0
         zona_cercana = hueco.buffer(_TOL_GRADOS)
-        for i, geom in enumerate(geoms):
-            if not zona_cercana.intersects(geom):
-                continue
-            largo = geom.boundary.intersection(zona_cercana).length
-            if largo > borde_compartido:
-                zona_vecina, borde_compartido = i, largo
+        cercanos = arbol.query(zona_cercana, predicate="intersects")
+        zona_vecina, borde_compartido = None, 0.0
+        if len(cercanos):
+            largos = shapely.length(segmentos[cercanos])
+            por_zona = np.bincount(dueno[cercanos], weights=largos, minlength=len(geoms))
+            mejor = int(por_zona.argmax())
+            if por_zona[mejor] > 0:
+                zona_vecina, borde_compartido = mejor, por_zona[mejor]
         if zona_vecina is not None:
             asignadas[zona_vecina].append(hueco)
 

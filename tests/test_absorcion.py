@@ -153,3 +153,22 @@ def test_la_parte_del_lote_que_el_raster_no_cubre_queda_en_blanco_si_esta_en_sin
     no_cubierto = box(X0, Y0 + 0.008, X0 + 0.02, Y0 + 0.02)
     salida = absorber_huecos(_coleccion(_feature(solo_abajo, "normal"), sin_datos=mapping(no_cubierto)), LOTE)
     assert abs(_area(salida) - solo_abajo.area) / LOTE.area < 1e-3
+
+
+def test_muchos_huecos_con_bordes_densos_termina_rapido():
+    """Regresión: en un ortomosaico de dron (píxeles de cm) había miles de huecos contra
+    zonas de decenas de miles de vértices y el endpoint tardaba minutos."""
+    import time
+
+    # borde dentado: 4.000 dientes de 0.5 m sobre la zona izquierda
+    n = 4_000
+    xs = [X0 + 0.01 * i / n for i in range(n + 1)]
+    diente = [(x, Y0 + 0.02 - (0.00001 if i % 2 else 0)) for i, x in enumerate(xs)]
+    zona = shape({"type": "Polygon", "coordinates": [[(X0, Y0), (X0 + 0.01, Y0), *reversed(diente)]]}).buffer(0)
+    huecos = [box(X0 + 0.0102 + i * 0.00002, Y0 + 0.005, X0 + 0.0102 + i * 0.00002 + 0.00001, Y0 + 0.005 + 0.00001) for i in range(500)]
+    otra = box(X0 + 0.0101, Y0, X0 + 0.02, Y0 + 0.02).difference(unary_union(huecos))
+
+    t = time.perf_counter()
+    salida = absorber_huecos(_coleccion(_feature(zona, "normal"), _feature(otra, "critica")), LOTE)
+    assert time.perf_counter() - t < 20
+    assert len(salida["features"]) == 2
