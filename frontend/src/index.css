@@ -1865,12 +1865,18 @@ body {
 
 .l2-bg {
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(to top, #070f09 0%, rgba(7, 15, 9, 0.72) 50%, rgba(7, 15, 9, 0.45) 100%),
-    url('/fondo2.jpeg') center/cover no-repeat;
+  inset: -10% 0 0 0;
+  background: url('/fondozaira1.jpeg') center/cover no-repeat;
   z-index: 0;
   animation: l2-bg-reveal 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.l2-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to top, #070f09 0%, rgba(7, 15, 9, 0.6) 50%, rgba(7, 15, 9, 0.3) 100%);
 }
 
 @keyframes l2-bg-reveal {
@@ -1886,29 +1892,80 @@ body {
 }
 
 .l2-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: fixed;
+  top: 1.25rem;
+  left: 1.5rem;
+  right: 1.5rem;
   z-index: 3;
   display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: l2-logo-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.l2-header-inner {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 1200px;
+  height: 56px;
+  display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 2rem;
-  height: 64px;
-  background: rgba(10, 24, 16, 0.45);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 1.5rem;
+  padding: 0 1.25rem;
+  background: rgba(7, 15, 9, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.l2-header-logo-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .l2-logo {
-  position: absolute;
-  top: -2rem;
-  left: 0.7rem;
-  height: 160px;
+  height: 120px;
   width: auto;
-  z-index: 2;
-  animation: l2-logo-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  display: block;
+  transform: translateY(3.5px);
+}
+
+.l2-btn-back {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e3ece5;
+  border-radius: 8px;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.l2-btn-back:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+@media (max-width: 580px) {
+  .l2-header {
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+  }
 }
 
 @keyframes l2-logo-in {
@@ -1926,15 +1983,15 @@ body {
 }
 
 .l2-modal {
-  background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(7, 15, 9, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 2.25rem 2rem;
   width: 100%;
   max-width: 380px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -1944,14 +2001,14 @@ body {
 .l2-modal-header h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #111;
+  color: #e8f0ea;
   letter-spacing: -0.5px;
   text-align: center;
 }
 
 .l2-modal-header p {
   font-size: 0.84rem;
-  color: #aaa;
+  color: #7a9a82;
   margin-top: 0.25rem;
 }
 
@@ -1970,7 +2027,7 @@ body {
 .l2-field label {
   font-size: 0.625rem;
   font-weight: 600;
-  color: #bbb;
+  color: #7a9a82;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -1984,30 +2041,30 @@ body {
 .l2-input-wrap input {
   width: 100%;
   padding: 0.625rem 2.25rem;
-  border: 1.5px solid #ebebeb;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
   border-radius: 9px;
   font-size: 0.84rem;
   outline: none;
-  background: #fafafa;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  color: #e8f0ea;
   font-family: inherit;
 }
 
 .l2-input-wrap input::placeholder {
-  color: #ccc;
+  color: rgba(232, 240, 234, 0.35);
 }
 
 .l2-input-wrap input:focus {
-  border-color: #2d5a3d;
-  box-shadow: 0 0 0 3px rgba(45, 90, 61, 0.1);
-  background: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .l2-icon {
   position: absolute;
   left: 0.75rem;
-  color: #d0d0d0;
+  color: rgba(232, 240, 234, 0.4);
   display: flex;
   align-items: center;
   pointer-events: none;
@@ -2018,7 +2075,7 @@ body {
   right: 0.75rem;
   background: none;
   border: none;
-  color: #d0d0d0;
+  color: rgba(232, 240, 234, 0.4);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -2026,7 +2083,7 @@ body {
 }
 
 .l2-icon-right:hover {
-  color: #555;
+  color: #e8f0ea;
 }
 
 .l2-options {
@@ -2040,14 +2097,14 @@ body {
   align-items: center;
   gap: 0.4rem;
   font-size: 0.8rem;
-  color: #555;
+  color: #a9bfb0;
   cursor: pointer;
 }
 
 .l2-remember input[type="checkbox"] {
   width: 13px;
   height: 13px;
-  accent-color: #1a3a2a;
+  accent-color: #9cc2a8;
   cursor: pointer;
 }
 
@@ -2055,7 +2112,7 @@ body {
   background: none;
   border: none;
   font-size: 0.8rem;
-  color: #b5860a;
+  color: #9cc2a8;
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -2071,22 +2128,24 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  background: linear-gradient(135deg, #1a3a2a, #2d5a3d);
-  color: #fff;
-  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef4ef;
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 9px;
   padding: 0.75rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
   width: 100%;
   font-family: inherit;
   margin-top: 0.25rem;
 }
 
 .l2-btn-submit:hover:not(:disabled) {
-  opacity: 0.88;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
 }
 
 .l2-btn-submit:disabled {
@@ -2097,13 +2156,13 @@ body {
 .l2-register {
   text-align: center;
   font-size: 0.84rem;
-  color: #aaa;
+  color: #7a9a82;
 }
 
 .l2-register-link {
   background: none;
   border: none;
-  color: #1a3a2a;
+  color: #9cc2a8;
   font-weight: 700;
   cursor: pointer;
   padding: 0;
@@ -2113,6 +2172,12 @@ body {
 
 .l2-register-link:hover {
   text-decoration: underline;
+}
+
+.l2-modal .error-message {
+  background: rgba(220, 80, 80, 0.12);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
 }
 
 /* Feature cards en fila abajo */
