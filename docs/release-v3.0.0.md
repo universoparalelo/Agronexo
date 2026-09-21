@@ -354,3 +354,29 @@ Verificación de cierre de sprint sobre los tres documentos/exportaciones nuevos
 
 **Error encontrado — "Totales por producto" mostraba 0.00 en vez de "—" para un producto sin dosis de referencia**
 Un producto cuya única unidad tiene `sin_dosis_referencia=True` mostraba `0.00` en la fila de "Totales por producto" del PDF de orden de trabajo (el acumulador de `_totales_por_producto()` en `app/diagnostico/orden_trabajo.py` arranca en `0.0` y nunca suma si `volumen_total` es `None`) — inconsistente con la fila individual de esa misma unidad, que sí mostraba "— (completar a mano)". Riesgo real: alguien podría leer "0.00" como "no aplicar nada" en vez de "dosis pendiente de completar a mano". Se corrigió en el template (`app/ordenes_trabajo/templates/orden_trabajo.html`): la celda de volumen total ahora muestra "— (completar a mano)" cuando `total.unidad_dosis` es vacío (ningún ítem de ese producto tenía dosis cargada). No se tocó el cálculo en Python — sigue siendo correcto y ya está cubierto por `test_orden_trabajo.py`, era puramente un problema de presentación.
+
+### Fixes posteriores al cierre de Sprint 12
+
+#### Fix: tabla "Análisis Recientes" del Dashboard se quedaba en "Pendiente" para siempre
+**Fecha:** 2026-09-21
+
+Reporte de usuario: subió un vuelo satelital al lote "Prueba Satelite" y la fila se quedó mostrando "Pendiente" sin ningún indicador de progreso, aunque el procesamiento ya había terminado. Confirmado con datos reales (worker log, `psql`, y `curl` directo a `/estado`/`/resultado`) que el vuelo sí llegó a `completado` en ~21s — el problema era pura UI, no backend.
+
+**Causa raíz:** `handleCargaExitosa()` en `frontend/src/pages/Dashboard.jsx` llama a `cargarDatos()` una sola vez, justo cuando se acepta el upload (202) — antes de que el worker termine — y nada vuelve a refrescar la tabla después. El panel de mapa (`AnalisisMap`, vía `useVueloProgreso`) sí hace polling cada 2s y funciona bien, pero es un componente separado que no actualiza `loteRows`/`vueloRows`.
+
+**Fix:** `cargarDatos()` ahora acepta `{ silencioso: true }` para refrescar sin togglear `loading` (evita que la tabla entera parpadee a "Cargando..." en cada poll). Nuevo `useEffect` (mismo patrón que ya usaba `DetalleLote.jsx`) hace polling cada 3s mientras haya algún vuelo en `pendiente`/`procesando`, y se detiene solo cuando todos terminan.
+
+#### Fix: mapa de zonas se mostraba en blanco sin explicación cuando el análisis no genera zonas
+**Fecha:** 2026-09-21
+
+Mismo reporte del usuario: además de la tabla congelada, el mapa no mostraba ninguna marca. Investigado con los datos reales del vuelo: el NDVI del lote "Prueba Satelite" salió con variación real (min 0.29, max 0.84) pero el worker vectorizó **0 polígonos** — no es un bug de cálculo. Causa raíz: `workers/gis/zonas.py::AREA_MINIMA_M2 = 10_000` (1 ha) descarta cualquier fragmento vectorizado más chico que eso, y el lote entero mide solo **0.61 ha** — por debajo del propio umbral. Ninguna zona puede pasar el filtro en un lote así de chico, sin importar el resultado del índice.
+
+Antes de este fix, `MapaIndice.jsx` con `nFeatures === 0` caía al bounds por defecto (`[[-34,-64],[-22,-53]]`, todo Argentina) — el usuario veía un mapa del país en blanco sin ninguna pista de qué pasó.
+
+**Fix (solo frontend, sin cambios de backend):** `AnalisisMap` en `Dashboard.jsx` ahora detecta `geojson.features.length === 0` en estado `completado` y muestra un mensaje explicativo en vez de delegar a `MapaIndice`, distinguiendo dos casos:
+- Lote más chico que el área mínima de zonificación (`loteAreaHa < 1`, recibido como prop desde `selectedVueloRow.lote.area_ha`) — explica el umbral real y aclara que ese lote nunca va a poder mostrar zonas mientras sea tan chico.
+- Lote de tamaño normal sin zonas — explica que el índice se mantuvo uniforme/sano, sugiere probar otra fecha/escena o cambiar de índice (NDRE) con el selector ya existente.
+
+**Decisión tomada:** no se tocó `AREA_MINIMA_M2` en el backend ni se agregó un parámetro para bajarlo desde la UI — es un cambio de mayor alcance (afecta el filtro "sal y pimienta" para todos los lotes, no solo los de prueba) fuera del pedido puntual del usuario. Si en el futuro se necesita analizar lotes reales de menos de 1 ha, evaluar exponer `area_minima_m2` como parámetro configurable.
+
+**Resultado:** `frontend/src/pages/Dashboard.jsx` (ambos fixes). `npm run build` sin errores.
