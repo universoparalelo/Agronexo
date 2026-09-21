@@ -46,75 +46,16 @@ const METRICS = [
   { label: 'PRECISIÓN DETECCIÓN', value: '99%', desc: 'accuracy del modelo IA', accent: 'teal' },
 ]
 
-const FEATURES = [
-  {
-    title: 'Captura Multiespectral',
-    desc: 'Drones y satélites capturan bandas NIR, RE y Green con sincronización GPS RTK centimétrica.',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Análisis IA en tiempo real',
-    desc: 'Red neuronal que procesa ortomosaicos y genera índices de vegetación precisos al instante.',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Diagnóstico de Anomalías',
-    desc: 'Detecta focos de estrés hídrico, plagas y deficiencias nutricionales semanas antes que el ojo humano.',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-        <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Prescripción Diferenciada',
-    desc: 'Genera órdenes de trabajo ISO-XML para maquinaria de aplicación variable con buffer geométrico.',
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" />
-      </svg>
-    ),
-  },
+const CAPACIDADES = [
+  'Captura Multiespectral',
+  'Análisis IA en tiempo real',
+  'Diagnóstico de Anomalías',
+  'Prescripción Diferenciada',
+  'Índices NDVI · NDRE · SAVI',
+  'Zonificación Automática',
+  'Órdenes de Trabajo ISO-XML',
+  'Georreferenciación RTK'
 ]
-
-const FAQS = [
-  {
-    question: '¿Cómo funciona el monitoreo satelital de AgroNexo?',
-    answer: 'Procesamos imágenes multiespectrales de Sentinel-2 y drones DJI Mavic 3 Multispectral. Nuestro pipeline extrae bandas NIR, RED y GREEN para calcular NDVI, NDRE y SAVI con resolución centimétrica, generando alertas automáticas ante variaciones superiores al umbral configurado.',
-  },
-  {
-    question: '¿Qué cultivos y regiones cubre la plataforma?',
-    answer: 'AgroNexo está optimizado para soja, algodón, maíz y sorgo en el NEA argentino (Chaco, Formosa, Corrientes). El sistema contempla las particularidades edáficas de vertisoles y suelos sódico-salinos de la región.',
-  },
-  {
-    question: '¿Qué precisión tiene la detección de anomalías?',
-    answer: 'Nuestro modelo alcanza 99% de precisión en la clasificación de zonas. Clasificamos patrones espaciales (circulares, lineales, difusos) para diferenciar enfermedades fúngicas, compactación, déficit hídrico y plagas con scoring probabilístico.',
-  },
-  {
-    question: '¿Puedo integrar AgroNexo con mis sistemas existentes?',
-    answer: 'Sí. AgroNexo expone una API REST completa con endpoints GeoJSON y exportación a Shapefile, ISO-XML e integración IoT. Compatible con sistemas de autoguiado John Deere y Case IH mediante RTK.',
-  },
-  {
-    question: '¿Cuánto tiempo tarda el procesamiento de un lote?',
-    answer: 'El pipeline GIS completo (carga GeoTIFF → índices → vectorización → diagnóstico) tarda entre 2 y 8 minutos según el tamaño del archivo. El progreso es visible en tiempo real mediante polling cada 2 segundos.',
-  },
-  {
-    question: '¿Cómo accedo a los reportes y prescripciones?',
-    answer: 'Desde el dashboard podés descargar reportes PDF (WeasyPrint), archivos Shapefile.zip para maquinaria y órdenes ISO-XML para ISOBUS. También están disponibles via API para integración automática con tu flujo de trabajo.',
-  },
-]
-
-const LOGOS = ['TERRA AGRO', 'CAMPO+', 'AGROVIA', 'NEXO SAT', 'GEO-CAMPO', 'AGROTECH', 'SOJA360', 'NEA PROD']
 
 /* ── Component ── */
 export default function LandingOriginal() {
@@ -122,27 +63,41 @@ export default function LandingOriginal() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [scrollY, setScrollY] = useState(0)
-  const [selectedFeature, setSelectedFeature] = useState(0)
-  const [imageFade, setImageFade] = useState(true)
-  const [autoRotationKey, setAutoRotationKey] = useState(0)
-  const [wordIndex, setWordIndex] = useState(0)
-  const [wordFade, setWordFade] = useState(true)
+  const [typedWord, setTypedWord] = useState(DYNAMIC_WORDS[0])
   const [dashTilt, setDashTilt] = useState(0)
-  const [openFaq, setOpenFaq] = useState(null)
 
   const dashRef = useRef(null)
   const observerRef = useRef(null)
 
-  // Word rotation
+  // Typewriter word rotation
   useEffect(() => {
-    const interval = setInterval(() => {
-      setWordFade(false)
-      setTimeout(() => {
-        setWordIndex(i => (i + 1) % DYNAMIC_WORDS.length)
-        setWordFade(true)
-      }, 300)
-    }, 3000)
-    return () => clearInterval(interval)
+    let idx = 0
+    let pos = DYNAMIC_WORDS[0].length
+    let deleting = false
+    let timer
+    const tick = () => {
+      const word = DYNAMIC_WORDS[idx]
+      if (!deleting) {
+        if (pos < word.length) {
+          pos++
+          setTypedWord(word.slice(0, pos))
+          timer = setTimeout(tick, 90)
+        } else {
+          deleting = true
+          timer = setTimeout(tick, 2000)
+        }
+      } else if (pos > 0) {
+        pos--
+        setTypedWord(word.slice(0, pos))
+        timer = setTimeout(tick, 50)
+      } else {
+        deleting = false
+        idx = (idx + 1) % DYNAMIC_WORDS.length
+        timer = setTimeout(tick, 250)
+      }
+    }
+    timer = setTimeout(tick, 2000)
+    return () => clearTimeout(timer)
   }, [])
 
   // Scroll: parallax + dashboard tilt
@@ -175,18 +130,6 @@ export default function LandingOriginal() {
     return () => observerRef.current?.disconnect()
   }, [])
 
-  // Feature auto-rotation
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setImageFade(false)
-      setTimeout(() => {
-        setSelectedFeature(i => (i + 1) % FEATURES.length)
-        setImageFade(true)
-      }, 300)
-    }, 6000)
-    return () => clearInterval(interval)
-  }, [autoRotationKey])
-
   const scrollTo = id => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
     setIsMenuOpen(false)
@@ -198,14 +141,14 @@ export default function LandingOriginal() {
     <div className={`l2orig-root${isLoaded ? ' l2orig-loaded' : ''}`}>
 
       {/* ── Header ── */}
-      <header className="l2orig-header">
+      <header className={`l2orig-header${scrollY > 50 ? ' l2orig-header--scrolled' : ''}`}>
         <div className="l2orig-header-inner">
           <button className="l2orig-header-logo-btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <img src="/logo.png" alt="AgroNexo" className="l2orig-logo-img" />
           </button>
 
           <nav className="l2orig-nav">
-            {[['metrics', 'Impacto'], ['features', 'Tecnología'], ['faq', 'FAQ'], ['cta', 'Acceso']].map(([id, label]) => (
+            {[['metrics', 'Impacto']].map(([id, label]) => (
               <button key={id} className="l2orig-nav-link" onClick={() => scrollTo(id)}>{label}</button>
             ))}
           </nav>
@@ -229,7 +172,7 @@ export default function LandingOriginal() {
       {/* ── Mobile menu overlay ── */}
       {isMenuOpen && (
         <div className="l2orig-mobile-menu">
-          {[['metrics', 'Impacto'], ['features', 'Tecnología'], ['faq', 'FAQ'], ['cta', 'Acceso']].map(([id, label]) => (
+          {[['metrics', 'Impacto']].map(([id, label]) => (
             <button key={id} className="l2orig-mobile-menu-link" onClick={() => scrollTo(id)}>{label}</button>
           ))}
           <button className="l2orig-mobile-menu-cta" onClick={() => { goLogin(); setIsMenuOpen(false) }}>Ingresar a la plataforma</button>
@@ -250,18 +193,18 @@ export default function LandingOriginal() {
         >
           <div className="l2orig-hero-text">
             <h1 className="l2orig-hero-title">
-              <span className={`l2orig-hero-word l2orig-stagger${wordFade ? '' : ' l2orig-word-hidden'}`}>
-                Gestioná <span className="l2orig-hero-accent">{DYNAMIC_WORDS[wordIndex]}</span>
+              <span className="l2orig-hero-word l2orig-stagger">
+                Gestioná{' '}<span className="l2orig-hero-accent">{typedWord}</span>
               </span>
               <span className="l2orig-stagger l2orig-stagger-2">a escala</span>
             </h1>
-            <p className="l2orig-hero-desc l2orig-stagger l2orig-stagger-3">
-              Monitoreo de cultivos con IA. Detectá amenazas, calculá índices de vegetación
-              y tomá decisiones agronómicas en tiempo real.
-            </p>
-            <div className="l2orig-stagger l2orig-stagger-4">
+            <div className="l2orig-stagger l2orig-stagger-4" style={{ marginTop: '4.5rem' }}>
               <button className="l2orig-btn-hero" onClick={goLogin}>
-                Comenzar ahora
+                <span>Comenzar ahora</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
               </button>
             </div>
           </div>
@@ -270,11 +213,14 @@ export default function LandingOriginal() {
 
       {/* ── Marquee ── */}
       <section className="l2orig-marquee-section">
-        <p className="l2orig-marquee-label">Empresas líderes que confían en AgroNexo</p>
+        <p className="l2orig-marquee-label">Capacidades del motor de precisión agronómica</p>
         <div className="l2orig-marquee">
           <div className="l2orig-marquee-track">
-            {[...LOGOS, ...LOGOS].map((l, i) => (
-              <span key={i} className="l2orig-marquee-item">{l}</span>
+            {[...CAPACIDADES, ...CAPACIDADES].map((item, i) => (
+              <span key={i} className="l2orig-marquee-item">
+                <span className="l2orig-marquee-dot" />
+                {item}
+              </span>
             ))}
           </div>
         </div>
@@ -305,250 +251,49 @@ export default function LandingOriginal() {
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section id="features" className="l2orig-section l2orig-anim">
-        <div className="l2orig-container">
-          <div className="l2orig-features-grid">
-            {/* Left: text + feature list */}
-            <div>
-              <div className="l2orig-eyebrow">
-                <span className="l2orig-eyebrow-dot" />
-                TECNOLOGÍA GIS
-              </div>
-              <h2 className="l2orig-features-title">
-                Cada lote agrícola{' '}
-                <span className="l2orig-gradient-text">importa</span>
-              </h2>
-              <p className="l2orig-features-desc">
-                Nuestra plataforma satelital con IA monitorea la biodiversidad del suelo, detecta
-                anomalías fitosanitarias, y alerta en tiempo real. Precisión al ritmo que exige el campo.
-              </p>
-
-              {/* Mobile: single image */}
-              <div className="l2orig-features-img-mobile">
-                <img
-                  src="/fondo.jpeg"
-                  alt="Feature"
-                  style={{ opacity: imageFade ? 1 : 0, transition: 'opacity 0.3s' }}
-                />
-              </div>
-
-              <div className="l2orig-features-list">
-                {FEATURES.map((f, i) => (
-                  <button
-                    key={i}
-                    className={`l2orig-feature-item${selectedFeature === i ? ' l2orig-feature-item--active' : ''}`}
-                    onClick={() => {
-                      setImageFade(false)
-                      setTimeout(() => { setSelectedFeature(i); setImageFade(true); setAutoRotationKey(k => k + 1) }, 300)
-                    }}
-                  >
-                    <span className={`l2orig-feature-icon${selectedFeature === i ? ' l2orig-feature-icon--active' : ''}`}>
-                      {f.icon}
-                    </span>
-                    <div>
-                      <h3 className="l2orig-feature-title">{f.title}</h3>
-                      <p className="l2orig-feature-desc">{f.desc}</p>
-                    </div>
-                    {selectedFeature === i && (
-                      <div className="l2orig-progress-track">
-                        <div className="l2orig-progress-bar" />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Right: image stack */}
-            <div className="l2orig-img-stack">
-              {FEATURES.map((_, i) => {
-                const pos = (i - selectedFeature + FEATURES.length) % FEATURES.length
-                return (
-                  <div
-                    key={i}
-                    className="l2orig-img-stack-item"
-                    style={{
-                      zIndex: FEATURES.length - pos,
-                      transform: `translateX(${pos * 18}px) scale(${1 - pos * 0.025})`,
-                      opacity: pos === 0 ? (imageFade ? 1 : 0.8) : Math.max(0, 0.55 - pos * 0.15),
-                      transition: 'all 0.6s cubic-bezier(0.16,1,0.3,1)',
-                    }}
-                  >
-                    <img src="/fondo.jpeg" alt={FEATURES[i].title} />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── FAQ ── */}
-      <section id="faq" className="l2orig-section l2orig-anim">
-        <div className="l2orig-container l2orig-container--narrow">
-          <div className="l2orig-section-center">
-            <div className="l2orig-eyebrow l2orig-eyebrow--center">
-              <span className="l2orig-eyebrow-dot" />
-              PREGUNTAS FRECUENTES
-            </div>
-            <h2 className="l2orig-section-title">
-              ¿Tenés <span className="l2orig-gradient-text">preguntas</span>?
-            </h2>
-            <p className="l2orig-section-desc">
-              Todo lo que necesitás saber sobre AgroNexo y nuestra plataforma de precisión agronómica.
-            </p>
-          </div>
-
-          <div className="l2orig-faq-list">
-            {FAQS.map((faq, i) => (
-              <div key={i} className={`l2orig-faq-item${openFaq === i ? ' l2orig-faq-item--open' : ''}`}>
-                <button
-                  className="l2orig-faq-question"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
-                  <span>{faq.question}</span>
-                  <svg
-                    className={`l2orig-faq-chevron${openFaq === i ? ' l2orig-faq-chevron--open' : ''}`}
-                    width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </button>
-                <div className={`l2orig-faq-answer${openFaq === i ? ' l2orig-faq-answer--open' : ''}`}>
-                  <p>{faq.answer}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section id="cta" className="l2orig-cta l2orig-anim">
-        <div className="l2orig-cta-gradient-top" />
-        <div className="l2orig-cta-bg" />
-        <div className="l2orig-container l2orig-cta-content">
-          <div className="l2orig-cta-pill">
-            <span className="l2orig-eyebrow-dot" />
-            Plataforma de precisión agronómica
-          </div>
-          <h2 className="l2orig-cta-title">Uníte al movimiento de agricultura digital</h2>
-          <p className="l2orig-cta-desc">
-            Junto a productores líderes del NEA estamos transformando la toma de decisiones
-            en el campo con tecnología GIS de precisión.
-          </p>
-          <button className="l2orig-btn-cta" onClick={goLogin}>
-            Acceder a la plataforma
-          </button>
-        </div>
-      </section>
-
       {/* ── Footer ── */}
       <footer className="l2orig-footer">
         <div className="l2orig-container">
-          <div className="l2orig-footer-grid">
-            <div className="l2orig-footer-brand">
-              <img src="/logo_verde.png" alt="AgroNexo" className="l2orig-footer-logo" />
+          <div className="l2orig-footer-main">
+            <div className="l2orig-footer-brand-col">
+              <div className="l2orig-footer-brand-header">
+                <img src="/logo.png" alt="AgroNexo" className="l2orig-footer-logo-full" />
+              </div>
               <p className="l2orig-footer-brand-desc">
-                Liderando la revolución de la agricultura digital con soluciones geoespaciales de alta precisión.
+                Soluciones de agricultura de precisión, procesamiento GIS y diagnóstico asistido por inteligencia artificial para el NEA argentino.
               </p>
-              <div className="l2orig-footer-social">
-                {/* X */}
-                <a href="#" className="l2orig-social-link" aria-label="X">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-                </a>
-                {/* YouTube */}
-                <a href="#" className="l2orig-social-link" aria-label="YouTube">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" /></svg>
-                </a>
-                {/* Instagram */}
-                <a href="#" className="l2orig-social-link" aria-label="Instagram">
-                  <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" /></svg>
-                </a>
+              <div className="l2orig-footer-meta">
+                <span className="l2orig-footer-meta-item">
+                  Resistencia, Chaco · Argentina
+                </span>
               </div>
             </div>
 
             <div className="l2orig-footer-col">
-              <h4 className="l2orig-footer-col-title">Producto</h4>
-              {['Funcionalidades', 'Precios', 'Documentación', 'API GIS'].map(l => <a key={l} href="#" className="l2orig-footer-link">{l}</a>)}
+              <h4 className="l2orig-footer-col-title">MÓDULOS</h4>
+              <button className="l2orig-footer-btn" onClick={() => scrollTo('metrics')}>Impacto Agronómico</button>
+              <button className="l2orig-footer-btn" onClick={() => scrollTo('metrics')}>Índices NDVI / NDRE</button>
+              <button className="l2orig-footer-btn" onClick={goLogin}>Motor de Diagnóstico</button>
+              <button className="l2orig-footer-btn" onClick={goLogin}>Prescripciones ISO-XML</button>
             </div>
 
             <div className="l2orig-footer-col">
-              <h4 className="l2orig-footer-col-title">Compañía</h4>
-              {['Sobre Nosotros', 'Blog Técnico', 'Casos de Éxito', 'Contacto'].map(l => <a key={l} href="#" className="l2orig-footer-link">{l}</a>)}
-            </div>
-
-            <div className="l2orig-footer-col">
-              <h4 className="l2orig-footer-col-title">Newsletter</h4>
-              <p className="l2orig-footer-newsletter-desc">Novedades sobre agricultura de precisión en el NEA.</p>
-              <input type="email" placeholder="tu@email.com" className="l2orig-newsletter-input" />
-              <button className="l2orig-newsletter-btn">Suscribirse</button>
+              <h4 className="l2orig-footer-col-title">PLATAFORMA</h4>
+              <button className="l2orig-footer-btn" onClick={goLogin}>Iniciar Sesión</button>
+              <button className="l2orig-footer-btn" onClick={goLogin}>Crear Cuenta</button>
             </div>
           </div>
 
           <div className="l2orig-footer-bottom">
-            <span>© 2026 AgroNexo GIS Solutions. Todos los derechos reservados.</span>
+            <span>© 2026 AgroNexo GIS Platform. Todos los derechos reservados.</span>
             <div className="l2orig-footer-bottom-links">
-              <a href="#">Privacidad</a>
-              <a href="#">Términos</a>
-              <a href="#">Cookies</a>
+              <a href="#">Términos de Servicio</a>
+              <a href="#">Privacidad Geoespacial</a>
+              <a href="#">Documentación API</a>
             </div>
           </div>
         </div>
       </footer>
-
-      {/* ── 3-Version Comparison Bar ── */}
-      <div style={{
-        position: 'fixed',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 99999,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '8px 16px',
-        borderRadius: '9999px',
-        background: 'rgba(15, 23, 42, 0.94)',
-        border: '1px solid rgba(255, 255, 255, 0.18)',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-        backdropFilter: 'blur(16px)',
-        fontSize: '12px',
-        fontFamily: 'system-ui, sans-serif'
-      }}>
-        <span style={{ color: '#94a3b8', fontWeight: 600, marginRight: '4px' }}>Comparar:</span>
-        <a href="/" style={{
-          padding: '6px 12px',
-          borderRadius: '9999px',
-          background: 'rgba(255,255,255,0.08)',
-          color: '#ffffff',
-          textDecoration: 'none',
-          fontWeight: 500
-        }}>
-          🌿 1. Nueva (Clean White)
-        </a>
-        <a href="/landing-intermedia" style={{
-          padding: '6px 12px',
-          borderRadius: '9999px',
-          background: 'rgba(255,255,255,0.08)',
-          color: '#ffffff',
-          textDecoration: 'none',
-          fontWeight: 500
-        }}>
-          🌙 2. Intermedia (Dark Pro)
-        </a>
-        <a href="/landing-original" style={{
-          padding: '6px 12px',
-          borderRadius: '9999px',
-          background: '#27500a',
-          color: '#ffffff',
-          textDecoration: 'none',
-          fontWeight: 700
-        }}>
-          📜 3. Original (Dark Glass) ✓
-        </a>
-      </div>
     </div>
   )
 }
