@@ -302,6 +302,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
           escenaSeleccionada.escena_id,
           new Date(fechaVuelo).toISOString(),
           estadioFenologico.trim() || null,
+          indices.filter((i) => i !== 'ndvi'),
         )
       } else {
         const fd = new FormData()
@@ -325,7 +326,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
       }
 
       const indicesAdicionales = indices.filter((i) => i !== 'ndvi')
-      if (indicesAdicionales.length > 0) {
+      // En satélite el archivo no existe todavía: el worker encola el batch al terminar la descarga.
+      if (fuente !== 'satelite' && indicesAdicionales.length > 0) {
         try {
           await analizarIndicesBatch(loteId, data.vuelo_id, indicesAdicionales)
         } catch {

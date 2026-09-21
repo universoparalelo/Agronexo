@@ -51,6 +51,8 @@ const ETIQUETAS_CLASE_POR_INDICE = {
   },
 }
 
+const ESTILO_LIMITE = { fill: false, color: '#7dd3fc', weight: 2, dashArray: '4 6' }
+
 function styleFeature(feature) {
   const clase = feature?.properties?.clase
   return {
@@ -107,7 +109,7 @@ class MapaBoundary extends Component {
 
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
-export default function MapaIndice({ geojson, indice = 'ndvi' }) {
+export default function MapaIndice({ geojson, indice = 'ndvi', limite = null }) {
   const nFeatures = geojson?.features?.length ?? 0
   const indiceLabel = INDICE_LABEL[indice] ?? indice.toUpperCase()
   const etiquetasClase = ETIQUETAS_CLASE_POR_INDICE[indice] ?? ETIQUETAS_CLASE_POR_INDICE.ndvi
@@ -171,6 +173,14 @@ export default function MapaIndice({ geojson, indice = 'ndvi' }) {
             style={styleFeature}
             onEachFeature={onEachFeature}
           />
+          {limite && (
+            <GeoJSON
+              key={`limite-${JSON.stringify(limite.coordinates?.[0]?.[0])}`}
+              data={limite}
+              style={ESTILO_LIMITE}
+              interactive={false}
+            />
+          )}
           <InvalidarAlRedimensionar />
         </MapContainer>
 

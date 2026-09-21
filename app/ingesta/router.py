@@ -225,6 +225,7 @@ async def crear_vuelo_desde_satelite(
         escena_id=data.escena_id,
         fecha_vuelo=data.fecha_vuelo,
         estadio_fenologico=data.estadio_fenologico,
+        indices=data.indices,
     )
     await db.commit()
 

@@ -192,13 +192,13 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
 /* ──────── Mapa de análisis (panel inferior) ──────── */
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
-function AnalisisMap({ loteId, vueloId, indice }) {
+function AnalisisMap({ loteId, vueloId, indice, limite }) {
   const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
 
   if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
   const estadoActual = estado.estado
-  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} />
+  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} limite={limite} />
   if (estadoActual === 'error' || errorMsg) {
     return (
       <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>
@@ -734,7 +734,7 @@ export default function Dashboard() {
                 )}
                 <div className="card-mapa-body">
                   {selectedVuelo
-                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} />
+                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry} />
                     : (
                       <div className="mapa-placeholder">
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c2c9b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
