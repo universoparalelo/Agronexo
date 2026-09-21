@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import { listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
 
 const ESTADO_LABELS = {
@@ -13,10 +14,6 @@ const ESTADO_LABELS = {
 const SENSOR_LABELS = {
   sentinel2:  'Sentinel-2',
   dji_mavic3: 'DJI Mavic 3',
-}
-
-const CULTIVO_LABELS = {
-  soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo',
 }
 
 export default function DetalleLote() {
@@ -85,9 +82,11 @@ export default function DetalleLote() {
           <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
           <div className="detalle-titulo">
             <h1>{lote.nombre}</h1>
-            <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
-              {CULTIVO_LABELS[lote.cultivo] || lote.cultivo}
-            </span>
+            {cultivoMasReciente(lote) && (
+              <span className={`cultivo-badge cultivo-${cultivoMasReciente(lote).tipo_cultivo}`}>
+                {etiquetaTipoCultivo(cultivoMasReciente(lote).tipo_cultivo)}
+              </span>
+            )}
           </div>
         </div>
         {lote.area_ha && (

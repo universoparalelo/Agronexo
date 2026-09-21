@@ -57,8 +57,6 @@ def setup_module(module):
 
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Para Tests de Diagnostico",
-        "cultivo": "soja",
-        "estadio_fenologico": "R2",
         "geometry": _GEOM,
     }, headers={"Authorization": f"Bearer {_token}"})
     assert r.status_code == 201, f"setup_module crear lote falló: {r.text}"
@@ -73,18 +71,23 @@ def _auth() -> dict:
     return {"Authorization": f"Bearer {_token}"}
 
 
-def _insertar_vuelo(lote_id: str, estado: str = "pendiente", geojson_key: str | None = None) -> str:
+def _insertar_vuelo(
+    lote_id: str, estado: str = "pendiente", geojson_key: str | None = None,
+    cultivo_id: str | None = None, estadio_fenologico: str | None = None,
+) -> str:
     """Inserta un vuelo directamente en la BD, sin pasar por MinIO ni Celery."""
     vuelo_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     engine = create_engine(settings.database_url_sync)
     with engine.connect() as conn:
         conn.execute(text(
-            "INSERT INTO vuelos (id, lote_id, sensor, fecha_vuelo, estado, geojson_key, created_at) "
-            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), :sensor, :fecha, :estado, :geojson_key, :created_at)"
+            "INSERT INTO vuelos (id, lote_id, cultivo_id, estadio_fenologico, sensor, fecha_vuelo, estado, geojson_key, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), CAST(:cultivo_id AS uuid), :estadio, :sensor, :fecha, :estado, :geojson_key, :created_at)"
         ), {
             "id": vuelo_id,
             "lote_id": lote_id,
+            "cultivo_id": cultivo_id,
+            "estadio": estadio_fenologico,
             "sensor": "dji_mavic3",
             "fecha": now,
             "estado": estado,
@@ -148,6 +151,70 @@ def test_diagnostico_vuelo_de_otro_lote_es_404():
     r = _tc.get(f"/api/v1/lotes/{uuid.uuid4()}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
     assert r.status_code == 404
     print("✓ GET /diagnostico vuelo con lote_id ajeno → 404")
+
+
+# ── Cultivo del análisis ─────────────────────────────────────────────
+
+def _crear_cultivo(tipo: str = "maiz", variedad: str | None = "DK 72-10") -> str:
+    r = _tc.post(f"/api/v1/lotes/{_lote_id}/cultivos", json={
+        "tipo_cultivo": tipo, "variedad": variedad, "fecha_siembra": "2026-09-01T00:00:00Z",
+    }, headers=_auth())
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def _geojson_ndvi_fixture() -> dict:
+    import json
+    from pathlib import Path
+    return json.loads((Path(__file__).parent / "fixtures" / "resultado_ndvi.geojson").read_text(encoding="utf-8"))
+
+
+def test_diagnostico_usa_el_cultivo_del_vuelo(monkeypatch):
+    # El cultivo sale del análisis (vuelo.cultivo), no del lote: dos vuelos del
+    # mismo lote con cultivos distintos deben diagnosticarse con el suyo.
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+
+    cultivo_maiz = _crear_cultivo("maiz", "DK 72-10")
+    vuelo_id = _insertar_vuelo(
+        _lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo_maiz, estadio_fenologico="R2",
+    )
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 200, r.text
+    meta = r.json()["metadata"]
+    assert meta["cultivo"] == "maiz"
+    assert meta["variedad"] == "DK 72-10"
+    assert meta["cultivo_id"] == cultivo_maiz
+    assert meta["estadio_fenologico"] == "R2"
+
+    cultivo_soja = _crear_cultivo("soja", None)
+    vuelo_soja = _insertar_vuelo(
+        _lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo_soja, estadio_fenologico="R2",
+    )
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_soja}/diagnostico", headers=_auth())
+    assert r.status_code == 200, r.text
+    assert r.json()["metadata"]["cultivo"] == "soja"
+    print("✓ GET /diagnostico usa el cultivo asociado a cada vuelo")
+
+
+def test_diagnostico_vuelo_sin_cultivo_es_409(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=None)
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 409
+    assert "cultivo" in r.json()["detail"].lower()
+    print("✓ GET /diagnostico vuelo sin cultivo → 409")
+
 
 
 # ── Auth ──────────────────────────────────────────────────────────────

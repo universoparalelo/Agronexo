@@ -188,7 +188,8 @@ Ingresá a http://localhost:5173 con el usuario administrador por defecto:
 ```
 POST /api/v1/auth/login                              → tokens JWT
 POST /api/v1/lotes                                   → crear lote con polígono GeoJSON
-POST /api/v1/lotes/{id}/vuelos                       → subir GeoTIFF → encola Celery → 202 Accepted
+POST /api/v1/lotes/{id}/cultivos                     → cargar un cultivo del lote (tipo, variedad, siembra, cosecha)
+POST /api/v1/lotes/{id}/vuelos                       → subir GeoTIFF (con cultivo_id o cultivo_tipo…) → encola Celery → 202 Accepted
 GET  /api/v1/lotes/{id}/vuelos/{id}/estado           → polling de progreso (%)
 GET  /api/v1/lotes/{id}/vuelos/{id}/diagnostico      → diagnóstico agronómico por zona
 GET  /api/v1/productos-fitosanitarios                → catálogo de productos (?causa=...&tipo=...)
@@ -254,7 +255,7 @@ agronexo/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
 ├── migrations/             # Migraciones Alembic
-│   └── versions/           # Scripts versionados (0001 → 0015)
+│   └── versions/           # Scripts versionados (0001 → 0020)
 ├── tests/                  # Tests: pipeline GIS, motor diagnóstico (engine, forma, texto, zonificación), API
 ├── frontend/               # React + Vite
 ├── docker/
@@ -279,6 +280,9 @@ sudo usermod -aG docker $USER
 
 **El worker no levanta / error de GDAL o numpy**
 La imagen `osgeo/gdal` (~1 GB) tiene numpy instalado vía apt. pip no puede sobreescribirlo. El `Dockerfile.worker` usa `--ignore-installed` para resolver el conflicto. Si el build falla por timeout de red, volvé a correr `docker compose up -d --build`.
+
+**El frontend falla con "Failed to resolve import geotiff" (o `proj4`) después de un `git pull`**
+Se agregaron dependencias npm (`geotiff`, `proj4`, para validar la ubicación del GeoTIFF en el navegador). El `node_modules` vive dentro de la imagen del contenedor, así que hay que reconstruirla: `docker compose up -d --build frontend`.
 
 **Puerto 5432 ya en uso**
 Tenés PostgreSQL instalado localmente. Cambiá el puerto expuesto en `docker-compose.yml`:

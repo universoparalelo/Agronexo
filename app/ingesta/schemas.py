@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.lotes.models import EstadoVueloEnum, IndiceEnum, SensorEnum
+from app.lotes.schemas import CultivoCreate, CultivoResponse
 
 
 class IndiceAnalisisItem(BaseModel):
@@ -28,6 +29,8 @@ class VueloListItem(BaseModel):
     task_id: str | None
     created_at: datetime
     estadio_fenologico: str | None = None
+    cultivo_id: uuid.UUID | None = None
+    cultivo: CultivoResponse | None = None
     indices: list[IndiceAnalisisItem] = []
 
 
@@ -39,6 +42,8 @@ class VueloUploadResponse(BaseModel):
     task_id: str
     created_at: datetime
     estadio_fenologico: str | None = None
+    cultivo_id: uuid.UUID | None = None
+    cultivo: CultivoResponse | None = None
     mensaje: str = "GeoTIFF recibido. Validación y procesamiento iniciados."
 
 
@@ -131,5 +136,17 @@ class EscenasSatelitalesResponse(BaseModel):
 class VueloDesdeSateliteRequest(BaseModel):
     escena_id: str
     fecha_vuelo: datetime
-    estadio_fenologico: str | None = None
+    # Obligatorio: el motor de diagnóstico lo usa para decidir qué reglas aplican.
+    estadio_fenologico: str = Field(..., min_length=1, max_length=30)
     indices: list[IndiceEnum] = []
+    # Exactamente uno de los dos: un cultivo ya cargado en el lote, o los datos de uno nuevo.
+    cultivo_id: uuid.UUID | None = None
+    cultivo: CultivoCreate | None = None
+
+    @field_validator("estadio_fenologico")
+    @classmethod
+    def estadio_no_vacio(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El estadio fenológico es obligatorio.")
+        return v

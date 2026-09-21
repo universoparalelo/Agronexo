@@ -8,6 +8,7 @@ import numpy as np
 import rasterio
 from rasterio.features import rasterize, shapes
 from shapely.geometry import shape
+from shapely.ops import unary_union
 
 from workers.gis.clasificacion import calcular_umbrales, clasificar_con_umbrales
 
@@ -95,15 +96,42 @@ def _codigo_a_nombre(codigo: int) -> str:
     return {1: "critica", 2: "deficiente", 3: "normal", 4: "vigorosa"}.get(codigo, "sin_dato")
 
 
+def _solo_poligonos(geom):
+    if geom is None or geom.is_empty:
+        return None
+    if geom.geom_type in ("Polygon", "MultiPolygon"):
+        return geom
+    if geom.geom_type == "GeometryCollection":
+        polis = [g for g in geom.geoms if g.geom_type in ("Polygon", "MultiPolygon")]
+        return unary_union(polis) if polis else None
+    return None
+
+
+def _recortar_a_limite(gdf: gpd.GeoDataFrame, limite: dict) -> gpd.GeoDataFrame:
+    # El enmascarado por píxeles del raster deja un borde de hasta ~1 píxel
+    # afuera del polígono, y el suavizado + simplificación lo agrandan — se
+    # corrige recortando el vector exacto al límite del lote.
+    poligono = shape(limite)
+    if not poligono.is_valid:
+        poligono = poligono.buffer(0)
+    recortadas = gdf.geometry.intersection(poligono).apply(_solo_poligonos)
+    gdf = gdf.assign(geometry=recortadas)
+    gdf = gdf[gdf.geometry.notna()]
+    return gdf.explode(index_parts=False).reset_index(drop=True)
+
+
 def vectorizar_zonas(
     clase: np.ndarray,
     ndvi: np.ndarray,
     meta: dict,
     area_minima_m2: int = AREA_MINIMA_M2,
+    limite: dict | None = None,
 ) -> gpd.GeoDataFrame:
     """
     Convierte la máscara de clases en polígonos GeoDataFrame.
     Filtra ruido por área mínima y simplifica con Douglas-Peucker.
+    Si se pasa `limite` (GeoJSON en el mismo CRS que el raster), las zonas se
+    recortan a ese polígono.
     Las estadísticas de índice se calculan por polígono individual con
     un único rasterize+bincount en lugar del costoso geometry_mask por polígono.
     """
@@ -143,6 +171,14 @@ def vectorizar_zonas(
 
     gdf = gpd.GeoDataFrame(filas, crs=crs)
     gdf = gdf.explode(index_parts=False).reset_index(drop=True)
+
+    if limite is not None:
+        gdf = _recortar_a_limite(gdf, limite)
+        if len(gdf) == 0:
+            return gpd.GeoDataFrame(
+                columns=["geometry", "clase", "codigo", "ndvi_promedio", "area_ha", "zscore", "es_atipica"],
+                crs=crs,
+            )
 
     # 1. Filtrar por área ANTES de calcular estadísticas — descarta ruido barato
     gdf_utm = gdf.to_crs(epsg=32721)

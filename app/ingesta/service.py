@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.storage import download_bytes
 from app.ingesta.schemas import EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse
-from app.lotes.models import AnalisisIndice, CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, SensorEnum, Vuelo
+from app.lotes.models import AnalisisIndice, Cultivo, CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, SensorEnum, Vuelo
 from workers.celery_app import celery_app
 
 
@@ -25,8 +25,6 @@ async def crear_lote_y_vuelo_desde_geotiff(
 ) -> LoteDesdeGeotiffResponse:
     lote = Lote(
         nombre=nombre,
-        cultivo=cultivo,
-        estadio_fenologico=estadio_fenologico,
         usuario_id=usuario_id,
         geometry=None,
     )
@@ -34,10 +32,16 @@ async def crear_lote_y_vuelo_desde_geotiff(
     await db.flush()
     await db.refresh(lote)
 
+    cultivo_lote = Cultivo(lote_id=lote.id, tipo_cultivo=cultivo)
+    db.add(cultivo_lote)
+    await db.flush()
+
     vuelo = Vuelo(
         lote_id=lote.id,
+        cultivo_id=cultivo_lote.id,
         sensor=sensor,
         fecha_vuelo=datetime.now(timezone.utc),
+        estadio_fenologico=estadio_fenologico,
         estado=EstadoVueloEnum.pendiente,
     )
     db.add(vuelo)
@@ -88,9 +92,11 @@ async def crear_vuelo_desde_upload(
     file_stream,
     file_size: int = -1,
     estadio_fenologico: str | None = None,
+    cultivo_id: uuid.UUID | None = None,
 ) -> Vuelo:
     vuelo = Vuelo(
         lote_id=lote_id,
+        cultivo_id=cultivo_id,
         sensor=sensor,
         fecha_vuelo=fecha_vuelo,
         estadio_fenologico=estadio_fenologico,
@@ -167,6 +173,7 @@ async def crear_vuelo_desde_satelite(
     fecha_vuelo: datetime,
     estadio_fenologico: str | None = None,
     indices: list[IndiceEnum] | None = None,
+    cultivo_id: uuid.UUID | None = None,
 ) -> Vuelo:
     """
     Crea el Vuelo y encola workers.gis.tasks.descargar_satelital, que
@@ -175,6 +182,7 @@ async def crear_vuelo_desde_satelite(
     """
     vuelo = Vuelo(
         lote_id=lote_id,
+        cultivo_id=cultivo_id,
         sensor=SensorEnum.sentinel2,
         fecha_vuelo=fecha_vuelo,
         estadio_fenologico=estadio_fenologico,

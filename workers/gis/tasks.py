@@ -16,19 +16,20 @@ _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
 
 def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
     """
-    Rellena geometry SOLO si el lote todavía no tiene una — pensado para
-    el flujo legacy `/lotes/desde-geotiff`, que crea el lote con
-    geometry=NULL y depende de esto para completarla después de procesar
-    el primer vuelo (ver migración 0005).
+    Rellena geometry (y area_ha) SOLO si el lote todavía no tiene una: un
+    lote creado sin límite toma el del primer GeoTIFF que se le sube (ver
+    migración 0005 y _poligono_cobertura_wkt).
 
-    Con el flujo actual (ModalNuevoLote → POST /lotes ya con el polígono
-    dibujado a mano, y recién después se suben vuelos) el lote YA tiene
-    una geometry real antes de que esta función se llame. El `WHERE
-    geometry IS NULL` evita pisarla con el bounding box rectangular del
-    raster en cada vuelo nuevo — antes de este chequeo, cualquier vuelo
-    (dron o satelital) subido a un lote ya dibujado le reemplazaba el
-    polígono real por un rectángulo silenciosamente (bug real detectado
-    2026-09-14, ver docs/release-v3.0.0.md).
+    Un lote que YA tiene límite (dibujado a mano) no se toca. El `WHERE
+    geometry IS NULL` evita pisarlo con el polígono del raster en cada
+    vuelo nuevo — antes de este chequeo, cualquier vuelo (dron o satelital)
+    subido a un lote ya dibujado le reemplazaba el polígono real
+    silenciosamente (bug real detectado 2026-09-14, ver
+    docs/release-v3.0.0.md).
+
+    area_ha se calcula igual que en la API (app/lotes/service.py): ST_Area
+    sobre EPSG:32721 (metros) / 10 000. Sin esto el lote figuraba con
+    límite pero sin superficie.
     """
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import Session
@@ -40,7 +41,9 @@ def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
         with Session(engine) as session:
             session.execute(
                 text(
-                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326) "
+                    "UPDATE lotes SET geometry = ST_GeomFromText(:wkt, 4326), "
+                    "area_ha = ROUND((ST_Area(ST_Transform(ST_GeomFromText(:wkt, 4326), 32721)) / 10000)::numeric, 4), "
+                    "updated_at = now() "
                     "WHERE id = CAST(:lote_id AS uuid) AND geometry IS NULL"
                 ),
                 {"wkt": wkt, "lote_id": lote_id},
@@ -48,6 +51,39 @@ def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
             session.commit()
     finally:
         engine.dispose()
+
+
+def _poligono_cobertura_wkt(src) -> str:
+    """
+    WKT (EPSG:4326, el raster ya viene reproyectado) del área que realmente
+    cubre el GeoTIFF: envolvente convexa de los píxeles con dato válido. Un
+    ortomosaico rotado o con bordes sin dato tiene un bounding box bastante
+    más grande que lo que cubre; si no hay máscara (todo válido) o no se
+    puede calcular, es directamente el rectángulo del raster.
+
+    La máscara se lee decimada (máx. ~1024 px de lado) para que sea barata
+    aunque el archivo pese varios GB.
+    """
+    from affine import Affine
+    from rasterio.features import shapes
+    from shapely.geometry import box, shape
+    from shapely.ops import unary_union
+
+    rectangulo = box(*src.bounds)
+    try:
+        factor = max(1.0, max(src.height, src.width) / 1024)
+        alto = max(1, round(src.height / factor))
+        ancho = max(1, round(src.width / factor))
+        mascara = src.dataset_mask(out_shape=(alto, ancho))
+        transform = src.transform * Affine.scale(src.width / ancho, src.height / alto)
+        partes = [shape(g) for g, v in shapes(mascara, mask=mascara > 0, transform=transform) if v > 0]
+        cobertura = unary_union(partes).convex_hull if partes else rectangulo
+        if cobertura.geom_type != "Polygon" or cobertura.area <= 0:
+            cobertura = rectangulo
+    except Exception:
+        logger.exception("No se pudo calcular la cobertura real del GeoTIFF; se usa su bounding box")
+        cobertura = rectangulo
+    return cobertura.wkt
 
 
 def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None, geojson_key: str | None = None) -> None:
@@ -445,11 +481,12 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
             # (recién preparado, o descargado directo de la caché) — no
             # hace falta reproyectar de nuevo solo para leer los bounds.
             with rasterio.open(tiff_path) as src:
-                b = src.bounds
-                wkt = f"POLYGON(({b.left} {b.bottom},{b.right} {b.bottom},{b.right} {b.top},{b.left} {b.top},{b.left} {b.bottom}))"
+                wkt = _poligono_cobertura_wkt(src)
             _actualizar_lote_geometry(lote_id, wkt)
         except Exception:
-            pass  # no bloquear el pipeline si falla la extracción de bounds
+            # no bloquear el pipeline, pero dejar rastro: sin esto el lote
+            # quedaba sin límite y nadie sabía por qué
+            logger.exception("No se pudo completar el límite del lote %s desde el GeoTIFF", lote_id)
 
     _actualizar_vuelo(vuelo_id, "procesando")
     self.update_state(state="PROGRESS", meta={"progreso": 30, "mensaje": f"Calculando {indice.upper()}"})
@@ -466,6 +503,7 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
             geojson_destino=geojson_path,
             metodo_umbral=metodo_umbral,
             area_minima_m2=area_minima_m2,
+            limite_wgs84=_limite_para_recorte(minio_key),
         )
     except Exception as exc:
         _actualizar_vuelo(vuelo_id, "error", f"Error en el pipeline GIS: {exc}")
@@ -552,6 +590,24 @@ def _obtener_geometry_lote_geojson(lote_id: str) -> dict | None:
         return json.loads(row) if row else None
     finally:
         engine.dispose()
+
+
+def _limite_para_recorte(minio_key: str) -> dict | None:
+    """
+    Límite del lote al que pertenece el archivo, para recortar las zonas
+    vectorizadas. El enmascarado por píxeles de las escenas satelitales deja
+    un borde afuera del polígono, y un ortomosaico puede cubrir más que el
+    lote — en ambos casos el resultado no debe salir del límite guardado.
+    Si el lote todavía no tiene geometry no se recorta.
+    """
+    partes = minio_key.split("/")  # {usuario_id}/{lote_id}/{vuelo_id}/original.tif
+    if len(partes) < 3:
+        return None
+    try:
+        return _obtener_geometry_lote_geojson(partes[1])
+    except Exception:
+        logger.exception("No se pudo leer el límite del lote %s para recortar las zonas", partes[1])
+        return None
 
 
 def _actualizar_vuelo_archivo_y_task(vuelo_id: str, minio_key: str, task_id: str) -> None:
@@ -716,6 +772,7 @@ def analizar_indice(
             geojson_destino=geojson_path,
             metodo_umbral=metodo_umbral,
             area_minima_m2=area_minima_m2,
+            limite_wgs84=_limite_para_recorte(minio_key),
         )
     except Exception as exc:
         _actualizar_analisis_indice(analisis_id, "error", f"Error en el pipeline GIS: {exc}")
@@ -851,6 +908,7 @@ def analizar_indices_batch(
             area_minima_m2=area_minima_m2,
             on_indice_completado=_on_completado,
             on_indice_error=_on_error,
+            limite_wgs84=_limite_para_recorte(minio_key),
         )
     finally:
         if os.path.exists(tiff_path):

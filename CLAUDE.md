@@ -12,7 +12,7 @@
 |---|---|---|
 | Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
 | FastAPI + SQLAlchemy async + PostGIS | ✅ | |
-| Migraciones Alembic (0001 → 0015) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Migraciones Alembic (0001 → 0020) | ✅ | Correr `alembic upgrade head` al arrancar |
 | Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
 | CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
@@ -28,11 +28,12 @@
 | Z-score por polígono (zonas atípicas) | ✅ | Campo `zscore` y `es_atipica` en GeoJSON |
 | Modal límites lote (GeoJSON + Leaflet preview) | ✅ | `frontend/src/components/ModalLimites.jsx` |
 | Eliminar diagnóstico (soft delete) + reintentar análisis fallido | ✅ | Botones en tabla "Análisis Recientes"; `DELETE`/`POST .../reintentar` en `app/ingesta/router.py` |
-| Botón "Nuevo lote" (formulario + límite GeoJSON, sin GeoTIFF) | ✅ | `frontend/src/components/ModalNuevoLote.jsx` → `POST /lotes` |
+| Botón "Nuevo lote" (formulario + límite dibujado en mapa, sin GeoTIFF) | ✅ | `frontend/src/components/ModalNuevoLote.jsx` → `POST /lotes`. El límite se puede omitir: el primer GeoTIFF lo completa (`workers/gis/tasks.py::_poligono_cobertura_wkt`) |
 | Modal "Cargar Ortomosaico" con selector de lote existente | ✅ | `ModalCargaGeoTIFF.jsx` ahora sube vuelos a un lote ya creado vía `POST /lotes/{id}/vuelos`, no crea lote nuevo |
 | Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
 | Motor de diagnóstico (RFDR-01) | ✅ | On-demand/sin persistencia — `GET /lotes/{id}/vuelos/{id}/diagnostico`. 20 reglas en `app/diagnostico/reglas.py`. Historial persistido queda para release 4 (ver `docs/release-v1.0.0.md`) |
-| Atributos enriquecidos del lote | ✅ | `variedad` (String), `tipo_suelo` (enum 7 valores NEA), `fecha_siembra` (DateTime). Migración 0014. Formulario frontend actualizado |
+| Atributos del lote | ✅ | `tipo_suelo` (enum 7 valores NEA). Cultivo, variedad y fechas ya NO son del lote — viven en `cultivos` (migración 0020, ver fila siguiente) |
+| Cultivos por lote | ✅ | Tabla `cultivos` (`tipo_cultivo`, `variedad`, `fecha_siembra`, `fecha_cosecha`, soft delete). `GET/POST/PUT/DELETE /lotes/{id}/cultivos`. Todo análisis (`vuelos.cultivo_id`) se hace sobre un cultivo existente del lote o uno nuevo creado en el momento (`cultivo_id` o `cultivo_tipo…` en el upload; `cultivo_id` o `cultivo{…}` en `desde-satelite`). El diagnóstico toma tipo/variedad del cultivo del vuelo; el estadio fenológico es solo del vuelo |
 | Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |
 | Diagnóstico explicado por zona | ✅ | Texto legible, severidad, vinculado a lote/vuelo. `app/diagnostico/texto.py` |
 | Zonificación de manejo (RFDR-02) | ✅ | Agrupa zonas contiguas por causa+severidad en unidades de manejo. `app/diagnostico/zonificacion.py` |
@@ -53,6 +54,9 @@
 | **Usuario por defecto** | — | `admin@agronexo.com` / `password123` |
 
 ### Decisiones recientes no obvias desde el código
+
+- **Cultivo y estadio ya no viven en `lotes`** (migración 0020). `vuelos.cultivo_id` es nullable solo por compatibilidad con datos viejos (la migración le asigna un cultivo a todos los vuelos existentes); un vuelo sin cultivo devuelve 409 en `/diagnostico`. `lotes.cultivos` (relationship `selectin`, `viewonly`) trae solo los no eliminados, del más reciente al más antiguo — el frontend usa `cultivos[0]` como "cultivo actual" del lote.
+- Las zonas vectorizadas se recortan siempre al polígono del lote (`workers/gis/zonas.py::_recortar_a_limite`, se pasa `limite_wgs84` desde `workers/gis/tasks.py::_limite_para_recorte`); si el lote no tiene geometry no se recorta.
 
 - `geometry` en tabla `lotes` es **nullable** (migración 0005) — el worker la rellena con el bounding box del GeoTIFF después de procesar. Un lote recién creado puede tener `geometry = null`.
 - El contenedor API necesita `./workers` montado como volumen — sin eso no puede importar `workers.celery_app` y crashea al arrancar.
