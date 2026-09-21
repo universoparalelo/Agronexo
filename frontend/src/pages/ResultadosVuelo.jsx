@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import client from '../api/client'
+import { etiquetaTipoCultivo } from '../utils/cultivos'
 import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
 import { descargarOrdenTrabajoPdf } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
@@ -12,10 +13,6 @@ import TablaZonas from '../components/TablaZonas'
 const SENSOR_LABELS = {
   sentinel2:  'Sentinel-2',
   dji_mavic3: 'DJI Mavic 3',
-}
-
-const CULTIVO_LABELS = {
-  soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo',
 }
 
 export default function ResultadosVuelo() {
@@ -43,7 +40,7 @@ export default function ResultadosVuelo() {
     ])
       .then(([loteData, vuelosData, zonasData]) => {
         setLote(loteData)
-        setVuelo(vuelosData.find(v => v.id === vueloId) || null)
+        setVuelo(vuelosData.find(v => (v.vuelo_id ?? v.id) === vueloId) || null)
         setZonas(zonasData)
       })
       .catch(() => setError('No se pudieron cargar los resultados del análisis.'))
@@ -108,9 +105,10 @@ export default function ResultadosVuelo() {
           <Link to={`/lotes/${loteId}`} className="btn-back">← Vuelos</Link>
           <div className="resultados-titulo">
             <h1>{lote?.nombre}</h1>
-            {lote && (
-              <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
-                {CULTIVO_LABELS[lote.cultivo] || lote.cultivo}
+            {vuelo?.cultivo && (
+              <span className={`cultivo-badge cultivo-${vuelo.cultivo.tipo_cultivo}`}>
+                {etiquetaTipoCultivo(vuelo.cultivo.tipo_cultivo)}
+                {vuelo.cultivo.variedad ? ` · ${vuelo.cultivo.variedad}` : ''}
               </span>
             )}
           </div>

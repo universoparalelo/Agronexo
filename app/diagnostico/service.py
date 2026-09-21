@@ -25,6 +25,7 @@ import math
 import uuid
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 from geoalchemy2.shape import to_shape
@@ -77,13 +78,12 @@ async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[st
     return catalogo
 
 
-def _resolver_estadio(lote: Lote, vuelo: Vuelo) -> str | None:
+def _resolver_estadio(vuelo: Vuelo) -> str | None:
     """
-    El estadio fenológico del vuelo puntual tiene prioridad — el del lote
-    es solo el valor cargado al crear el lote (ver migración 0017) y puede
-    haber quedado desactualizado para vuelos posteriores.
+    El estadio fenológico es del vuelo puntual: cambia semana a semana, así
+    que no se guarda ni en el lote ni en el cultivo (ver migración 0020).
     """
-    return vuelo.estadio_fenologico or lote.estadio_fenologico
+    return vuelo.estadio_fenologico
 
 
 def _features_a_zonas(geojson: dict) -> list[ZonaInput]:
@@ -217,6 +217,13 @@ async def generar_diagnostico(
             logger.exception("No se pudo resolver el índice %s para el vuelo %s", indice.value, vuelo_id)
             continue
 
+    cultivo = vuelo.cultivo
+    if cultivo is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este análisis no tiene un cultivo asociado, así que no se puede diagnosticar. Volvé a cargarlo eligiendo o creando un cultivo.",
+        )
+
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
 
     catalogo = await _cargar_catalogo_productos(db)
@@ -224,11 +231,15 @@ async def generar_diagnostico(
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
         ndvi_geojson, geojson_por_indice, lote_geom_4326,
-        lote.cultivo, _resolver_estadio(lote, vuelo), catalogo,
+        cultivo.tipo_cultivo, _resolver_estadio(vuelo), catalogo,
         lote_id=str(lote.id),
         lote_nombre=lote.nombre,
         vuelo_id=str(vuelo_id),
         fecha_vuelo=str(vuelo.fecha_vuelo) if vuelo.fecha_vuelo else None,
+        cultivo_id=str(cultivo.id),
+        variedad=cultivo.variedad,
+        fecha_siembra=cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
+        fecha_cosecha=cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
     )
 
     calculado_en = datetime.now(timezone.utc)
@@ -250,6 +261,10 @@ def _calcular_diagnostico(
     lote_nombre: str | None = None,
     vuelo_id: str | None = None,
     fecha_vuelo: str | None = None,
+    cultivo_id: str | None = None,
+    variedad: str | None = None,
+    fecha_siembra: str | None = None,
+    fecha_cosecha: str | None = None,
 ) -> dict:
     """Cómputo geométrico puro (Shapely, sin I/O ni DB) — ver generar_diagnostico()."""
     estadio_normalizado = normalizar_estadio(estadio_fenologico)
@@ -332,6 +347,10 @@ def _calcular_diagnostico(
             "vuelo_id": vuelo_id,
             "fecha_vuelo": fecha_vuelo,
             "cultivo": cultivo.value,
+            "cultivo_id": cultivo_id,
+            "variedad": variedad,
+            "fecha_siembra": fecha_siembra,
+            "fecha_cosecha": fecha_cosecha,
             "estadio_fenologico": estadio_fenologico,
             "ndvi_promedio_lote": round(ndvi_promedio_lote, 4),
             "indices_disponibles": list(valores_por_indice.keys()),

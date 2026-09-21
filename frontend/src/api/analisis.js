@@ -23,13 +23,20 @@ export const buscarImagenesSatelitales = (loteId, fecha, ventanaDias = 15) =>
     params: { fecha, ventana_dias: ventanaDias },
   }).then(r => r.data)
 
-export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFenologico, indices = []) =>
+// `cultivo` es { cultivo_id } para un cultivo ya cargado en el lote, o
+// { cultivo: { tipo_cultivo, variedad, fecha_siembra, fecha_cosecha } } para crear uno nuevo.
+export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFenologico, indices = [], cultivo = {}) =>
   client.post(`/lotes/${loteId}/vuelos/desde-satelite`, {
     escena_id: escenaId,
     fecha_vuelo: fechaVuelo,
     estadio_fenologico: estadioFenologico || null,
     indices,
+    ...cultivo,
   }).then(r => r.data)
+
+// { soja: ['VE', 'VC', 'V1', ...], maiz: [...], algodon: [...], sorgo: [...] }
+export const listarEstadiosFenologicos = () =>
+  client.get('/estadios-fenologicos').then(r => r.data.estadios)
 
 export const inspeccionarGeotiff = (archivo, sensor) => {
   const fd = new FormData()

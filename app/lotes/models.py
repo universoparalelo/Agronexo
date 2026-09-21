@@ -54,11 +54,7 @@ class Lote(Base):
         UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
     )
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
-    cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
-    estadio_fenologico: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    variedad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tipo_suelo: Mapped[TipoSueloEnum | None] = mapped_column(Enum(TipoSueloEnum), nullable=True)
-    fecha_siembra: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     geometry: Mapped[object] = mapped_column(
         Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True
     )
@@ -76,6 +72,38 @@ class Lote(Base):
 
     usuario: Mapped["Usuario"] = relationship("Usuario", back_populates="lotes")
     vuelos: Mapped[list["Vuelo"]] = relationship("Vuelo", back_populates="lote")
+    # Solo los cultivos no eliminados, el más reciente primero — un cultivo
+    # dado de baja no debe reaparecer en el selector de cultivo del análisis.
+    cultivos: Mapped[list["Cultivo"]] = relationship(
+        "Cultivo",
+        primaryjoin="and_(Cultivo.lote_id == Lote.id, Cultivo.deleted_at.is_(None))",
+        order_by="Cultivo.created_at.desc()",
+        lazy="selectin",
+        viewonly=True,
+    )
+
+
+class Cultivo(Base):
+    """
+    Cultivo sembrado en un lote (una campaña). Un lote puede tener varios a lo
+    largo del tiempo; cada vuelo/análisis se asocia al cultivo que estaba en
+    pie cuando se capturó — de ahí salen el tipo de cultivo y la variedad que
+    usa el motor de diagnóstico.
+    """
+    __tablename__ = "cultivos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    lote_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False
+    )
+    tipo_cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
+    variedad: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fecha_siembra: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fecha_cosecha: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Vuelo(Base):
@@ -90,6 +118,9 @@ class Vuelo(Base):
     fecha_vuelo: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     hora_inicio: Mapped[time | None] = mapped_column(Time(), nullable=True)
     hora_fin: Mapped[time | None] = mapped_column(Time(), nullable=True)
+    cultivo_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("cultivos.id", ondelete="RESTRICT"), nullable=True
+    )
     sensor: Mapped[SensorEnum] = mapped_column(Enum(SensorEnum), nullable=False)
     estadio_fenologico: Mapped[str | None] = mapped_column(String(30), nullable=True)
     archivo_original: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -103,6 +134,7 @@ class Vuelo(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     lote: Mapped["Lote"] = relationship("Lote", back_populates="vuelos")
+    cultivo: Mapped["Cultivo | None"] = relationship("Cultivo", lazy="selectin")
     analisis_indices: Mapped[list["AnalisisIndice"]] = relationship(
         "AnalisisIndice", back_populates="vuelo"
     )

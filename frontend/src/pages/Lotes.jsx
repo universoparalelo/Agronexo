@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { listarLotes, eliminarLote } from '../api/lotes'
 import client from '../api/client'
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import SidebarNav from '../components/SidebarNav'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
 
-const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
 const IconBell = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -97,6 +97,7 @@ export default function Lotes() {
         <ModalCargaGeoTIFF
           lotes={lotes}
           onSuccess={() => { setShowModalCarga(false); cargarLotes() }}
+          onLoteCreado={cargarLotes}
           onClose={() => setShowModalCarga(false)}
         />
       )}
@@ -190,7 +191,7 @@ export default function Lotes() {
                       </div>
                     </div>
                     <div className="lote-card-meta">
-                      <span>🌱 {CULTIVO_LABEL[lote.cultivo] ?? lote.cultivo}</span>
+                      <span>🌱 {etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo) || 'Sin cultivo'}</span>
                       <span>📐 {lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}</span>
                       <span>🛰️ {lote.vuelos.length} vuelo{lote.vuelos.length !== 1 ? 's' : ''}</span>
                       <span>📅 {fmtFecha(lote.created_at)}</span>

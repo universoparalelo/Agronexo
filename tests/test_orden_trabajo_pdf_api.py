@@ -101,8 +101,6 @@ def setup_module(module):
 
     r = _tc.post("/api/v1/lotes", json={
         "nombre": "Lote Para Tests de Orden de Trabajo",
-        "cultivo": "soja",
-        "estadio_fenologico": "R2",
         "geometry": _GEOM,
     }, headers={"Authorization": f"Bearer {_token}"})
     assert r.status_code == 201, f"setup_module crear lote falló: {r.text}"

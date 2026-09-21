@@ -1,4 +1,4 @@
-const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 
 export default function ModalElegirLote({ lotes, onElegir, onClose }) {
   return (
@@ -20,7 +20,7 @@ export default function ModalElegirLote({ lotes, onElegir, onClose }) {
               >
                 <span className="elegir-lote-nombre">{lote.nombre}</span>
                 <span className="elegir-lote-meta">
-                  {CULTIVO_LABEL[lote.cultivo] ?? lote.cultivo}
+                  {etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo) || 'Sin cultivo'}
                   {lote.vuelos ? ` · ${lote.vuelos.length} vuelo${lote.vuelos.length !== 1 ? 's' : ''}` : ''}
                 </span>
               </button>

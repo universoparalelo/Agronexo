@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import client from '../api/client'
 import CalendarioSatelital from './CalendarioSatelital'
+import MapaDibujoLote from './MapaDibujoLote'
+import MapaNEA from './MapaNEA'
+import { geotiffCercaDelLote, leerLimitesGeotiff } from '../utils/geotiffLimites'
+import { AREA_MIN_HA, AREA_MAX_HA } from '../utils/geometria'
+import { TIPOS_SUELO } from '../utils/suelos'
+import { CULTIVOS, cultivoMasReciente, descripcionCultivo, etiquetaTipoCultivo } from '../utils/cultivos'
 import {
   analizarIndicesBatch,
   buscarImagenesSatelitales,
   crearVueloDesdeSatelite,
   inspeccionarGeotiff,
+  listarEstadiosFenologicos,
 } from '../api/analisis'
 
 // Mismo patrón que ModalLimites.jsx/ModalNuevoLote.jsx — autocentra el mapa
@@ -29,11 +36,33 @@ function boundsDesdePoligono(coordinates) {
   ]
 }
 
-const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
+const MSG_FUERA_DEL_LOTE = 'GeoTIFF subido queda por fuera de los límites guardados del lote.'
+
+const CULTIVO_NUEVO = '__nuevo__'
+
+const CULTIVO_NUEVO_VACIO = { tipo_cultivo: '', variedad: '', fecha_siembra: '', fecha_cosecha: '' }
+
+const aInputFecha = (iso) => (iso ? iso.slice(0, 10) : '')
+
+function formDesdeCultivo(c) {
+  return {
+    tipo_cultivo: c.tipo_cultivo,
+    variedad: c.variedad ?? '',
+    fecha_siembra: aInputFecha(c.fecha_siembra),
+    fecha_cosecha: aInputFecha(c.fecha_cosecha),
+  }
+}
+
+function fmtFechaCultivo(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })
+}
+
+const SENSOR_POR_DEFECTO = 'dji_mavic3'
 
 const SENSORES = [
-  { value: 'sentinel2', label: 'Sentinel-2' },
   { value: 'dji_mavic3', label: 'DJI Mavic 3 Multispectral' },
+  { value: 'sentinel2', label: 'Sentinel-2' },
 ]
 
 const SENSOR_LABEL = Object.fromEntries(SENSORES.map((s) => [s.value, s.label]))
@@ -59,14 +88,15 @@ const INDICES = [
   },
   {
     value: 'exg', label: 'ExG', sub: 'RGB', bandas: ['GREEN', 'RED', 'BLUE'],
-    desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR. No se calcula automáticamente: hay que seleccionarlo a mano.',
+    desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR.',
   },
 ]
 
-// Todos los índices disponibles para el sensor, salvo ExG — se calculan
-// automáticamente al subir el vuelo sin que el usuario tenga que tildarlos.
+// Todos los índices que el sensor permite calcular arrancan seleccionados.
+// ExG necesita la banda Blue, que el DJI Mavic 3 no captura — para ese sensor
+// simplemente no se ofrece (ver band_mapping.py).
 function indicesAutomaticos(sensor) {
-  return indicesDisponibles(sensor).filter((i) => i.value !== 'exg').map((i) => i.value)
+  return indicesDisponibles(sensor).map((i) => i.value)
 }
 
 // Bandas disponibles por sensor (workers/gis/band_mapping.py::MAPEO_SENSORES).
@@ -102,36 +132,138 @@ const IconInfo = () => (
     <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
   </svg>
 )
-const IconSatelite = () => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="8" y="8" width="8" height="8" rx="1.5" transform="rotate(45 12 12)"/>
-    <line x1="14.5" y1="9.5" x2="19" y2="5"/>
-    <line x1="9.5" y1="14.5" x2="5" y2="19"/>
-    <path d="M2 22l3-3"/>
-    <path d="M17 2l-1.5 1.5"/>
-    <path d="M4 7l3 3"/>
+const IconSatelite = ({ size = 26 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <g transform="rotate(-45 12 12)">
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
+      <rect x="1.5" y="9.7" width="6" height="4.6" rx="0.6"/>
+      <rect x="16.5" y="9.7" width="6" height="4.6" rx="0.6"/>
+      <line x1="7.5" y1="12" x2="9.5" y2="12"/>
+      <line x1="14.5" y1="12" x2="16.5" y2="12"/>
+      <line x1="12" y1="9.5" x2="12" y2="7"/>
+      <circle cx="12" cy="6.2" r="0.9"/>
+    </g>
   </svg>
 )
-const IconDron = () => (
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
-    <line x1="9.5" y1="9.5" x2="4" y2="4"/>
-    <line x1="14.5" y1="9.5" x2="20" y2="4"/>
-    <line x1="9.5" y1="14.5" x2="4" y2="20"/>
-    <line x1="14.5" y1="14.5" x2="20" y2="20"/>
-    <circle cx="4" cy="4" r="2.2"/>
-    <circle cx="20" cy="4" r="2.2"/>
-    <circle cx="4" cy="20" r="2.2"/>
-    <circle cx="20" cy="20" r="2.2"/>
+const IconDron = ({ size = 26 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="8.5" y="10" width="7" height="4.5" rx="1.6"/>
+    <circle cx="12" cy="16.6" r="1.3"/>
+    <line x1="8.5" y1="11.2" x2="5.2" y2="7.6"/>
+    <line x1="15.5" y1="11.2" x2="18.8" y2="7.6"/>
+    <line x1="8.5" y1="13.3" x2="5.2" y2="16.9"/>
+    <line x1="15.5" y1="13.3" x2="18.8" y2="16.9"/>
+    <ellipse cx="5.2" cy="6.6" rx="3.2" ry="1"/>
+    <ellipse cx="18.8" cy="6.6" rx="3.2" ry="1"/>
+    <ellipse cx="5.2" cy="17.9" rx="3.2" ry="1"/>
+    <ellipse cx="18.8" cy="17.9" rx="3.2" ry="1"/>
+  </svg>
+)
+const IconHoja = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 20A7 7 0 019.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
+    <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
   </svg>
 )
 
-export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onClose }) {
-  const [step, setStep] = useState('carga') // 'carga' | 'analisis'
-  const [loteId, setLoteId] = useState(loteIdInicial ?? lotes?.[0]?.id ?? '')
+function AyudaVariedad() {
+  return (
+    <span className="ayuda-tip">
+      <button type="button" className="ayuda-tip-boton" aria-label="¿Qué es la variedad?">?</button>
+      <span role="tooltip" className="ayuda-tip-caja">
+        La variedad de una semilla es su versión comercial dentro del cultivo (ej: DM 46i17).
+      </span>
+    </span>
+  )
+}
+
+function CultivoDropdown({ cultivos, seleccion, creando, onElegir, onNuevo, disabled }) {
+  const [abierto, setAbierto] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    const cerrarSiClickAfuera = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false) }
+    document.addEventListener('mousedown', cerrarSiClickAfuera)
+    return () => document.removeEventListener('mousedown', cerrarSiClickAfuera)
+  }, [abierto])
+
+  const elegido = cultivos.find((c) => c.id === seleccion)
+
+  const detalle = (c) => (
+    <span className="cultivo-item-texto">
+      <span className="cultivo-item-nombre">{etiquetaTipoCultivo(c.tipo_cultivo)}</span>
+      <span className="cultivo-item-fechas">
+        Variedad: {c.variedad || '—'} · Siembra: {fmtFechaCultivo(c.fecha_siembra)} · Cosecha: {fmtFechaCultivo(c.fecha_cosecha)}
+      </span>
+    </span>
+  )
+
+  return (
+    <div className="cultivo-dropdown" ref={ref}>
+      <button
+        type="button"
+        className="cultivo-item cultivo-item--activo cultivo-dropdown-trigger"
+        onClick={() => setAbierto((a) => !a)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={abierto}
+      >
+        {elegido ? detalle(elegido) : (
+          <span className="cultivo-item-texto">
+            <span className="cultivo-item-nombre">{creando ? 'Cultivo nuevo' : 'Seleccioná un cultivo'}</span>
+            <span className="cultivo-item-fechas">
+              {creando ? 'Completá los datos de abajo' : `${cultivos.length} cultivo${cultivos.length !== 1 ? 's' : ''} en este lote`}
+            </span>
+          </span>
+        )}
+        <span className="cultivo-dropdown-flecha" aria-hidden="true">▾</span>
+      </button>
+
+      {abierto && (
+        <div className="cultivo-dropdown-panel">
+          <div className="cultivo-dropdown-lista" role="listbox">
+            {cultivos.length === 0 && (
+              <p className="cultivo-dropdown-vacio">Este lote todavía no tiene cultivos cargados.</p>
+            )}
+            {cultivos.map((c) => (
+              <button
+                type="button"
+                key={c.id}
+                role="option"
+                aria-selected={seleccion === c.id}
+                className={`cultivo-item${seleccion === c.id ? ' cultivo-item--activo' : ''}`}
+                onClick={() => { onElegir(c); setAbierto(false) }}
+              >
+                {detalle(c)}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`cultivo-item cultivo-item--nuevo${creando ? ' cultivo-item--activo' : ''}`}
+            onClick={() => { onNuevo(); setAbierto(false) }}
+          >
+            ＋ Nuevo cultivo
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PASOS = [
+  { key: 'carga', label: 'Carga', icon: <IconUpload /> },
+  { key: 'cultivo', label: 'Cultivo', icon: <IconHoja /> },
+  { key: 'analisis', label: 'Análisis', icon: <IconSearch /> },
+]
+
+export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onClose, onLoteCreado }) {
+  const [step, setStep] = useState('carga') // 'carga' | 'cultivo' | 'analisis'
+  const [loteId, setLoteId] = useState(loteIdInicial ?? '')
   const [fuente, setFuente] = useState('dron') // 'dron' | 'satelite'
-  const [sensor, setSensor] = useState('sentinel2')
-  const [indices, setIndices] = useState(() => indicesAutomaticos('sentinel2'))
+  const [sensor, setSensor] = useState(SENSOR_POR_DEFECTO)
+  const [indices, setIndices] = useState(() => indicesAutomaticos(SENSOR_POR_DEFECTO))
   const [indiceMostrado, setIndiceMostrado] = useState('ndvi')
   const [archivo, setArchivo] = useState(null)
   const [estadioFenologico, setEstadioFenologico] = useState('')
@@ -142,6 +274,23 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [uploadPhase, setUploadPhase] = useState(null) // 'uploading' | 'processing' | 'done'
   const [error, setError] = useState('')
   const [inspeccion, setInspeccion] = useState(null)
+  const [limitesGeotiff, setLimitesGeotiff] = useState(null)
+  // Todo análisis se hace sobre un cultivo: uno ya cargado en el lote o uno nuevo.
+  const [cultivoSeleccion, setCultivoSeleccion] = useState(CULTIVO_NUEVO) // id de cultivo | CULTIVO_NUEVO
+  const [cultivoForm, setCultivoForm] = useState(CULTIVO_NUEVO_VACIO)
+  const [estadiosPorCultivo, setEstadiosPorCultivo] = useState({})
+
+  // ── Alta de un lote sin salir del modal ───────────────────────────────
+  const [creandoLote, setCreandoLote] = useState(false)
+  const [lotesCreados, setLotesCreados] = useState([])
+  const [nuevoLote, setNuevoLote] = useState({ nombre: '', tipo_suelo: '' })
+  const [dibujandoLimite, setDibujandoLimite] = useState(false)
+  const [poligonoNuevo, setPoligonoNuevo] = useState(null)
+  const [areaNuevaM2, setAreaNuevaM2] = useState(null)
+  const [autointerseccionNueva, setAutointerseccionNueva] = useState(false)
+  const [guardandoLote, setGuardandoLote] = useState(false)
+  const [errorLote, setErrorLote] = useState('')
+  const loteAntesDeCrear = useRef('')
   const inputRef = useRef()
 
   // ── Carga desde imagen satelital (sin subir archivo) ──────────────────
@@ -151,13 +300,38 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   const [escenas, setEscenas] = useState([])
   const [escenaSeleccionada, setEscenaSeleccionada] = useState(null)
 
-  const sinLotes = !lotes || lotes.length === 0
-  const loteSeleccionado = lotes?.find((l) => l.id === loteId)
+  // Los lotes creados desde este modal se suman a los que llegan por props
+  // hasta que el padre recarga su lista.
+  const lotesTodos = [...(lotes ?? []), ...lotesCreados.filter((n) => !(lotes ?? []).some((l) => l.id === n.id))]
+  const loteSeleccionado = lotesTodos.find((l) => l.id === loteId)
+  const areaNuevaHa = areaNuevaM2 != null ? areaNuevaM2 / 10000 : null
+  const areaNuevaFueraDeRango = areaNuevaHa != null && (areaNuevaHa < AREA_MIN_HA || areaNuevaHa > AREA_MAX_HA)
   const indiceInfo = INDICES.find((i) => i.value === indiceMostrado)
   const indicesParaSensor = indicesDisponibles(sensor)
-  const loteBoundsSatelital = loteSeleccionado?.geometry
-    ? boundsDesdePoligono(loteSeleccionado.geometry.coordinates)
-    : null
+  const cultivosLote = loteSeleccionado?.cultivos ?? []
+  const creandoCultivo = cultivoSeleccion === CULTIVO_NUEVO
+  const cultivoElegido = creandoCultivo ? null : cultivosLote.find((c) => c.id === cultivoSeleccion) ?? null
+  // Un cultivo existente al que se le tocó algún dato: al continuar se actualiza el guardado.
+  const cultivoModificado = Boolean(cultivoElegido) && (() => {
+    const original = formDesdeCultivo(cultivoElegido)
+    return Object.keys(original).some((k) => original[k] !== cultivoForm[k])
+  })()
+  const estadiosDisponibles = estadiosPorCultivo[cultivoForm.tipo_cultivo] ?? []
+  const geotiffVisible = fuente === 'dron' ? limitesGeotiff : null
+  // Si no se pudo leer la ubicación del archivo (CRS raro, sin georreferencia)
+  // no se bloquea: el worker hace la validación completa.
+  const geotiffFueraDelLote = Boolean(
+    geotiffVisible && loteSeleccionado?.geometry && !geotiffCercaDelLote(geotiffVisible, loteSeleccionado.geometry)
+  )
+  const boundsMapa = useMemo(() => {
+    const geoms = [loteSeleccionado?.geometry, geotiffVisible].filter(Boolean)
+    if (geoms.length === 0) return null
+    const todos = geoms.map((g) => boundsDesdePoligono(g.coordinates))
+    return [
+      [Math.min(...todos.map((b) => b[0][0])), Math.min(...todos.map((b) => b[0][1]))],
+      [Math.max(...todos.map((b) => b[1][0])), Math.max(...todos.map((b) => b[1][1]))],
+    ]
+  }, [loteSeleccionado, geotiffVisible])
 
   useEffect(() => {
     // al cambiar de sensor, recalculamos qué índices se calculan por
@@ -179,10 +353,30 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   }, [archivo, sensor])
 
   useEffect(() => {
-    // al cambiar de lote, sugerimos su estadio como punto de partida — pero
-    // sigue siendo editable, es el estadio de ESTE vuelo puntual, no el del
-    // lote (ver app/diagnostico/service.py::_resolver_estadio).
-    setEstadioFenologico(loteSeleccionado?.estadio_fenologico ?? '')
+    listarEstadiosFenologicos().then(setEstadiosPorCultivo).catch(() => setEstadiosPorCultivo({}))
+  }, [])
+
+  useEffect(() => {
+    // el estadio elegido pertenece a la escala del cultivo anterior: si cambia
+    // el tipo y ya no está en la lista, se borra para no mandar uno inválido.
+    if (estadioFenologico && estadiosDisponibles.length > 0 && !estadiosDisponibles.includes(estadioFenologico)) {
+      setEstadioFenologico('')
+    }
+  }, [cultivoForm.tipo_cultivo, estadiosPorCultivo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!archivo) { setLimitesGeotiff(null); return }
+    let cancelado = false
+    leerLimitesGeotiff(archivo).then((poligono) => { if (!cancelado) setLimitesGeotiff(poligono) })
+    return () => { cancelado = true }
+  }, [archivo])
+
+  useEffect(() => {
+    // al cambiar de lote se propone su cultivo más reciente (autocompleta los
+    // campos); si no tiene ninguno, se arranca con un cultivo nuevo en blanco.
+    const reciente = cultivoMasReciente(loteSeleccionado)
+    setCultivoSeleccion(reciente?.id ?? CULTIVO_NUEVO)
+    setCultivoForm(reciente ? formDesdeCultivo(reciente) : CULTIVO_NUEVO_VACIO)
     // resultados de búsqueda satelital son específicos del lote anterior —
     // no tiene sentido dejarlos si se cambia de lote a mitad de camino.
     setFechaDeseada('')
@@ -194,7 +388,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   useEffect(() => {
     // la imagen satelital siempre viene de Sentinel-2 — no hay selección
     // manual de sensor en este modo, a diferencia de subir un archivo.
-    if (fuente === 'satelite') setSensor('sentinel2')
+    setSensor(fuente === 'satelite' ? 'sentinel2' : SENSOR_POR_DEFECTO)
   }, [fuente])
 
   function cambiarFuente(nueva) {
@@ -259,14 +453,97 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
   function handleDrop(e) {
     e.preventDefault()
     setDragging(false)
+    if (!loteId) return
     handleArchivo(e.dataTransfer.files[0])
   }
 
   function handleSiguiente() {
     if (!loteId) { setError('Seleccioná a qué lote pertenece este vuelo.'); return }
     if (fuente === 'dron' && !archivo) { setError('Seleccioná un archivo GeoTIFF.'); return }
+    if (geotiffFueraDelLote) { setError(MSG_FUERA_DEL_LOTE); return }
     if (fuente === 'satelite' && !escenaSeleccionada) { setError('Elegí una escena satelital.'); return }
     if (fuente === 'satelite') setFechaVuelo(escenaSeleccionada.fecha)
+    setError('')
+    setStep('cultivo')
+  }
+
+  function abrirNuevoLote() {
+    loteAntesDeCrear.current = loteId
+    setLoteId('')
+    setNuevoLote({ nombre: '', tipo_suelo: '' })
+    setDibujandoLimite(false)
+    setPoligonoNuevo(null)
+    setAreaNuevaM2(null)
+    setAutointerseccionNueva(false)
+    setErrorLote('')
+    setError('')
+    setCreandoLote(true)
+  }
+
+  function cancelarNuevoLote() {
+    setCreandoLote(false)
+    setDibujandoLimite(false)
+    setLoteId(loteAntesDeCrear.current)
+    setErrorLote('')
+  }
+
+  function onDibujoNuevoLote(geojson, areaM2, autointerseccion) {
+    setPoligonoNuevo(geojson)
+    setAreaNuevaM2(areaM2)
+    setAutointerseccionNueva(!!autointerseccion)
+    setErrorLote('')
+  }
+
+  async function handleGuardarLote() {
+    if (!nuevoLote.nombre.trim()) { setErrorLote('El nombre del lote es requerido.'); return }
+    if (autointerseccionNueva) {
+      setErrorLote('El polígono tiene lados que se cruzan entre sí — corregilo antes de guardar.')
+      return
+    }
+    if (areaNuevaFueraDeRango) {
+      setErrorLote(`El área del polígono (${areaNuevaHa.toFixed(2)} ha) está fuera del rango esperado (${AREA_MIN_HA}-${AREA_MAX_HA} ha).`)
+      return
+    }
+    setGuardandoLote(true)
+    setErrorLote('')
+    try {
+      const { data } = await client.post('/lotes', {
+        nombre: nuevoLote.nombre.trim(),
+        tipo_suelo: nuevoLote.tipo_suelo || null,
+        geometry: poligonoNuevo,
+      })
+      setLotesCreados((prev) => [...prev, data])
+      setLoteId(data.id)
+      setCreandoLote(false)
+      setDibujandoLimite(false)
+      onLoteCreado?.()
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      setErrorLote(Array.isArray(detail) ? detail.map((d) => d.msg).join(', ') : detail || 'Error al crear el lote.')
+    } finally {
+      setGuardandoLote(false)
+    }
+  }
+
+  function elegirCultivo(cultivo) {
+    setCultivoSeleccion(cultivo.id)
+    setCultivoForm(formDesdeCultivo(cultivo))
+    setError('')
+  }
+
+  function nuevoCultivo() {
+    setCultivoSeleccion(CULTIVO_NUEVO)
+    setCultivoForm(CULTIVO_NUEVO_VACIO)
+    setError('')
+  }
+
+  function handleContinuarCultivo() {
+    if (!cultivoForm.tipo_cultivo) { setError('Elegí el tipo de cultivo.'); return }
+    if (cultivoForm.fecha_siembra && cultivoForm.fecha_cosecha && cultivoForm.fecha_cosecha < cultivoForm.fecha_siembra) {
+      setError('La fecha de cosecha no puede ser anterior a la de siembra.')
+      return
+    }
+    if (!estadioFenologico.trim()) { setError('El estadio fenológico es obligatorio.'); return }
     setError('')
     setStep('analisis')
   }
@@ -286,11 +563,28 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     return 'Procesando archivo en el servidor...'
   }
 
+  function cultivoFormPayload() {
+    return {
+      tipo_cultivo: cultivoForm.tipo_cultivo,
+      variedad: cultivoForm.variedad.trim() || null,
+      fecha_siembra: cultivoForm.fecha_siembra ? new Date(cultivoForm.fecha_siembra).toISOString() : null,
+      fecha_cosecha: cultivoForm.fecha_cosecha ? new Date(cultivoForm.fecha_cosecha).toISOString() : null,
+    }
+  }
+
+  function setCampoCultivo(campo, valor) {
+    setCultivoForm((prev) => ({ ...prev, [campo]: valor }))
+  }
+
   async function handleSubmit() {
     setLoading(true)
     setError('')
 
     try {
+      if (cultivoModificado) {
+        await client.put(`/lotes/${loteId}/cultivos/${cultivoSeleccion}`, cultivoFormPayload())
+      }
+
       let data
       if (fuente === 'satelite') {
         // No hay bytes que subir — la descarga real ocurre en el worker
@@ -303,6 +597,9 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
           new Date(fechaVuelo).toISOString(),
           estadioFenologico.trim() || null,
           indices.filter((i) => i !== 'ndvi'),
+          cultivoSeleccion === CULTIVO_NUEVO
+            ? { cultivo: cultivoFormPayload() }
+            : { cultivo_id: cultivoSeleccion },
         )
       } else {
         const fd = new FormData()
@@ -310,6 +607,15 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
         fd.append('sensor', sensor)
         if (estadioFenologico.trim()) fd.append('estadio_fenologico', estadioFenologico.trim())
         if (fechaVuelo) fd.append('fecha_vuelo', new Date(fechaVuelo).toISOString())
+        if (cultivoSeleccion === CULTIVO_NUEVO) {
+          const nuevo = cultivoFormPayload()
+          fd.append('cultivo_tipo', nuevo.tipo_cultivo)
+          if (nuevo.variedad) fd.append('cultivo_variedad', nuevo.variedad)
+          if (nuevo.fecha_siembra) fd.append('cultivo_fecha_siembra', nuevo.fecha_siembra)
+          if (nuevo.fecha_cosecha) fd.append('cultivo_fecha_cosecha', nuevo.fecha_cosecha)
+        } else {
+          fd.append('cultivo_id', cultivoSeleccion)
+        }
 
         setUploadProgress(0)
         setUploadPhase('uploading')
@@ -352,49 +658,119 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-box--wizard" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Nuevo análisis de ortomosaico</h2>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button>
         </div>
 
-        {!sinLotes && (
+        {(
           <div className="wizard-stepper">
-            <div className={`wizard-step${step === 'carga' ? ' wizard-step--active' : ' wizard-step--done'}`}>
-              <span className="wizard-step-icon">{step === 'carga' ? <IconUpload /> : <IconCheck />}</span>
-              <span className="wizard-step-label">Carga</span>
-            </div>
-            <div className={`wizard-step-line${step === 'analisis' ? ' wizard-step-line--done' : ''}`} />
-            <div className={`wizard-step${step === 'analisis' ? ' wizard-step--active' : ''}`}>
-              <span className="wizard-step-icon"><IconSearch /></span>
-              <span className="wizard-step-label">Análisis</span>
-            </div>
+            {PASOS.map((paso, i) => {
+              const indiceActual = PASOS.findIndex((p) => p.key === step)
+              const estado = i === indiceActual ? ' wizard-step--active' : i < indiceActual ? ' wizard-step--done' : ''
+              return (
+                <Fragment key={paso.key}>
+                  {i > 0 && <div className={`wizard-step-line${i <= indiceActual ? ' wizard-step-line--done' : ''}`} />}
+                  <div className={`wizard-step${estado}`}>
+                    <span className="wizard-step-icon">{i < indiceActual ? <IconCheck /> : paso.icon}</span>
+                    <span className="wizard-step-label">{paso.label}</span>
+                  </div>
+                </Fragment>
+              )
+            })}
           </div>
         )}
 
-        {sinLotes ? (
+        {(
+        <div className="wizard-split">
+        <div className="wizard-split-datos">
+        {step === 'carga' && creandoLote ? (
           <div className="modal-form">
-            <p className="empty-hint">
-              Todavía no tenés lotes registrados. Creá un lote primero con "Nuevo Lote".
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="btn-secondary" onClick={onClose}>Cerrar</button>
+            <p className="config-analisis-titulo">Nuevo lote</p>
+
+            <div className="form-group">
+              <label htmlFor="nl_nombre">Nombre del lote</label>
+              <input
+                id="nl_nombre"
+                type="text"
+                placeholder="Ej: Lote Norte — Parcela 3"
+                value={nuevoLote.nombre}
+                onChange={(e) => setNuevoLote((f) => ({ ...f, nombre: e.target.value }))}
+                disabled={guardandoLote}
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="nl_suelo">Tipo de suelo <span className="label-opcional">(opcional)</span></label>
+              <select
+                id="nl_suelo"
+                value={nuevoLote.tipo_suelo}
+                onChange={(e) => setNuevoLote((f) => ({ ...f, tipo_suelo: e.target.value }))}
+                disabled={guardandoLote}
+              >
+                {TIPOS_SUELO.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Límites</label>
+              <div className="nuevo-lote-limite">
+              <button
+                type="button"
+                className={`modo-limite-btn${dibujandoLimite ? ' modo-limite-btn--activo' : ''}`}
+                onClick={() => setDibujandoLimite((d) => !d)}
+                disabled={guardandoLote}
+              >
+                🗺️ Dibujar en mapa
+              </button>
+              <span className="nuevo-lote-o">O al cargar un GeoTIFF se determinarán los límites</span>
+              </div>
+            </div>
+
+            {areaNuevaHa != null && (
+              <p className={`area-badge${areaNuevaFueraDeRango ? ' area-badge--alerta' : ''}`}>
+                Área del polígono: {areaNuevaHa.toFixed(2)} ha
+                {areaNuevaFueraDeRango && ' — fuera del rango esperado para un lote agrícola'}
+              </p>
+            )}
+            {autointerseccionNueva && (
+              <p className="area-badge area-badge--alerta">
+                ⚠️ El polígono tiene lados que se cruzan entre sí — corregilo antes de guardar.
+              </p>
+            )}
+
+            {errorLote && <p className="error-message">{errorLote}</p>}
+
+            <div className="modal-actions modal-actions--wizard">
+              <button type="button" className="btn-secondary" onClick={cancelarNuevoLote} disabled={guardandoLote}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-primary" onClick={handleGuardarLote} disabled={guardandoLote}>
+                {guardandoLote ? 'Guardando...' : 'Guardar'}
+              </button>
             </div>
           </div>
         ) : step === 'carga' ? (
-          <div className="modal-form">
+          <div className={`modal-form${loteId ? '' : ' modal-form--sin-lote'}`}>
             <div className="form-group">
               <label htmlFor="lote">Lote</label>
-              <select
-                id="lote"
-                value={loteId}
-                onChange={(e) => setLoteId(e.target.value)}
-                disabled={loading}
-              >
-                {lotes.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.nombre} — {CULTIVO_LABEL[l.cultivo] ?? l.cultivo}
-                  </option>
-                ))}
-              </select>
+              <div className="lote-selector-fila">
+                <select
+                  id="lote"
+                  value={loteId}
+                  onChange={(e) => setLoteId(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="" disabled>Seleccioná un lote…</option>
+                  {lotesTodos.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.nombre}{cultivoMasReciente(l) ? ` — ${etiquetaTipoCultivo(cultivoMasReciente(l).tipo_cultivo)}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn-nuevo-lote" onClick={abrirNuevoLote} disabled={loading}>
+                  ＋ Nuevo lote
+                </button>
+              </div>
             </div>
 
             <div className="modo-limite-toggle">
@@ -402,9 +778,9 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 type="button"
                 className={`modo-limite-btn${fuente === 'dron' ? ' modo-limite-btn--activo' : ''}`}
                 onClick={() => cambiarFuente('dron')}
-                disabled={loading}
+                disabled={loading || !loteId}
               >
-                🚁 Subir archivo (dron)
+                <IconDron size={18} /> Subir archivo (dron)
               </button>
               <button
                 type="button"
@@ -430,27 +806,29 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                     id="sensor"
                     value={sensor}
                     onChange={(e) => setSensor(e.target.value)}
-                    disabled={loading}
+                    disabled={loading || !loteId}
                   >
                     {SENSORES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
                 </div>
 
-                {inspeccion && !inspeccion.compatible ? (
+                {geotiffFueraDelLote && (
+                  <div className="requisitos-box requisitos-box--error">
+                    <IconInfo />
+                    <p>
+                      <strong>{MSG_FUERA_DEL_LOTE}</strong><br />
+                      El área naranja del mapa es la que cubre el archivo. Verificá que elegiste el lote correcto o
+                      que el GeoTIFF corresponde a este campo.
+                    </p>
+                  </div>
+                )}
+
+                {inspeccion && !inspeccion.compatible && (
                   <div className="requisitos-box requisitos-box--error">
                     <IconInfo />
                     <p>
                       <strong>El archivo no coincide con el sensor seleccionado</strong><br />
                       {inspeccion.mensaje}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="requisitos-box">
-                    <IconInfo />
-                    <p>
-                      <strong>Requerimientos Técnicos</strong><br />
-                      El archivo debe estar en formato GeoTIFF (.tif), contener información georreferenciada y poseer
-                      las bandas necesarias para el análisis multiespectral.
                     </p>
                   </div>
                 )}
@@ -460,7 +838,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                   onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
                   onDragLeave={() => setDragging(false)}
                   onDrop={handleDrop}
-                  onClick={() => inputRef.current.click()}
+                  onClick={() => { if (loteId) inputRef.current.click() }}
                 >
                   <input
                     ref={inputRef}
@@ -483,27 +861,6 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               </>
             ) : (
               <>
-                {loteBoundsSatelital && (
-                  <div className="limites-preview-map">
-                    <MapContainer
-                      bounds={loteBoundsSatelital}
-                      style={{ height: '220px', width: '100%', borderRadius: '8px' }}
-                      zoomControl={true}
-                      scrollWheelZoom={false}
-                    >
-                      <TileLayer
-                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                        attribution="Tiles &copy; Esri"
-                      />
-                      <GeoJSON
-                        data={loteSeleccionado.geometry}
-                        style={{ color: '#2ecc71', weight: 2, fillOpacity: 0.15 }}
-                      />
-                      <FitBounds bounds={loteBoundsSatelital} />
-                    </MapContainer>
-                  </div>
-                )}
-
                 <div className="form-group">
                   <label>Fecha deseada</label>
                   <CalendarioSatelital
@@ -555,9 +912,127 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 type="button"
                 className="btn-primary"
                 onClick={handleSiguiente}
-                disabled={fuente === 'dron' ? !archivo : !escenaSeleccionada}
+                disabled={fuente === 'dron' ? !archivo || geotiffFueraDelLote : !escenaSeleccionada}
               >
                 Siguiente →
+              </button>
+            </div>
+          </div>
+        ) : step === 'cultivo' ? (
+          <div className="modal-form">
+            <p className="config-analisis-titulo">Información de cultivo</p>
+
+            <CultivoDropdown
+              cultivos={cultivosLote}
+              seleccion={cultivoSeleccion}
+              creando={creandoCultivo}
+              onElegir={elegirCultivo}
+              onNuevo={nuevoCultivo}
+              disabled={loading}
+            />
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="cultivo_tipo">Tipo de cultivo</label>
+                <select
+                  id="cultivo_tipo"
+                  value={cultivoForm.tipo_cultivo}
+                  onChange={(e) => setCampoCultivo('tipo_cultivo', e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="" disabled>Seleccionar...</option>
+                  {CULTIVOS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <div className="label-con-ayuda">
+                  <label htmlFor="cultivo_variedad">Variedad</label>
+                  <AyudaVariedad />
+                </div>
+                <input
+                  id="cultivo_variedad"
+                  type="text"
+                  placeholder="Ej: DM 46i17"
+                  maxLength={100}
+                  value={cultivoForm.variedad}
+                  onChange={(e) => setCampoCultivo('variedad', e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="cultivo_siembra">Fecha de siembra</label>
+                <input
+                  id="cultivo_siembra"
+                  type="date"
+                  value={cultivoForm.fecha_siembra}
+                  onChange={(e) => setCampoCultivo('fecha_siembra', e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="cultivo_cosecha">Fecha de cosecha</label>
+                <input
+                  id="cultivo_cosecha"
+                  type="date"
+                  value={cultivoForm.fecha_cosecha}
+                  min={cultivoForm.fecha_siembra || undefined}
+                  onChange={(e) => setCampoCultivo('fecha_cosecha', e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            {cultivoModificado && (
+              <div className="requisitos-box requisitos-box--aviso">
+                <IconInfo />
+                <p>
+                  <strong>Modificaste los datos de este cultivo.</strong><br />
+                  Al continuar se va a actualizar el cultivo guardado, y el cambio también se ve en sus análisis anteriores.
+                  Si querés registrar otro cultivo distinto, usá "＋ Nuevo cultivo".
+                </p>
+              </div>
+            )}
+
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="fecha_vuelo">Fecha del vuelo</label>
+                <input
+                  id="fecha_vuelo"
+                  type="date"
+                  value={fechaVuelo}
+                  onChange={(e) => setFechaVuelo(e.target.value)}
+                  disabled={loading || fuente === 'satelite'}
+                  title={fuente === 'satelite' ? 'Es la fecha real de captura de la escena elegida — no se puede editar.' : undefined}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="estadio_vuelo">Estadio fenológico</label>
+                <select
+                  id="estadio_vuelo"
+                  value={estadioFenologico}
+                  onChange={(e) => setEstadioFenologico(e.target.value)}
+                  disabled={loading || !cultivoForm.tipo_cultivo}
+                  required
+                >
+                  <option value="" disabled>
+                    {cultivoForm.tipo_cultivo ? 'Seleccionar...' : 'Elegí primero el tipo de cultivo'}
+                  </option>
+                  {estadiosDisponibles.map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {error && <p className="error-message">{error}</p>}
+
+            <div className="modal-actions modal-actions--wizard">
+              <button type="button" className="btn-secondary" onClick={() => { setError(''); setStep('carga') }}>
+                ← Atrás
+              </button>
+              <button type="button" className="btn-primary" onClick={handleContinuarCultivo}>
+                Continuar →
               </button>
             </div>
           </div>
@@ -574,7 +1049,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 </div>
                 <div className="lote-info-meta">
                   <span><strong>Superficie:</strong> {loteSeleccionado?.area_ha ? `${Math.round(loteSeleccionado.area_ha)} Ha` : '—'}</span>
-                  <span><strong>Cultivo:</strong> {CULTIVO_LABEL[loteSeleccionado?.cultivo] ?? loteSeleccionado?.cultivo}</span>
+                  <span><strong>Cultivo:</strong> {descripcionCultivo({ ...cultivoForm, variedad: cultivoForm.variedad.trim() || null, fecha_siembra: cultivoForm.fecha_siembra ? `${cultivoForm.fecha_siembra}T00:00:00Z` : null })}</span>
+                  <span><strong>Estadio:</strong> {estadioFenologico.trim()}</span>
                   <span><strong>Sensor:</strong> {SENSOR_LABEL[sensor]}</span>
                   {fuente === 'satelite' ? (
                     <span><strong>Escena:</strong> {escenaSeleccionada?.fecha} ({escenaSeleccionada?.nubes_pct != null ? `${escenaSeleccionada.nubes_pct.toFixed(1)}% nubes` : 'nubes desconocidas'})</span>
@@ -586,9 +1062,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             </div>
 
             <div className="config-analisis-header">
-              <p className="config-analisis-titulo">Configuración de análisis</p>
               <p className="config-analisis-sub">
-                NDVI se calcula siempre (es la base del diagnóstico). NDRE, SAVI y GNDVI vienen tildados por defecto — destildá los que no necesites o sumá ExG.
+                Elegí qué índices calcular. NDVI se calcula siempre (es la base del diagnóstico); destildá los demás que no necesites.
               </p>
             </div>
 
@@ -603,7 +1078,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                   title={i.value === 'ndvi' ? 'NDVI se calcula siempre al subir el vuelo — es la base del diagnóstico y no se puede destildar.' : undefined}
                 >
                   <span className="indice-btn-label">{i.label}</span>
-                  <span className="indice-btn-sub">{i.value === 'ndvi' ? 'Siempre incluido' : i.sub}</span>
+                  <span className="indice-btn-sub">{i.sub}</span>
                 </button>
               ))}
             </div>
@@ -614,35 +1089,6 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                 <p><strong>{indiceInfo.label}</strong> — {indiceInfo.desc}</p>
               </div>
             )}
-
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="estadio_vuelo">Estadio fenológico <span className="label-opcional">(opcional)</span></label>
-                <input
-                  id="estadio_vuelo"
-                  type="text"
-                  placeholder="Ej: R3"
-                  maxLength={30}
-                  value={estadioFenologico}
-                  onChange={(e) => setEstadioFenologico(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="fecha_vuelo">
-                  Fecha del vuelo {fuente === 'dron' && <span className="label-opcional">(opcional)</span>}
-                </label>
-                <input
-                  id="fecha_vuelo"
-                  type="date"
-                  value={fechaVuelo}
-                  onChange={(e) => setFechaVuelo(e.target.value)}
-                  disabled={loading || fuente === 'satelite'}
-                  title={fuente === 'satelite' ? 'Es la fecha real de captura de la escena elegida — no se puede editar.' : undefined}
-                />
-              </div>
-            </div>
 
             {error && <p className="error-message">{error}</p>}
 
@@ -664,7 +1110,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
             )}
 
             <div className="modal-actions modal-actions--wizard">
-              <button type="button" className="btn-secondary" onClick={() => setStep('carga')} disabled={loading}>
+              <button type="button" className="btn-secondary" onClick={() => setStep('cultivo')} disabled={loading}>
                 ← Atrás
               </button>
               <button type="button" className="btn-primary" onClick={handleSubmit} disabled={loading}>
@@ -672,6 +1118,58 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
               </button>
             </div>
           </div>
+        )}
+        </div>
+
+        <aside className="wizard-split-mapa">
+          {creandoLote && dibujandoLimite ? (
+            <MapaDibujoLote key="dibujo-nuevo-lote" onChange={onDibujoNuevoLote} initialGeoJSON={poligonoNuevo} height="100%" />
+          ) : boundsMapa ? (
+            <>
+            <MapContainer
+              key={loteId}
+              bounds={boundsMapa}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution="Tiles &copy; Esri"
+              />
+              {loteSeleccionado?.geometry && (
+                <GeoJSON
+                  key={`lote-${loteId}`}
+                  data={loteSeleccionado.geometry}
+                  style={{ color: '#2ecc71', weight: 2, fillOpacity: 0.15 }}
+                />
+              )}
+              {geotiffVisible && (
+                <GeoJSON
+                  key={`tif-${archivo?.name}-${archivo?.size}`}
+                  data={geotiffVisible}
+                  style={{ color: '#f59e0b', weight: 2, dashArray: '6 4', fillOpacity: 0.08 }}
+                />
+              )}
+              <FitBounds bounds={boundsMapa} />
+            </MapContainer>
+            <div className="wizard-mapa-leyenda">
+              {loteSeleccionado?.geometry && <span><i style={{ background: '#2ecc71' }} />Límite del lote</span>}
+              {geotiffVisible && <span><i style={{ background: '#f59e0b' }} />Área del GeoTIFF</span>}
+            </div>
+            </>
+          ) : (
+            <MapaNEA
+              aviso={
+                creandoLote
+                  ? null
+                  : loteSeleccionado
+                    ? 'Este lote no tiene límite cargado todavía.'
+                    : 'Seleccioná un lote para ver sus límites.'
+              }
+            />
+          )}
+        </aside>
+        </div>
         )}
       </div>
     </div>

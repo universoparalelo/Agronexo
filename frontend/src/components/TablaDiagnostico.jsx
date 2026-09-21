@@ -107,7 +107,7 @@ export default function TablaDiagnostico({
           <p className="diagnostico-metadata">
             {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
             {metadata.lote_nombre && ' · '}
-            {metadata.cultivo} · estadio {metadata.estadio_fenologico || 'sin cargar'}
+            {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
             {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
             {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
             {metadata.calculado_en && (

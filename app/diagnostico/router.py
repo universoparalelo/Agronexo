@@ -9,13 +9,26 @@ from app.auth.models import Usuario
 from app.core.database import get_db
 from app.diagnostico import service
 from app.diagnostico.models import CausaIndiceEnum, TipoProductoEnum
-from app.diagnostico.schemas import ProductoFitosanitarioListResponse
+from app.diagnostico.estadios import ESTADIOS_POR_CULTIVO
+from app.diagnostico.schemas import EstadiosFenologicosResponse, ProductoFitosanitarioListResponse
 from app.lotes.service import obtener_lote
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 productos_router = APIRouter()
+estadios_router = APIRouter()
+
+
+@estadios_router.get(
+    "",
+    response_model=EstadiosFenologicosResponse,
+    summary="Estadios fenológicos elegibles por tipo de cultivo",
+)
+async def listar_estadios_fenologicos(current_user: Usuario = Depends(get_current_user)):
+    return EstadiosFenologicosResponse(
+        estadios={cultivo.value: estadios for cultivo, estadios in ESTADIOS_POR_CULTIVO.items()},
+    )
 
 
 @productos_router.get(
@@ -68,6 +81,8 @@ async def _resolver_diagnostico(
 
     try:
         resultado = await service.generar_diagnostico(db, lote, vuelo_id, forzar_recalculo=forzar_recalculo)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Error generando diagnóstico para vuelo %s del lote %s", vuelo_id, lote_id)
         raise HTTPException(
