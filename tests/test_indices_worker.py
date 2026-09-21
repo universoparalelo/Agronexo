@@ -118,9 +118,38 @@ def test_exg_no_requiere_nir():
     red   = np.full((5, 5), 0.2, dtype=np.float32)
     blue  = np.full((5, 5), 0.1, dtype=np.float32)
     resultado = calcular_exg(green, red, blue)
-    esperado = 2 * 0.4 - 0.2 - 0.1  # 0.5
+    # normalizado: 2g − r − b = (2G − R − B) / (R + G + B) = 0.5 / 0.7
+    esperado = (2 * 0.4 - 0.2 - 0.1) / (0.4 + 0.2 + 0.1)
     assert np.allclose(resultado, esperado, atol=1e-5)
-    print(f"✓ ExG = 2G-R-B → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+    print(f"✓ ExG normalizado → {resultado[0,0]:.4f} (esperado {esperado:.4f})")
+
+
+def test_exg_no_depende_del_brillo_ni_de_las_unidades():
+    from workers.gis.indices import calcular_exg
+
+    green = np.full((3, 3), 0.07, dtype=np.float32)
+    red   = np.full((3, 3), 0.05, dtype=np.float32)
+    blue  = np.full((3, 3), 0.04, dtype=np.float32)
+    base = calcular_exg(green, red, blue)
+    doble_brillo = calcular_exg(green * 2, red * 2, blue * 2)
+    dn_8bit = calcular_exg(green * 3600, red * 3600, blue * 3600)   # otra escala de la cámara
+    assert np.allclose(base, doble_brillo, atol=1e-5)
+    assert np.allclose(base, dn_8bit, atol=1e-4)
+    assert 0.05 < base[0, 0] < 0.45   # rango típico de vegetación
+    print(f"✓ ExG igual con el doble de brillo y con otras unidades ({base[0,0]:.3f})")
+
+
+def test_exg_suma_cero_es_nan_y_respeta_nodata():
+    from workers.gis.indices import calcular_exg
+
+    verde = np.array([[0.0, 0.07]], dtype=np.float32)
+    rojo  = np.array([[0.0, 0.05]], dtype=np.float32)
+    azul  = np.array([[0.0, 0.04]], dtype=np.float32)
+    resultado = calcular_exg(verde, rojo, azul)
+    assert np.isnan(resultado[0, 0]) and not np.isnan(resultado[0, 1])
+    con_nodata = calcular_exg(verde, rojo, azul, nodata=0.07)
+    assert np.isnan(con_nodata[0, 1])
+    print("✓ ExG: R+G+B = 0 → NaN, y nodata enmascarado")
 
 
 def test_gndvi_valor_conocido():
@@ -395,6 +424,8 @@ if __name__ == "__main__":
     test_ndre_rango_valido()
     test_savi_difiere_de_ndvi()
     test_exg_no_requiere_nir()
+    test_exg_no_depende_del_brillo_ni_de_las_unidades()
+    test_exg_suma_cero_es_nan_y_respeta_nodata()
     test_gndvi_valor_conocido()
     test_nodata_se_convierte_en_nan()
 

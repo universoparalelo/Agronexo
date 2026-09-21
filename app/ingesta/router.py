@@ -2,12 +2,15 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.ingesta import service
+from app.ingesta.absorcion import absorber_huecos
 from app.ingesta.schemas import (
     EscenasSatelitalesResponse,
     EstadoVueloResponse,
@@ -31,6 +34,17 @@ from app.lotes.schemas import CultivoCreate
 from app.lotes.service import obtener_lote, resolver_cultivo_para_analisis
 
 router = APIRouter()
+
+
+def _limite_del_lote(lote):
+    return to_shape(lote.geometry) if lote.geometry is not None else None
+
+
+async def _presentar_resultado(geojson: dict, lote, absorber: bool) -> dict:
+    """Variante de lectura del resultado; lo guardado nunca se modifica."""
+    if absorber:
+        return await run_in_threadpool(absorber_huecos, geojson, _limite_del_lote(lote))
+    return geojson
 
 
 @router.post(
@@ -322,6 +336,7 @@ async def listar_vuelos_lote(
 async def resultado_vuelo(
     lote_id: uuid.UUID,
     vuelo_id: uuid.UUID,
+    absorber: bool = Query(False, description="Combina con la zona vecina lo que tiene datos pero no quedó con zona (vista resumida, no cambia lo guardado). El `sin_datos` real no se toca."),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -334,7 +349,7 @@ async def resultado_vuelo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resultado no disponible. El vuelo debe estar en estado 'completado'.",
         )
-    return geojson
+    return await _presentar_resultado(geojson, lote, absorber)
 
 
 @router.get(
@@ -565,6 +580,7 @@ async def resultado_indice_vuelo(
     lote_id: uuid.UUID,
     vuelo_id: uuid.UUID,
     indice: IndiceEnum,
+    absorber: bool = Query(False, description="Combina con la zona vecina lo que tiene datos pero no quedó con zona (vista resumida, no cambia lo guardado). El `sin_datos` real no se toca."),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -578,4 +594,4 @@ async def resultado_indice_vuelo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resultado no disponible. El análisis debe estar en estado 'completado'.",
         )
-    return geojson
+    return await _presentar_resultado(geojson, lote, absorber)

@@ -105,7 +105,7 @@ export default function ResultadosVuelo() {
   const principal = (
     <main className="resultados-main">
       <div className="resultados-mapa">
-        <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} />
+        <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} sinDatos={zonas?.sin_datos} />
       </div>
 
       <div className="resultados-sidebar">

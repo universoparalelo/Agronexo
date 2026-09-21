@@ -3398,3 +3398,11 @@ body {
   justify-content: space-between;
   padding: 0.85rem 1.75rem 0.75rem;
 }
+
+/* "Sin datos": rayado gris sobre las capas de Leaflet (el patrón está en PatronSinDatos.jsx) */
+.leaflet-container path.capa-sin-datos { fill: url(#patron-sin-datos); fill-opacity: 1; }
+
+.leyenda-color--sin-datos {
+  background: repeating-linear-gradient(45deg, #6b7280 0 2px, #f3f4f6 2px 5px);
+  border: 1px solid #4b5563;
+}

@@ -49,10 +49,19 @@ def calcular_savi(nir: np.ndarray, red: np.ndarray, nodata: float | None = None,
 
 
 def calcular_exg(green: np.ndarray, red: np.ndarray, blue: np.ndarray, nodata: float | None = None) -> np.ndarray:
-    """ExG = 2*GREEN - RED - BLUE  — índice de verdor, no requiere NIR.
-    Útil con cámaras RGB cuando no hay banda NIR disponible.
+    """ExG normalizado = 2g − r − b, con g, r, b = cada banda / (R + G + B).
+
+    Como g + r + b = 1, es igual a (2G − R − B) / (R + G + B). Dividir por el
+    brillo total deja solo la proporción de verde: el valor no cambia si la
+    escena está más o menos iluminada, ni según las unidades de la cámara
+    (reflectancia 0-1 o DN 8-bit dan lo mismo), así que se puede comparar
+    entre fechas, lotes y sensores. Sin normalizar, sobre reflectancias daba
+    valores ~0,02 (rango real −0,02 a 0,07) y la regla R10 (ExG > 0,20) no
+    podía dispararse nunca. Rango típico de vegetación: 0,05 a 0,45.
+
+    No requiere NIR. Útil con cámaras RGB cuando no hay banda NIR disponible.
     """
-    resultado = 2.0 * green - red - blue
+    resultado = _division_segura(2.0 * green - red - blue, red + green + blue)
     resultado[_mascara_nodata(nodata, green, red, blue)] = np.nan
     return resultado.astype(np.float32)
 
