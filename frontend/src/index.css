@@ -2626,27 +2626,6 @@ body {
 }
 
 /* ── Detalle Lote ── */
-.detalle-page { min-height: 100vh; display: flex; flex-direction: column; background: #f0f4f0; }
-
-.detalle-header {
-  background: #1a3a2a;
-  color: #fff;
-  padding: 0 2rem;
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
-
-.detalle-header-left { display: flex; align-items: center; gap: 1.25rem; }
-.detalle-titulo { display: flex; align-items: center; gap: 0.6rem; }
-.detalle-titulo h1 { font-size: 1.2rem; font-weight: 700; }
-.detalle-header .btn-back { color: rgba(255,255,255,0.8); }
-.detalle-header .btn-back:hover { color: #fff; opacity: 1; }
-.detalle-area { font-size: 1.1rem; font-weight: 600; color: rgba(255,255,255,0.85); white-space: nowrap; }
-
 .detalle-main {
   flex: 1;
   max-width: 860px;
@@ -2727,29 +2706,6 @@ body {
 .vuelo-card-acciones { display: flex; justify-content: flex-end; }
 
 /* ── Resultados Vuelo ── */
-.resultados-page { height: 100vh; display: flex; flex-direction: column; }
-
-.resultados-header {
-  background: #1a3a2a;
-  color: #fff;
-  padding: 0 2rem;
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
-
-.resultados-header-left { display: flex; align-items: center; gap: 1.25rem; }
-.resultados-header .btn-back { color: rgba(255,255,255,0.8); }
-.resultados-header .btn-back:hover { color: #fff; opacity: 1; }
-.resultados-titulo { display: flex; align-items: center; gap: 0.6rem; }
-.resultados-titulo h1 { font-size: 1.2rem; font-weight: 700; }
-.resultados-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: rgba(255,255,255,0.8); }
-.resultados-meta-sep { opacity: 0.5; }
-
 .resultados-main { flex: 1; display: grid; grid-template-columns: 1fr 340px; overflow: hidden; }
 .resultados-mapa { overflow: hidden; }
 .resultados-sidebar { background: #fff; border-left: 1px solid #e5e7eb; overflow-y: auto; overflow-x: hidden; padding: 1.25rem; box-sizing: border-box; }
