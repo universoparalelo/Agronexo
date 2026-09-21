@@ -2,49 +2,8 @@ import './LandingOriginal.css'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-/* ── Animated Counter ── */
-function AnimatedCounter({ value }) {
-  const [display, setDisplay] = useState('0')
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return
-        const numStr = value.replace(/[^0-9.]/g, '')
-        const unit = value.replace(/[0-9.]/g, '')
-        const target = parseFloat(numStr)
-        let current = 0
-        const increment = target / 60
-        const interval = setInterval(() => {
-          current += increment
-          if (current >= target) {
-            setDisplay(`${target}${unit}`)
-            clearInterval(interval)
-          } else {
-            setDisplay(`${current.toFixed(1)}${unit}`.replace('.0', ''))
-          }
-        }, 16)
-        observer.disconnect()
-      },
-      { threshold: 0.5 }
-    )
-    if (ref.current) observer.observe(ref.current)
-    return () => observer.disconnect()
-  }, [value])
-
-  return <div className="l2orig-counter-num" ref={ref}>{display}</div>
-}
-
 /* ── Data ── */
 const DYNAMIC_WORDS = ['cultivos', 'lotes', 'datos', 'rendimiento', 'recursos']
-
-const METRICS = [
-  { label: 'LOTES ANALIZADOS', value: '1.2K', desc: 'campos procesados', accent: 'green' },
-  { label: 'ÍNDICES CALCULADOS', value: '38K', desc: 'análisis NDVI / NDRE', accent: 'teal' },
-  { label: 'REDUCCIÓN INSUMOS', value: '30%', desc: 'fertilizante ahorrado', accent: 'green' },
-  { label: 'PRECISIÓN DETECCIÓN', value: '99%', desc: 'accuracy del modelo IA', accent: 'teal' },
-]
 
 const CAPACIDADES = [
   'Captura Multiespectral',
@@ -130,11 +89,6 @@ export default function LandingOriginal() {
     return () => observerRef.current?.disconnect()
   }, [])
 
-  const scrollTo = id => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-    setIsMenuOpen(false)
-  }
-
   const goLogin = () => navigate('/login')
 
   return (
@@ -146,12 +100,6 @@ export default function LandingOriginal() {
           <button className="l2orig-header-logo-btn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <img src="/logo.png" alt="AgroNexo" className="l2orig-logo-img" />
           </button>
-
-          <nav className="l2orig-nav">
-            {[['metrics', 'Impacto']].map(([id, label]) => (
-              <button key={id} className="l2orig-nav-link" onClick={() => scrollTo(id)}>{label}</button>
-            ))}
-          </nav>
 
           <button className="l2orig-btn-acceder" onClick={goLogin}>
             Ingresar
@@ -172,9 +120,6 @@ export default function LandingOriginal() {
       {/* ── Mobile menu overlay ── */}
       {isMenuOpen && (
         <div className="l2orig-mobile-menu">
-          {[['metrics', 'Impacto']].map(([id, label]) => (
-            <button key={id} className="l2orig-mobile-menu-link" onClick={() => scrollTo(id)}>{label}</button>
-          ))}
           <button className="l2orig-mobile-menu-cta" onClick={() => { goLogin(); setIsMenuOpen(false) }}>Ingresar a la plataforma</button>
         </div>
       )}
@@ -226,31 +171,6 @@ export default function LandingOriginal() {
         </div>
       </section>
 
-      {/* ── Metrics ── */}
-      <section id="metrics" className="l2orig-section l2orig-anim">
-        <div className="l2orig-container">
-          <h2 className="l2orig-section-title">
-            Impacto <span className="l2orig-gradient-text">Agronómico</span> a Escala
-          </h2>
-          <p className="l2orig-section-desc">
-            Respaldado por datos reales de campo en el NEA argentino.
-          </p>
-
-          <div className="l2orig-metrics-grid">
-            {METRICS.map((m, i) => (
-              <div key={i} className="l2orig-metric-card">
-                <div className="l2orig-metric-label">
-                  <span className={`l2orig-metric-dot l2orig-dot-${m.accent}`} />
-                  {m.label}
-                </div>
-                <AnimatedCounter value={m.value} />
-                <div className="l2orig-metric-desc">{m.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── Footer ── */}
       <footer className="l2orig-footer">
         <div className="l2orig-container">
@@ -271,8 +191,6 @@ export default function LandingOriginal() {
 
             <div className="l2orig-footer-col">
               <h4 className="l2orig-footer-col-title">MÓDULOS</h4>
-              <button className="l2orig-footer-btn" onClick={() => scrollTo('metrics')}>Impacto Agronómico</button>
-              <button className="l2orig-footer-btn" onClick={() => scrollTo('metrics')}>Índices NDVI / NDRE</button>
               <button className="l2orig-footer-btn" onClick={goLogin}>Motor de Diagnóstico</button>
               <button className="l2orig-footer-btn" onClick={goLogin}>Prescripciones ISO-XML</button>
             </div>
