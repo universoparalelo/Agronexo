@@ -89,7 +89,7 @@ const INDICES = [
   },
   {
     value: 'exg', label: 'ExG', sub: 'RGB', bandas: ['GREEN', 'RED', 'BLUE'],
-    desc: 'Exceso de Verde. Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR.',
+    desc: 'Exceso de Verde (normalizado por el brillo, no cambia con la iluminación). Usa solo bandas visibles (RGB) para diferenciar vegetación de suelo desnudo — útil con cámaras sin banda NIR.',
   },
 ]
 

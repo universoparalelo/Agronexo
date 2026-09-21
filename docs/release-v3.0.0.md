@@ -439,6 +439,57 @@ Se reordenó `ModalCargaGeoTIFF.jsx` a pedido del usuario: (1) **Carga** — lot
 - **Estadio fenológico como lista según el cultivo** (a pedido): `ESTADIOS_POR_CULTIVO` en `app/diagnostico/estadios.py`, expuesta en `GET /api/v1/estadios-fenologicos` (soja VE–R8, maíz VE–R6 con V1–V18 y VT, algodón con botón floral/floración/apertura de cápsulas, sorgo con espigado/floración/llenado). El select del paso "Cultivo" se habilita al elegir el tipo y se limpia si el tipo cambia y el estadio ya no pertenece a la escala. Se guarda el texto tal cual y el motor lo normaliza; `tests/test_estadios.py` verifica que las 20 reglas puedan matchear con alguna opción de la lista de su cultivo, para que agregar una regla con un estadio nuevo no la deje inalcanzable. La lista incluye estadios que ninguna regla usa (p. ej. R6–R8 de soja): solo dejan de aplicar las reglas que exigen un estadio puntual.
 - Nuevo ícono de dron (cuadricóptero con rotores) para el botón "Subir archivo (dron)" y la tarjeta del paso de análisis; el anterior se veía como un enchufe.
 
+#### Fix: el umbral adaptativo (Otsu) nunca funcionaba — ExG quedaba entero en "crítica"
+**Fecha:** 2026-09-21
+
+**Error encontrado — `TypeError: threshold_multiotsu() got an unexpected keyword argument 'nclasses'`**
+Detectado al revisar el ExG de un vuelo Sentinel-2 de "Nueva Prueba": todo el lote (104 ha) salía en una sola zona "crítica" con valor 0,023. `workers/gis/clasificacion.py` llamaba `threshold_multiotsu(validos, nclasses=4)`, pero en scikit-image 0.24 el parámetro se llama `classes`. El `except Exception` que envolvía la llamada se tragaba el TypeError y devolvía los umbrales **fijos** `[0.20, 0.40, 0.70]`, así que "otsu" nunca fue adaptativo. Para ExG (que es una diferencia de reflectancias crudas, valores ~0,02, no un índice razón en [-1,1]) los umbrales fijos dejan todo bajo 0,20. El test `test_otsu_retorna_tres_umbrales_ordenados` pasaba igual porque `[0.20, 0.40, 0.70]` también son 3 umbrales ordenados.
+
+Se corrigió el parámetro (`classes=4`), el fallback esperable (`ValueError`, imagen con < 4 valores únicos) sigue siendo silencioso, y cualquier otra excepción ahora se loguea. Test de regresión `test_otsu_es_adaptativo_y_no_cae_a_los_umbrales_fijos`. Con el vuelo real: umbrales `[0.0144, 0.0258, 0.0389]` y 9 zonas en 4 clases en vez de 1.
+
+**Leyenda con valores reales (a pedido):** el worker ahora guarda en el GeoJSON de cada análisis los cortes de clase usados (`umbrales` y `metodo_umbral`, miembros externos de la FeatureCollection) y `MapaIndice.jsx` rotula la leyenda con ellos — p. ej. ExG: "Crítica (< 0.014) / Deficiente (0.014–0.026) / Normal (0.026–0.039) / Vigorosa (> 0.039)" en vez de "umbral adaptativo por vuelo". Sirve para cualquier índice con umbral adaptativo. Los análisis anteriores no tienen `umbrales` y conservan la leyenda anterior hasta reprocesarse. Son los valores reales del índice, **no normalizados**: si se quiere ExG en una escala normalizada hay que definirlo aparte (ver problema abierto de R10).
+
+**Impacto:** afecta a todo análisis ExG ya calculado y a cualquier análisis pedido con `metodo_umbral="otsu"` explícito; hay que reprocesarlos.
+
+**ExG normalizado (a pedido):** `workers/gis/indices.py::calcular_exg` pasó de `2G − R − B` a `2g − r − b` con `g, r, b = banda / (R + G + B)` (equivale a `(2G − R − B) / (R + G + B)`). Al dividir por el brillo total el valor no cambia con la iluminación ni con las unidades de la cámara (reflectancia 0–1 o DN 8-bit), así que es comparable entre fechas, lotes y sensores. Con la escena de Nueva Prueba: rango −0,047 a 0,492 (antes −0,020 a 0,066), promedio 0,133 (antes 0,023). Eso resuelve el problema de **R10**: `ExG > 0.20` ahora es alcanzable (con la escena de prueba solo 1 píxel de 10.451 cumple "NDVI < 0.50 y ExG > 0.20": el lote no tiene firma de malezas, no es un fallo de la regla). Píxeles con R+G+B = 0 quedan como NaN. Tests: `test_exg_no_depende_del_brillo_ni_de_las_unidades` y `test_exg_suma_cero_es_nan_y_respeta_nodata`.
+- Se reprocesaron los 7 análisis ExG con datos del usuario de desarrollo y se recalcularon sus diagnósticos guardados. Los ExG de otros usuarios o de bases ya desplegadas hay que reprocesarlos (`POST .../indices {"indice":"exg"}`), porque conservan la escala vieja.
+- **ExG con cortes fijos (a pedido):** con el ExG normalizado ya es comparable, así que dejó de clasificarse con Otsu (que daba cortes distintos en cada escena, hasta 0,99 en una, y hacía imposible comparar mapas) y tiene cortes fijos propios en `workers/gis/clasificacion.py::_UMBRALES_POR_INDICE`: **0,05 / 0,15 / 0,30** → Muy bajo (< 0,05), Bajo (0,05–0,15), Medio (0,15–0,30), Alto (> 0,30) (el corte intermedio empezó en 0,20 y se bajó a 0,15 a pedido: con 0,20 el 63 % de Nueva Prueba quedaba en "Bajo" mientras el NDVI la clasificaba casi toda como normal). Se eliminó `_metodo_umbral_efectivo` (forzaba Otsu); Otsu/percentil siguen disponibles si se piden explícitamente. Con cortes absolutos ya no hace falta la brecha mínima entre clases para ExG: un lote homogéneo queda en una sola clase.
+  - **Origen de los cortes:** agrupación en 4 clases de una escala orientativa de interpretación propuesta en una revisión externa (< 0 suelo rojizo/agua/oscuro; 0–0,05 suelo desnudo o materiales grises; 0,05–0,10 pasto seco o vegetación muy rala; 0,10–0,20 vegetación rala o parcialmente verde; 0,20–0,30 vegetación verde con buena cobertura; > 0,30 vegetación muy verde y densa). Esa tabla **no tiene una fuente citada**; se cruzó con datos: en las escenas disponibles el ExG cruza los cortes del NDVI (0,40 y 0,70) en ≈ 0,05 y ≈ 0,29, coherente con los extremos elegidos.
+  - **Advertencia para no sobreinterpretar:** en esas escenas los píxeles de ExG bajo (0 a 0,10) tienen NDVI mediano ≈ 0,5, es decir **hay vegetación** (seca, rala o con estructura), no suelo desnudo (que tendría NDVI ~0,1–0,25). Por eso la leyenda usa nombres genéricos (Muy bajo … Alto) y no las descripciones de la tabla.
+  - **Calibración provisoria:** 3 escenas Sentinel-2, todas con cultivo, casi sin suelo desnudo (31 píxeles bajo NDVI 0,20): el corte de 0,05 no está bien validado y los cortes valen para Sentinel-2. Validar con más lotes o con un agrónomo.
+  - Se reprocesaron los 5 ExG vigentes del usuario de desarrollo (el resto eran vuelos borrados o con el NDVI en error).
+
+
+#### Nombres de las clases de los índices: Muy bajo / Bajo / Medio / Alto
+**Fecha:** 2026-09-21
+
+A pedido, las clases de valor de un índice se muestran como **Muy bajo, Bajo, Medio y Alto** en lugar de Crítica, Deficiente, Normal y Vigorosa ("Normal" pasó a "Medio" el 2026-09-21) (leyenda y tooltip de `MapaIndice.jsx`, mapa y tabla de zonas de la pantalla de resultados). Los nombres viven en `frontend/src/utils/clasesIndice.js`.
+
+**Decisiones tomadas:**
+- Solo cambia lo visible: los identificadores internos (`critica`, `deficiente`, `normal`, `vigorosa`) se mantienen porque están guardados en los GeoJSON y los consumen el diagnóstico, el reporte y las exportaciones.
+- La **severidad** del diagnóstico (Crítica / Moderada / Leve, en la tabla de diagnóstico, el reporte PDF y la orden de trabajo) no se tocó: habla de la gravedad del problema, no del valor del índice.
+
+#### Mapa chico del inicio: los huecos chicos se absorben en la zona vecina
+**Fecha:** 2026-09-21
+
+Al cambiar los cortes del GNDVI aparecieron "parches sin datos" en el mapa: no eran píxeles sin dato sino zonas menores a 1 ha, que el worker descarta a propósito (`AREA_MINIMA_M2` en `workers/gis/zonas.py`) — con los cortes nuevos hay más fragmentos (42 zonas, 39 descartadas: 5,6 ha ≈ 5 % del lote sin cubrir; antes 0,4 ha).
+
+**Decisión tomada (a pedido):** en el mapa chico del Dashboard esos huecos se rellenan con la zona vecina; en el mapa de resultados no (se va a rediseñar con escala de colores continua). Se hace **al leer**, no al procesar: `GET .../resultado` y `GET .../indices/{indice}/resultado` aceptan `?absorber=true` (`app/ingesta/absorcion.py`, Shapely). Así el diagnóstico, la tabla de zonas y las exportaciones siguen trabajando sobre las zonas originales y no hay que reprocesar nada.
+- Cada hueco va a la zona con la que comparte más borde; su clase y su valor no cambian, sí se recalcula `area_ha`.
+- Solo se absorben huecos de hasta 3 ha (`AREA_MAX_HUECO_M2`): uno grande (nube, borde sin dato, parte del lote que el GeoTIFF no cubre) es información real y queda en blanco.
+- **"Sin datos" es real, no una deducción (a pedido):** el worker lo mide al procesar (`workers/gis/sin_datos.py`) y lo guarda en el resultado como `sin_datos` = píxeles sin dato del índice (NaN) + la parte del lote que el GeoTIFF no cubre, **de cualquier tamaño** (un solo píxel sin dato se registra). El recorte del lote deja NaN fuera del polígono: eso no cuenta, y las astillas dentadas del borde (< ~0,9 píxel) tampoco. La clave `sin_datos` está siempre en análisis nuevos (con valor `null` si no hay nada) para distinguir "no hay" de "análisis viejo que no lo registró". Los mapas (Dashboard y zonas de resultados) lo dibujan **rayado en gris** con entrada "Sin datos" en la leyenda y tooltip. Un análisis sin ninguna zona (p. ej. el GeoTIFF cae fuera del lote) marca todo el lote "Sin datos".
+- **Lo que tiene datos se combina con la vecina, sea del tamaño que sea (a pedido):** `absorber_huecos` rellena todo hueco entre zonas que NO esté en `sin_datos` (zonas < 1 ha descartadas, o fragmentos que no alcanzaron valor definido), sin tope de tamaño. Nunca rellena el `sin_datos`. Solo para análisis viejos, que no registraron `sin_datos` y por tanto no se puede saber qué es qué, se mantiene el tope de 3 ha por prudencia (y no se dibuja rayado: no se afirma lo que no se midió). Reprocesar un análisis viejo lo pasa al modo exacto.
+- **Se reemplazó** la primera versión, que deducía el "sin datos" por el tamaño del hueco (> 3 ha): rotulaba mal en ambos sentidos (fragmentos chicos pegados podían dar un falso positivo y una nube chica quedaba sin marcar).
+- Resultado en Nueva Prueba: GNDVI 41 huecos → 0 (98,6 → 104,6 ha cubiertas de 104,6); NDRE 15 → 1.
+- Tests: `tests/test_absorcion.py` (12, API) y `tests/test_sin_datos.py` (9, worker; corren en el job `test-gis` del CI).
+
+#### GNDVI con cortes propios (todo salía "Normal")
+**Fecha:** 2026-09-21
+
+`GNDVI` reutilizaba los cortes del NDVI (0,20 / 0,40 / 0,70) bajo el supuesto de que "se comporta parecido". Medido sobre 3 escenas Sentinel-2 no es así: al usar la banda verde, que refleja bastante en casi cualquier vegetación, varía la mitad que el NDVI (p5–p95 de 0,13–0,22 contra 0,26–0,37) y un canopeo con NDVI 0,70 tiene GNDVI ≈ 0,63. Resultado: 85–99 % del lote en "Normal" y "Alto" (> 0,70) casi inalcanzable (máximo real ≈ 0,75).
+
+Cortes nuevos: **0,25 / 0,45 / 0,60** (Muy bajo < 0,25, Bajo 0,25–0,45, Medio 0,45–0,60, Alto > 0,60). Salen de los valores de GNDVI donde el NDVI cruza sus cortes (≈ 0,25 / 0,45 / 0,63); el último se fijó en 0,60 a pedido. **Calibración provisoria:** 3 escenas de cultivo sano y el corte de 0,25 se apoya en ~40 píxeles. Se reprocesaron los GNDVI del usuario de desarrollo; los de otras bases hay que reprocesarlos (`POST .../indices {"indice":"gndvi"}`).
+
 #### Buscador en el mapa de dibujo de límites
 **Fecha:** 2026-09-20
 

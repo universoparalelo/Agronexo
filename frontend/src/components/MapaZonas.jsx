@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import { ETIQUETA_CLASE } from '../utils/clasesIndice'
+import PatronSinDatos, { ESTILO_SIN_DATOS, TEXTO_SIN_DATOS } from './PatronSinDatos'
 
 const COLORES_CLASE = {
   critica:    '#ef4444',
@@ -9,12 +11,7 @@ const COLORES_CLASE = {
   vigorosa:   '#16a34a',
 }
 
-const ETIQUETAS_CLASE = {
-  critica:    'Crítica',
-  deficiente: 'Deficiente',
-  normal:     'Normal',
-  vigorosa:   'Vigorosa',
-}
+const ETIQUETAS_CLASE = ETIQUETA_CLASE
 
 const COLORES_SEVERIDAD = {
   critica:  '#ef4444',
@@ -114,7 +111,7 @@ function FitBounds({ geojson }) {
   return null
 }
 
-export default function MapaZonas({ geojson, diagnostico }) {
+export default function MapaZonas({ geojson, diagnostico, sinDatos = null }) {
   const modo = diagnostico ? 'severidad' : 'clase'
   const dataMapa = diagnostico || geojson
   const unidades = diagnostico?.unidades_manejo || []
@@ -129,6 +126,7 @@ export default function MapaZonas({ geojson, diagnostico }) {
 
   return (
     <div className="mapa-zonas-wrapper">
+      <PatronSinDatos />
       <MapContainer
         center={[-27.47, -60.67]}
         zoom={13}
@@ -138,6 +136,14 @@ export default function MapaZonas({ geojson, diagnostico }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
+        {sinDatos && (
+          <GeoJSON
+            key={`sin-datos-${JSON.stringify(sinDatos.coordinates?.[0]?.[0])}`}
+            data={sinDatos}
+            style={ESTILO_SIN_DATOS}
+            onEachFeature={(_, layer) => layer.bindTooltip(TEXTO_SIN_DATOS, { sticky: true })}
+          />
+        )}
         {dataMapa && (
           <>
             <GeoJSON key={featuresKey} data={dataMapa} style={estilo} onEachFeature={onEach} />
@@ -161,6 +167,12 @@ export default function MapaZonas({ geojson, diagnostico }) {
             <span>{label}</span>
           </div>
         ))}
+        {sinDatos && (
+          <div className="leyenda-item">
+            <span className="leyenda-color leyenda-color--sin-datos" />
+            <span>Sin datos</span>
+          </div>
+        )}
         {unidades.length > 0 && (
           <div className="leyenda-item">
             <span

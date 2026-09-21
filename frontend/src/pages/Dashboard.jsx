@@ -201,7 +201,8 @@ function KpiFranja({ items }) {
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
 function AnalisisMap({ loteId, vueloId, indice, limite, onCompletado }) {
-  const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
+  // mapa de vistazo: los huecos chicos se rellenan con la zona vecina
+  const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice, { absorber: true })
 
   // Un lote sin límite lo recibe del worker al procesar el GeoTIFF: al terminar
   // hay que recargar los lotes para que aparezcan el límite y la superficie.

@@ -45,6 +45,40 @@ def test_otsu_retorna_tres_umbrales_ordenados():
     assert -1.0 <= u[0] and u[2] <= 1.0
 
 
+def test_otsu_es_adaptativo_y_no_cae_a_los_umbrales_fijos():
+    # Regresión: threshold_multiotsu se llamaba con `nclasses=` (el parámetro
+    # correcto es `classes=`); el TypeError se tragaba y "otsu" devolvía siempre
+    # [0.20, 0.40, 0.70]. Con un índice de escala chica (como ExG sobre
+    # reflectancias, ~0.02) eso dejaba todo el lote en la clase más baja.
+    rng = np.random.default_rng(0)
+    valores = np.concatenate([
+        rng.normal(centro, 0.002, 400) for centro in (0.005, 0.02, 0.035, 0.05)
+    ]).astype(np.float32)
+    u = calcular_umbrales(valores, "otsu", indice="exg")
+    assert u != [0.20, 0.40, 0.70]
+    assert all(0.0 < x < 0.07 for x in u)
+    clases = clasificar_con_umbrales(valores, u)
+    assert set(np.unique(clases)) == {1, 2, 3, 4}
+
+
+def test_gndvi_tiene_umbrales_propios_distintos_del_ndvi():
+    # Regresión: GNDVI reutilizaba los cortes del NDVI y un lote sano quedaba
+    # casi entero en "Normal" (su rango real es más angosto).
+    assert calcular_umbrales(np.array([0.5, 0.6], dtype=np.float32), "fijo", indice="gndvi") == [0.25, 0.45, 0.60]
+    assert calcular_umbrales(np.array([0.5, 0.6], dtype=np.float32), "fijo", indice="ndvi") == [0.20, 0.40, 0.70]
+    valores = np.array([0.2, 0.3, 0.5, 0.55, 0.62, 0.7], dtype=np.float32)
+    clases = clasificar_con_umbrales(valores, [0.25, 0.45, 0.60])
+    assert clases.tolist() == [1, 2, 3, 3, 4, 4]
+
+
+def test_exg_tiene_umbrales_fijos_propios():
+    # ExG normalizado: cortes 0.05 / 0.15 / 0.30 (no los de NDVI), en 4 clases.
+    assert calcular_umbrales(np.array([0.1, 0.2], dtype=np.float32), "fijo", indice="exg") == [0.05, 0.15, 0.30]
+    valores = np.array([-0.02, 0.03, 0.06, 0.14, 0.16, 0.28, 0.35, 0.5], dtype=np.float32)
+    clases = clasificar_con_umbrales(valores, [0.05, 0.15, 0.30])
+    assert clases.tolist() == [1, 1, 2, 2, 3, 3, 4, 4]
+
+
 def test_percentil_retorna_cuartiles_correctos():
     valores = np.array([0.1, 0.3, 0.5, 0.7] * 50, dtype=np.float32)
     u = calcular_umbrales(valores, "percentil")
@@ -287,3 +321,23 @@ def test_area_minima_filtra_poligonos_pequenos():
 
     assert len(sin_filtro) > 0
     assert len(con_filtro) == 0
+
+
+def test_el_geojson_guarda_los_umbrales_usados():
+    """La leyenda del mapa rotula las clases con estos valores (ver MapaIndice.jsx)."""
+    from workers.gis.pipeline import ejecutar_pipeline
+
+    for metodo in ("fijo", "otsu"):
+        data = _geotiff_cuatro_zonas()
+        with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+            geojson_path = tmp.name
+        ejecutar_pipeline(data=data, sensor="dji_mavic3", indice="ndvi",
+                          geojson_destino=geojson_path, metodo_umbral=metodo)
+        with open(geojson_path) as f:
+            gj = json.load(f)
+        assert gj["metodo_umbral"] == metodo
+        assert "sin_datos" in gj and gj["sin_datos"] is None   # campo entero válido: nada sin datos, pero la clave está
+        assert len(gj["umbrales"]) == 3 and gj["umbrales"] == sorted(gj["umbrales"])
+        assert len(gj["features"]) > 0
+        if metodo == "fijo":
+            assert gj["umbrales"] == [0.2, 0.4, 0.7]
