@@ -200,7 +200,13 @@ function KpiFranja({ items }) {
 /* ──────── Mapa de análisis (panel inferior) ──────── */
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
-function AnalisisMap({ loteId, vueloId, indice, limite, onCompletado }) {
+// Debe coincidir con workers/gis/zonas.py::AREA_MINIMA_M2 — el pipeline
+// descarta cualquier fragmento vectorizado más chico que esto (evita ruido
+// de píxeles sueltos), así que un lote entero por debajo de este umbral
+// nunca puede generar una zona, sin importar cuán distinto sea su índice.
+const AREA_MINIMA_ZONA_HA = 1
+
+function AnalisisMap({ loteId, vueloId, indice, limite, loteAreaHa, onCompletado }) {
   // mapa de vistazo: los huecos chicos se rellenan con la zona vecina
   const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice, { absorber: true })
 
@@ -214,7 +220,39 @@ function AnalisisMap({ loteId, vueloId, indice, limite, onCompletado }) {
   if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
   const estadoActual = estado.estado
-  if (estadoActual === 'completado' && geojson) return <MapaIndice geojson={geojson} indice={indice} limite={limite} />
+  if (estadoActual === 'completado' && geojson) {
+    const nFeatures = geojson.features?.length ?? 0
+    if (nFeatures === 0) {
+      const loteChico = loteAreaHa != null && loteAreaHa < AREA_MINIMA_ZONA_HA
+      return (
+        <div className="estado-msg" style={{ padding: '1rem 1.25rem' }}>
+          <strong>No se generaron zonas para marcar en el mapa.</strong>
+          <p style={{ marginTop: '0.5rem', color: '#6b7280', lineHeight: 1.5 }}>
+            {loteChico ? (
+              <>
+                Tu lote mide <strong>{loteAreaHa.toFixed(2)} ha</strong>, por debajo del área mínima de
+                zonificación (<strong>{AREA_MINIMA_ZONA_HA} ha</strong>). El sistema descarta por diseño
+                cualquier zona más chica que ese umbral, para no marcar ruido de píxeles sueltos — como el
+                lote completo es más chico que el umbral, ninguna zona puede superarlo nunca, sin importar
+                el resultado del índice. <strong>Solución:</strong> usá esto solo para probar la carga, no
+                para ver zonificación real — para eso hace falta un lote de al menos {AREA_MINIMA_ZONA_HA}–2 ha.
+              </>
+            ) : (
+              <>
+                El índice {INDICE_LABEL[indice] ?? indice.toUpperCase()} se mantuvo uniforme y dentro de rango
+                normal en toda la escena — no se encontraron zonas de estrés, suelo desnudo ni vigor excesivo
+                que superen el área mínima de zonificación ({AREA_MINIMA_ZONA_HA} ha). Esto normalmente indica
+                un lote homogéneo y sano para esta fecha, no un error. <strong>Si esperabas ver variación:</strong>{' '}
+                probá otra fecha/escena, o analizá otro índice como NDRE (más sensible a estrés temprano) con
+                el selector de índices de arriba.
+              </>
+            )}
+          </p>
+        </div>
+      )
+    }
+    return <MapaIndice geojson={geojson} indice={indice} limite={limite} />
+  }
   if (estadoActual === 'error' || errorMsg) {
     return (
       <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>
@@ -273,8 +311,8 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', onClickFuera)
   }, [exportMenuAbierto])
 
-  const cargarDatos = useCallback(async () => {
-    setLoading(true)
+  const cargarDatos = useCallback(async ({ silencioso = false } = {}) => {
+    if (!silencioso) setLoading(true)
     try {
       const { data } = await client.get('/lotes')
       const lotes = data.items ?? []
@@ -286,9 +324,9 @@ export default function Dashboard() {
         vuelos: results[i].status === 'fulfilled' ? (results[i].value.data ?? []) : [],
       })))
     } catch {
-      setLoteRows([])
+      if (!silencioso) setLoteRows([])
     } finally {
-      setLoading(false)
+      if (!silencioso) setLoading(false)
     }
   }, [])
 
@@ -387,6 +425,18 @@ export default function Dashboard() {
   const totalPages = Math.max(1, Math.ceil(vueloRows.length / PAGE_SIZE))
   const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
+
+  // La tabla "Análisis Recientes" solo se refrescaba cuando el usuario hacía una
+  // acción (subir vuelo, eliminar, etc.) — sin este polling se quedaba mostrando
+  // "Pendiente"/"Procesando" para siempre aunque el worker ya hubiera terminado,
+  // porque nada más volvía a pedir /lotes. Silencioso para no tapar la tabla con
+  // "Cargando..." cada 3s (mismo patrón de polling que DetalleLote.jsx).
+  useEffect(() => {
+    const hayActivos = vueloRows.some(v => v.estado === 'pendiente' || v.estado === 'procesando')
+    if (!hayActivos) return
+    const id = setInterval(() => cargarDatos({ silencioso: true }), 3000)
+    return () => clearInterval(id)
+  }, [vueloRows, cargarDatos])
 
   const vuelosCompletados = vueloRows.filter(v => v.estado === 'completado').length
   const vuelosEnProceso = vueloRows.filter(v => v.estado === 'pendiente' || v.estado === 'procesando').length
@@ -748,7 +798,17 @@ export default function Dashboard() {
                 )}
                 <div className="card-mapa-body">
                   {selectedVuelo
-                    ? <AnalisisMap key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`} loteId={selectedVuelo.loteId} vueloId={selectedVuelo.vueloId} indice={selectedVuelo.indice} limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry} onCompletado={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry ? undefined : cargarDatos} />
+                    ? (
+                      <AnalisisMap
+                        key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`}
+                        loteId={selectedVuelo.loteId}
+                        vueloId={selectedVuelo.vueloId}
+                        indice={selectedVuelo.indice}
+                        loteAreaHa={selectedVueloRow?.lote?.area_ha ?? null}
+                        limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry}
+                        onCompletado={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry ? undefined : cargarDatos}
+                      />
+                    )
                     : (
                       <div className="mapa-placeholder">
                         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#c2c9b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
