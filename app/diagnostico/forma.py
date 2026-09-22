@@ -30,6 +30,7 @@ from dataclasses import dataclass
 
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform as shapely_transform
+from shapely.validation import make_valid
 
 # Patrón: circular
 CIRCULARIDAD_MIN_CIRCULAR = 0.65   # 4πA/P² — 1.0 = círculo perfecto
@@ -73,8 +74,18 @@ def _proyector_local(lon0: float, lat0: float):
 
 
 def proyectar_a_metros_locales(geom_4326: BaseGeometry, lon0: float, lat0: float) -> BaseGeometry:
-    """Reproyecta una geometría EPSG:4326 a metros locales (ver docstring del módulo)."""
-    return shapely_transform(_proyector_local(lon0, lat0), geom_4326)
+    """Reproyecta una geometría EPSG:4326 a metros locales (ver docstring del módulo).
+
+    La simplificación Douglas-Peucker del worker puede dejar polígonos con
+    bordes que se autointersectan; GEOS rechaza esas geometrías con
+    TopologyException al hacer buffer()/intersects() más adelante (en
+    service.py y zonificacion.py), así que se normaliza la validez acá,
+    en el único punto por el que pasan todas las geometrías del diagnóstico.
+    """
+    geom_local = shapely_transform(_proyector_local(lon0, lat0), geom_4326)
+    if not geom_local.is_valid:
+        geom_local = make_valid(geom_local)
+    return geom_local
 
 
 def _circularidad(area_m2: float, perimetro_m: float) -> float:

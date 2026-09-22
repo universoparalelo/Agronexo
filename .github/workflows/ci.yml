@@ -140,6 +140,12 @@ jobs:
       - name: Tests clasificación dinámica y vectorización
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_clasificacion.py -v
 
+      - name: Tests cobertura del GeoTIFF (límite de un lote sin límite)
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_cobertura_geotiff.py -v
+
+      - name: Tests "sin datos" real (píxeles sin dato registrados por el worker)
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_sin_datos.py -v
+
       - name: Tests configuración Celery
         run: |
           PYTHONPATH=$(pwd) python3 -c "

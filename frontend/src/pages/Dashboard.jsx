@@ -8,6 +8,7 @@ import { descargarReportePdf, exportarZonas } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
@@ -15,6 +16,7 @@ import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
 import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import SidebarNav from '../components/SidebarNav'
+import TopbarPanel from '../components/TopbarPanel'
 
 /* ──────── Icons ──────── */
 const IconLotes = () => (
@@ -38,18 +40,6 @@ const IconConfig = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3"/>
     <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-  </svg>
-)
-const IconBell = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-    <path d="M13.73 21a2 2 0 01-3.46 0"/>
-  </svg>
-)
-const IconCalendar = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
   </svg>
 )
 const IconArrow = () => (
@@ -104,7 +94,6 @@ const IconContraer = () => (
 )
 
 /* ──────── Helpers ──────── */
-const CULTIVO_LABEL = { soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo' }
 
 const ESTADO_BADGE = {
   completado: { label: 'Completado', cls: 'badge-optimo' },
@@ -118,10 +107,12 @@ function fmtFecha(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function fmtFechaHoy() {
-  return new Date().toLocaleDateString('es-AR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+function saludoSegunHora() {
+  const h = new Date().getHours()
+  if (h < 6) return 'Buenas noches'
+  if (h < 13) return 'Buen día'
+  if (h < 20) return 'Buenas tardes'
+  return 'Buenas noches'
 }
 
 function fmtTiempoRelativo(fecha) {
@@ -189,6 +180,23 @@ function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
   )
 }
 
+function KpiFranja({ items }) {
+  return (
+    <div className="kpi-franja">
+      {items.map(it => (
+        <div key={it.etiqueta} className="kpi-franja-item">
+          <span className="kpi-franja-etiqueta">{it.etiqueta}</span>
+          <div className="kpi-franja-valor">
+            {it.valor}
+            {it.unidad && <span className="kpi-franja-unidad">{it.unidad}</span>}
+          </div>
+          <span className={`kpi-franja-nota kpi-franja-nota--${it.tono}`}>{it.nota}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ──────── Mapa de análisis (panel inferior) ──────── */
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
@@ -198,8 +206,16 @@ const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI',
 // nunca puede generar una zona, sin importar cuán distinto sea su índice.
 const AREA_MINIMA_ZONA_HA = 1
 
-function AnalisisMap({ loteId, vueloId, indice, loteAreaHa }) {
-  const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice)
+function AnalisisMap({ loteId, vueloId, indice, limite, loteAreaHa, onCompletado }) {
+  // mapa de vistazo: los huecos chicos se rellenan con la zona vecina
+  const { estado, geojson, errorMsg } = useVueloProgreso(loteId, vueloId, indice, { absorber: true })
+
+  // Un lote sin límite lo recibe del worker al procesar el GeoTIFF: al terminar
+  // hay que recargar los lotes para que aparezcan el límite y la superficie.
+  const completado = estado?.estado === 'completado'
+  useEffect(() => {
+    if (completado) onCompletado?.()
+  }, [completado]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
 
@@ -235,7 +251,7 @@ function AnalisisMap({ loteId, vueloId, indice, loteAreaHa }) {
         </div>
       )
     }
-    return <MapaIndice geojson={geojson} indice={indice} />
+    return <MapaIndice geojson={geojson} indice={indice} limite={limite} />
   }
   if (estadoActual === 'error' || errorMsg) {
     return (
@@ -253,7 +269,7 @@ function AnalisisMap({ loteId, vueloId, indice, loteAreaHa }) {
 
 /* ──────── Dashboard ──────── */
 export default function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   const [loteRows, setLoteRows] = useState([])
@@ -422,13 +438,19 @@ export default function Dashboard() {
     return () => clearInterval(id)
   }, [vueloRows, cargarDatos])
 
+  const vuelosCompletados = vueloRows.filter(v => v.estado === 'completado').length
+  const vuelosEnProceso = vueloRows.filter(v => v.estado === 'pendiente' || v.estado === 'procesando').length
+  const areaTotalHa = loteRows.reduce((suma, l) => suma + (l.area_ha || 0), 0)
+  const lotesConLimite = loteRows.filter(l => l.area_ha > 0).length
+
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard--resumen">
       {showModal && (
         <ModalCargaGeoTIFF
           lotes={loteRows}
           loteIdInicial={selectedVuelo?.loteId ?? null}
           onSuccess={handleCargaExitosa}
+          onLoteCreado={cargarDatos}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -470,40 +492,31 @@ export default function Dashboard() {
 
       <div className="dashboard-body">
         {/* Topbar */}
-        <header className="topbar">
-          <nav className="topbar-breadcrumb">
-            <span>Dashboard</span>
-            <span className="breadcrumb-sep">›</span>
-            <span className="breadcrumb-active">Resumen</span>
-          </nav>
-          <div className="topbar-actions">
-            <button className="topbar-icon-btn" title="Notificaciones">
-              <IconBell />
-            </button>
-            <div className="topbar-date">
-              <IconCalendar />
-              <span>{fmtFechaHoy()}</span>
-            </div>
-            <button className="btn-salir" onClick={() => { logout(); navigate('/login') }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              Salir
-            </button>
-          </div>
-        </header>
+        <TopbarPanel migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Resumen' }]} />
 
         <main className="dashboard-main">
-          {/* Welcome */}
-          <div className="welcome-section">
-            <h1 className="welcome-title">
-              Bienvenido, {user?.nombre?.split(' ')[0] ?? 'Usuario'} 👋
+          {/* Portada */}
+          <section className="hero-panel">
+            <h1 className="hero-panel-titulo">
+              {saludoSegunHora()}, {user?.nombre?.split(' ')[0] ?? 'Usuario'}
             </h1>
-            <p className="welcome-sub">
-              Resumen del estado de tus cultivos y análisis recientes en la región de Chaco.
-            </p>
-          </div>
+            <div className="hero-panel-acciones">
+              <button type="button" className="hero-btn hero-btn--principal" onClick={() => setShowModal(true)}>
+                Cargar nuevo análisis <IconArrow />
+              </button>
+              <button type="button" className="hero-btn" onClick={() => setShowModalNuevoLote(true)}>
+                Nuevo lote
+              </button>
+              <button
+                type="button"
+                className="hero-btn"
+                disabled={!vueloRows.some(v => v.estado === 'completado')}
+                onClick={handleVerDiagnosticos}
+              >
+                Ver diagnósticos
+              </button>
+            </div>
+          </section>
 
           {/* KPI cards */}
           <div className="kpi-row">
@@ -517,26 +530,27 @@ export default function Dashboard() {
             <KpiCard
               label="ANÁLISIS REALIZADOS"
               value={vueloRows.length || '—'}
-              delta={vueloRows.filter(v => v.estado === 'completado').length > 0 ? `${vueloRows.filter(v => v.estado === 'completado').length} completados` : null}
+              delta={vuelosCompletados > 0 ? `${vuelosCompletados} completados` : null}
               deltaType="up"
               icon={<IconDiagnostico />}
             />
             <KpiCard
               label="ANÁLISIS COMPLETADOS"
-              value={vueloRows.filter(v => v.estado === 'completado').length || '—'}
-              delta={vueloRows.some(v => v.estado === 'completado') ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
-              deltaType={vueloRows.some(v => v.estado === 'completado') ? 'up' : 'neutral'}
+              value={vuelosCompletados || '—'}
+              delta={vuelosCompletados > 0 ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
+              deltaType={vuelosCompletados > 0 ? 'up' : 'neutral'}
               icon={<IconInformes />}
             />
             <KpiCard
               label="ÁREA MONITOREADA"
-              value={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? `${Math.round(loteRows.reduce((s, l) => s + (l.area_ha || 0), 0))}` : '—'}
-              delta={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'hectáreas totales' : 'Registrá un lote para comenzar'}
-              deltaType={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0 ? 'up' : 'neutral'}
+              value={areaTotalHa > 0 ? `${Math.round(areaTotalHa).toLocaleString('es-AR')}` : '—'}
+              delta={areaTotalHa > 0 ? 'hectáreas totales' : 'Registrá un lote para comenzar'}
+              deltaType={areaTotalHa > 0 ? 'up' : 'neutral'}
               icon={<IconConfig />}
-              highlight={loteRows.reduce((s, l) => s + (l.area_ha || 0), 0) > 0}
+              highlight={areaTotalHa > 0}
             />
           </div>
+
 
           {/* Grid principal */}
           <div className="dashboard-grid">
@@ -549,7 +563,7 @@ export default function Dashboard() {
                     <h2 className="card-title">Análisis Recientes</h2>
                     <p className="card-sub">Últimos vuelos procesados y estado de vigor</p>
                   </div>
-                  <button className="card-link">Ver todos <IconArrow /></button>
+                  <button className="card-link" onClick={() => navigate('/lotes')}>Ver todos <IconArrow /></button>
                 </div>
                 {tablaError && (
                   <div className="error-message" style={{ margin: '0 1.1rem 0.75rem' }}>{tablaError}</div>
@@ -565,7 +579,7 @@ export default function Dashboard() {
                   ) : vueloRows.length === 0 ? (
                     <div className="empty-state">
                       <p>No hay vuelos cargados todavía.</p>
-                      <p className="empty-hint">Usá "Cargar Ortomosaico" para subir el primer vuelo de un lote.</p>
+                      <p className="empty-hint">Usá "Cargar Nuevo Análisis" para subir el primer vuelo de un lote.</p>
                     </div>
                   ) : (
                     <>
@@ -588,7 +602,7 @@ export default function Dashboard() {
                                 <td>
                                   <div className="td-lote-nombre">{v.lote.nombre}</div>
                                   <div className="td-lote-info">
-                                    {CULTIVO_LABEL[v.lote.cultivo] ?? v.lote.cultivo}
+                                    {etiquetaTipoCultivo(v.cultivo?.tipo_cultivo ?? cultivoMasReciente(v.lote)?.tipo_cultivo) || 'Sin cultivo'}
                                     {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>
@@ -740,7 +754,7 @@ export default function Dashboard() {
               <div className={`card card--mapa${mapaExpandido ? ' card--mapa-expandido' : ''}`}>
                 <div className="card-header">
                   <div>
-                    <h2 className="card-title">📍 Vista geoespacial</h2>
+                    <h2 className="card-title">Vista geoespacial</h2>
                     <p className="card-sub">
                       {selectedVuelo
                         ? (selectedVueloRow
@@ -791,6 +805,8 @@ export default function Dashboard() {
                         vueloId={selectedVuelo.vueloId}
                         indice={selectedVuelo.indice}
                         loteAreaHa={selectedVueloRow?.lote?.area_ha ?? null}
+                        limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry}
+                        onCompletado={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry ? undefined : cargarDatos}
                       />
                     )
                     : (
@@ -810,41 +826,6 @@ export default function Dashboard() {
 
             {/* Columna derecha */}
             <div className="dashboard-col-side">
-              {/* Acciones Rápidas */}
-              <div className="card">
-                <div className="card-header">
-                  <h2 className="card-title">Acciones Rápidas</h2>
-                </div>
-                <div className="card-body acciones-list">
-                  <button className="accion-item accion-item--primary" onClick={() => setShowModalNuevoLote(true)}>
-                    <div className="accion-text">
-                      <span className="accion-label">Nuevo Lote</span>
-                      <span className="accion-sub">Registrá una nueva parcela</span>
-                    </div>
-                  </button>
-                  <button className="accion-item" onClick={() => setShowModal(true)}>
-                    <div className="accion-text">
-                      <span className="accion-label">Cargar Ortomosaico</span>
-                      <span className="accion-sub">Subí imágenes multiespectral</span>
-                    </div>
-                  </button>
-                  <button
-                    className="accion-item"
-                    disabled={!vueloRows.some(v => v.estado === 'completado')}
-                    onClick={handleVerDiagnosticos}
-                  >
-                    <div className="accion-text">
-                      <span className="accion-label">Ver Diagnósticos</span>
-                      <span className="accion-sub">
-                        {vueloRows.some(v => v.estado === 'completado')
-                          ? 'Elegí de qué lote ver los análisis'
-                          : 'Cargá un ortomosaico primero'}
-                      </span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
               {/* Actividad reciente */}
               <div className="card">
                 <div className="card-header">

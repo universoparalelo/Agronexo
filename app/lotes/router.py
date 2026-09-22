@@ -7,7 +7,15 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.lotes import service
-from app.lotes.schemas import LoteCreate, LoteListResponse, LoteResponse, LoteUpdate
+from app.lotes.schemas import (
+    CultivoCreate,
+    CultivoResponse,
+    CultivoUpdate,
+    LoteCreate,
+    LoteListResponse,
+    LoteResponse,
+    LoteUpdate,
+)
 
 router = APIRouter()
 
@@ -75,3 +83,58 @@ async def historial_lote(
 ):
     await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
     return {"lote_id": str(lote_id), "intervenciones": []}
+
+
+# ── Cultivos del lote ───────────────────────────────────────────────
+
+async def _get_cultivo_o_404(lote_id: uuid.UUID, cultivo_id: uuid.UUID, db: AsyncSession):
+    cultivo = await service.obtener_cultivo(db, lote_id, cultivo_id)
+    if not cultivo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cultivo no encontrado")
+    return cultivo
+
+
+@router.get("/{lote_id}/cultivos", response_model=list[CultivoResponse])
+async def listar_cultivos(
+    lote_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    return await service.listar_cultivos(db, lote_id)
+
+
+@router.post("/{lote_id}/cultivos", response_model=CultivoResponse, status_code=status.HTTP_201_CREATED)
+async def crear_cultivo(
+    lote_id: uuid.UUID,
+    data: CultivoCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    return await service.crear_cultivo(db, lote_id, data)
+
+
+@router.put("/{lote_id}/cultivos/{cultivo_id}", response_model=CultivoResponse)
+async def actualizar_cultivo(
+    lote_id: uuid.UUID,
+    cultivo_id: uuid.UUID,
+    data: CultivoUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    cultivo = await _get_cultivo_o_404(lote_id, cultivo_id, db)
+    return await service.actualizar_cultivo(db, cultivo, data)
+
+
+@router.delete("/{lote_id}/cultivos/{cultivo_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def eliminar_cultivo(
+    lote_id: uuid.UUID,
+    cultivo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    await _get_lote_o_404(lote_id, db, uuid.UUID(current_user.id))
+    cultivo = await _get_cultivo_o_404(lote_id, cultivo_id, db)
+    await service.eliminar_cultivo(db, cultivo)

@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import Landing from './pages/Landing'
+import LandingOriginal from './pages/LandingOriginal'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Lotes from './pages/Lotes'
@@ -11,7 +11,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={<LandingOriginal />} />
         <Route path="/login" element={<Login />} />
         <Route
           path="/dashboard"

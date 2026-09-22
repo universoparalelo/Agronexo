@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import client from '../api/client'
 
-export function useVueloProgreso(loteId, vueloId, indice = 'ndvi') {
+// absorber: pide la versión resumida del resultado (lo que tiene datos pero no quedó con zona se
+// combina con la zona vecina), para mapas de vistazo. El `sin_datos` real viene siempre en el resultado.
+export function useVueloProgreso(loteId, vueloId, indice = 'ndvi', { absorber = false } = {}) {
   const [estado, setEstado] = useState(null)
   const [geojson, setGeojson] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
@@ -18,7 +20,8 @@ export function useVueloProgreso(loteId, vueloId, indice = 'ndvi') {
     // el resto de los índices (NDRE/SAVI/ExG) en el sub-recurso /indices/{indice}.
     const base = `/lotes/${loteId}/vuelos/${vueloId}`
     const urlEstado = !indice || indice === 'ndvi' ? `${base}/estado` : `${base}/indices/${indice}/estado`
-    const urlResultado = !indice || indice === 'ndvi' ? `${base}/resultado` : `${base}/indices/${indice}/resultado`
+    const urlResultado = (!indice || indice === 'ndvi' ? `${base}/resultado` : `${base}/indices/${indice}/resultado`)
+      + (absorber ? '?absorber=true' : '')
 
     let cancelled = false
 
@@ -52,7 +55,7 @@ export function useVueloProgreso(loteId, vueloId, indice = 'ndvi') {
       cancelled = true
       clearInterval(intervalRef.current)
     }
-  }, [loteId, vueloId, indice])
+  }, [loteId, vueloId, indice, absorber])
 
   return { estado, geojson, errorMsg }
 }

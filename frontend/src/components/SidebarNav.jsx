@@ -70,11 +70,8 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
   return (
     <aside className="sidebar-nav">
       <div className="sidebar-logo-wrap">
-        <img src="/logo_hoja.png" alt="AgroNexo" className="sidebar-logo-mark" />
-        <div>
-          <span className="sidebar-logo-text">AgroNexo</span>
-          <span className="sidebar-beta">BETA</span>
-        </div>
+        <img src="/logo.png" alt="AgroNexo" className="sidebar-logo-img" />
+        <span className="sidebar-beta">BETA</span>
       </div>
 
       <nav className="sidebar-menu">

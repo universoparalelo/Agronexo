@@ -2,12 +2,15 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from geoalchemy2.shape import to_shape
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.ingesta import service
+from app.ingesta.absorcion import absorber_huecos
 from app.ingesta.schemas import (
     EscenasSatelitalesResponse,
     EstadoVueloResponse,
@@ -27,9 +30,21 @@ from app.ingesta.schemas import (
 from app.ingesta.tiff_inspector import contar_bandas_geotiff
 from app.ingesta.validator import validar_archivo_geotiff
 from app.lotes.models import CultivoEnum, EstadoVueloEnum, IndiceEnum, SensorEnum
-from app.lotes.service import obtener_lote
+from app.lotes.schemas import CultivoCreate
+from app.lotes.service import obtener_lote, resolver_cultivo_para_analisis
 
 router = APIRouter()
+
+
+def _limite_del_lote(lote):
+    return to_shape(lote.geometry) if lote.geometry is not None else None
+
+
+async def _presentar_resultado(geojson: dict, lote, absorber: bool) -> dict:
+    """Variante de lectura del resultado; lo guardado nunca se modifica."""
+    if absorber:
+        return await run_in_threadpool(absorber_huecos, geojson, _limite_del_lote(lote))
+    return geojson
 
 
 @router.post(
@@ -122,17 +137,32 @@ async def subir_vuelo(
         default=None,
         description="Fecha y hora del vuelo (ISO 8601). Por defecto: ahora.",
     ),
-    estadio_fenologico: str | None = Form(
-        default=None,
+    estadio_fenologico: str = Form(
+        ...,
         max_length=30,
-        description="Estadio fenológico del cultivo en este vuelo puntual. Si no se manda, el diagnóstico usa el del lote.",
+        description="Estadio fenológico del cultivo en este vuelo puntual (obligatorio).",
     ),
+    cultivo_id: uuid.UUID | None = Form(
+        default=None,
+        description="Cultivo ya cargado en el lote sobre el que se hace el análisis. Alternativa: cultivo_tipo para crear uno nuevo.",
+    ),
+    cultivo_tipo: CultivoEnum | None = Form(default=None, description="Tipo de un cultivo nuevo a crear en el lote."),
+    cultivo_variedad: str | None = Form(default=None, max_length=100),
+    cultivo_fecha_siembra: datetime | None = Form(default=None),
+    cultivo_fecha_cosecha: datetime | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
     lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
     if not lote:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    estadio_fenologico = estadio_fenologico.strip()
+    if not estadio_fenologico:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El estadio fenológico es obligatorio.",
+        )
 
     primeros_bytes = await archivo.read(4)
     validar_archivo_geotiff(archivo, primeros_bytes)
@@ -143,6 +173,22 @@ async def subir_vuelo(
     if fecha_vuelo is None:
         fecha_vuelo = datetime.now(timezone.utc)
 
+    cultivo_nuevo = None
+    if cultivo_tipo is not None:
+        try:
+            cultivo_nuevo = CultivoCreate(
+                tipo_cultivo=cultivo_tipo,
+                variedad=cultivo_variedad,
+                fecha_siembra=cultivo_fecha_siembra,
+                fecha_cosecha=cultivo_fecha_cosecha,
+            )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="fecha_cosecha no puede ser anterior a fecha_siembra.",
+            )
+    cultivo = await resolver_cultivo_para_analisis(db, lote_id, cultivo_id, cultivo_nuevo)
+
     vuelo = await service.crear_vuelo_desde_upload(
         db=db,
         lote_id=lote_id,
@@ -152,6 +198,7 @@ async def subir_vuelo(
         file_stream=archivo.file,
         file_size=file_size,
         estadio_fenologico=estadio_fenologico,
+        cultivo_id=cultivo.id,
     )
     await db.commit()
 
@@ -163,6 +210,8 @@ async def subir_vuelo(
         task_id=vuelo.task_id,
         created_at=vuelo.created_at,
         estadio_fenologico=vuelo.estadio_fenologico,
+        cultivo_id=cultivo.id,
+        cultivo=cultivo,
     )
 
 
@@ -218,6 +267,8 @@ async def crear_vuelo_desde_satelite(
             detail="El lote no tiene límite (geometry) cargado. Dibujá o subí el límite del lote antes de cargar una imagen satelital.",
         )
 
+    cultivo = await resolver_cultivo_para_analisis(db, lote_id, data.cultivo_id, data.cultivo)
+
     vuelo = await service.crear_vuelo_desde_satelite(
         db=db,
         lote_id=lote_id,
@@ -225,6 +276,8 @@ async def crear_vuelo_desde_satelite(
         escena_id=data.escena_id,
         fecha_vuelo=data.fecha_vuelo,
         estadio_fenologico=data.estadio_fenologico,
+        indices=data.indices,
+        cultivo_id=cultivo.id,
     )
     await db.commit()
 
@@ -236,6 +289,8 @@ async def crear_vuelo_desde_satelite(
         task_id=vuelo.task_id,
         created_at=vuelo.created_at,
         estadio_fenologico=vuelo.estadio_fenologico,
+        cultivo_id=cultivo.id,
+        cultivo=cultivo,
         mensaje="Imagen satelital solicitada. Descarga y procesamiento iniciados.",
     )
 
@@ -266,6 +321,8 @@ async def listar_vuelos_lote(
             task_id=v.task_id,
             created_at=v.created_at,
             estadio_fenologico=v.estadio_fenologico,
+            cultivo_id=v.cultivo_id,
+            cultivo=v.cultivo,
             indices=await service.listar_analisis_indices(db, v),
         )
         for v in vuelos
@@ -279,6 +336,7 @@ async def listar_vuelos_lote(
 async def resultado_vuelo(
     lote_id: uuid.UUID,
     vuelo_id: uuid.UUID,
+    absorber: bool = Query(False, description="Combina con la zona vecina lo que tiene datos pero no quedó con zona (vista resumida, no cambia lo guardado). El `sin_datos` real no se toca."),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -291,7 +349,7 @@ async def resultado_vuelo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resultado no disponible. El vuelo debe estar en estado 'completado'.",
         )
-    return geojson
+    return await _presentar_resultado(geojson, lote, absorber)
 
 
 @router.get(
@@ -522,6 +580,7 @@ async def resultado_indice_vuelo(
     lote_id: uuid.UUID,
     vuelo_id: uuid.UUID,
     indice: IndiceEnum,
+    absorber: bool = Query(False, description="Combina con la zona vecina lo que tiene datos pero no quedó con zona (vista resumida, no cambia lo guardado). El `sin_datos` real no se toca."),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
@@ -535,4 +594,4 @@ async def resultado_indice_vuelo(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Resultado no disponible. El análisis debe estar en estado 'completado'.",
         )
-    return geojson
+    return await _presentar_resultado(geojson, lote, absorber)

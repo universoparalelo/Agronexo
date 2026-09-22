@@ -1,5 +1,7 @@
 import { Component, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { ETIQUETA_CLASE, etiquetaClase } from '../utils/clasesIndice'
+import PatronSinDatos, { ESTILO_SIN_DATOS, TEXTO_SIN_DATOS } from './PatronSinDatos'
 
 // El contenedor del mapa cambia de tamaño (botón "Expandir"/"Contraer") sin que
 // MapContainer se desmonte — Leaflet cachea el tamaño inicial y no lo actualiza
@@ -18,38 +20,42 @@ function InvalidarAlRedimensionar() {
 const COLORES_CLASE = {
   critica:    '#c0392b',
   deficiente: '#e67e22',
-  normal:     '#f1c40f',
-  vigorosa:   '#27ae60',
+  normal:     '#8fd16f',
+  vigorosa:   '#1e8449',
 }
 
 // Umbrales "fijo" por índice — deben coincidir con
 // workers/gis/clasificacion.py::_UMBRALES_POR_INDICE. Cada índice tiene su
 // propio rango agronómico típico (NDRE ronda 0.1-0.4 para el mismo canopeo
 // donde NDVI ronda 0.4-0.8), por eso no se reutilizan los umbrales de NDVI
-// para los demás. ExG no tiene umbral fijo — siempre se clasifica con
-// método adaptativo (otsu), así que su leyenda no muestra rangos numéricos.
-const ETIQUETAS_CLASE_POR_INDICE = {
-  ndvi: {
-    critica: 'Crítica (< 0.20)', deficiente: 'Deficiente (0.20–0.40)',
-    normal: 'Normal (0.40–0.70)', vigorosa: 'Vigorosa (> 0.70)',
-  },
-  gndvi: {
-    critica: 'Crítica (< 0.20)', deficiente: 'Deficiente (0.20–0.40)',
-    normal: 'Normal (0.40–0.70)', vigorosa: 'Vigorosa (> 0.70)',
-  },
-  ndre: {
-    critica: 'Crítica (< 0.10)', deficiente: 'Deficiente (0.10–0.20)',
-    normal: 'Normal (0.20–0.35)', vigorosa: 'Vigorosa (> 0.35)',
-  },
-  savi: {
-    critica: 'Crítica (< 0.15)', deficiente: 'Deficiente (0.15–0.30)',
-    normal: 'Normal (0.30–0.50)', vigorosa: 'Vigorosa (> 0.50)',
-  },
-  exg: {
-    critica: 'Crítica', deficiente: 'Deficiente',
-    normal: 'Normal', vigorosa: 'Vigorosa (umbral adaptativo por vuelo)',
-  },
+// para los demás.
+const UMBRALES_FIJOS = {
+  ndvi:  [0.20, 0.40, 0.70],
+  gndvi: [0.25, 0.45, 0.60],
+  ndre:  [0.10, 0.20, 0.35],
+  savi:  [0.15, 0.30, 0.50],
+  exg:   [0.05, 0.15, 0.30],
 }
+
+// Rótulos con el nombre de la clase y su rango. Sin rangos (ExG en análisis
+// viejos, sin `umbrales` guardados) solo se muestran los nombres.
+function etiquetasConRangos(umbrales) {
+  const L = ETIQUETA_CLASE
+  if (!Array.isArray(umbrales) || umbrales.length !== 3) {
+    return { critica: L.critica, deficiente: L.deficiente, normal: L.normal, vigorosa: `${L.vigorosa} (umbral adaptativo por vuelo)` }
+  }
+  // con cortes chicos (< 0,1) dos decimales no distinguen las clases
+  const decimales = Math.max(...umbrales.map(Math.abs)) < 0.1 ? 3 : 2
+  const [u1, u2, u3] = umbrales.map((u) => u.toFixed(decimales))
+  return {
+    critica: `${L.critica} (< ${u1})`,
+    deficiente: `${L.deficiente} (${u1}–${u2})`,
+    normal: `${L.normal} (${u2}–${u3})`,
+    vigorosa: `${L.vigorosa} (> ${u3})`,
+  }
+}
+
+const ESTILO_LIMITE = { fill: false, color: '#7dd3fc', weight: 2, dashArray: '4 6' }
 
 function styleFeature(feature) {
   const clase = feature?.properties?.clase
@@ -70,7 +76,7 @@ function crearOnEachFeature(indiceLabel) {
       ? p.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })
       : '–'
     layer.bindTooltip(
-      `<strong style="text-transform:capitalize">${p.clase ?? 'zona'}</strong>` +
+      `<strong>${etiquetaClase(p.clase ?? 'zona')}</strong>` +
       `<br/>${indiceLabel} prom.: ${valor}` +
       `<br/>Área: ${area} ha`,
       { sticky: true, className: 'mapa-tooltip' }
@@ -107,20 +113,25 @@ class MapaBoundary extends Component {
 
 const INDICE_LABEL = { ndvi: 'NDVI', ndre: 'NDRE', savi: 'SAVI', gndvi: 'GNDVI', exg: 'ExG' }
 
-export default function MapaIndice({ geojson, indice = 'ndvi' }) {
+export default function MapaIndice({ geojson, indice = 'ndvi', limite = null }) {
   const nFeatures = geojson?.features?.length ?? 0
   const indiceLabel = INDICE_LABEL[indice] ?? indice.toUpperCase()
-  const etiquetasClase = ETIQUETAS_CLASE_POR_INDICE[indice] ?? ETIQUETAS_CLASE_POR_INDICE.ndvi
+  // los cortes realmente usados vienen en el GeoJSON (con umbral adaptativo cambian por vuelo)
+  const etiquetasClase = etiquetasConRangos(geojson?.umbrales ?? UMBRALES_FIJOS[indice])
   const onEachFeature = useMemo(() => crearOnEachFeature(indiceLabel), [indiceLabel])
 
   const bounds = useMemo(() => {
-    if (!nFeatures) return null
+    // Sin ninguna zona (todo "sin datos") se encuadra el lote, no un mapa vacío.
+    const geometrias = nFeatures
+      ? geojson.features.map((f) => f.geometry)
+      : [limite, geojson?.sin_datos].filter(Boolean)
+    if (!geometrias.length) return null
     // Iterar con loop en lugar de spread+Math.min/max — el spread falla con stack
     // overflow cuando hay miles de polígonos con decenas de coordenadas cada uno.
     let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
-    for (const f of geojson.features) {
-      const type = f.geometry?.type
-      const raw = f.geometry?.coordinates
+    for (const geometry of geometrias) {
+      const type = geometry?.type
+      const raw = geometry?.coordinates
       if (!raw) continue
       const rings = type === 'Polygon' ? raw : type === 'MultiPolygon' ? raw.flat(1) : []
       for (const ring of rings) {
@@ -134,7 +145,7 @@ export default function MapaIndice({ geojson, indice = 'ndvi' }) {
     }
     if (minLat === Infinity) return null
     return [[minLat, minLng], [maxLat, maxLng]]
-  }, [geojson, nFeatures])
+  }, [geojson, nFeatures, limite])
 
   if (!geojson) return null
 
@@ -155,6 +166,7 @@ export default function MapaIndice({ geojson, indice = 'ndvi' }) {
   return (
     <MapaBoundary>
       <div className="mapa-indice-wrap">
+        <PatronSinDatos />
         <MapContainer
           bounds={bounds ?? [[-34, -64], [-22, -53]]}
           boundsOptions={{ padding: [20, 20] }}
@@ -165,12 +177,28 @@ export default function MapaIndice({ geojson, indice = 'ndvi' }) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
+          {geojson.sin_datos && (
+            <GeoJSON
+              key={`sin-datos-${JSON.stringify(geojson.sin_datos.coordinates?.[0]?.[0])}`}
+              data={geojson.sin_datos}
+              style={ESTILO_SIN_DATOS}
+              onEachFeature={(_, layer) => layer.bindTooltip(TEXTO_SIN_DATOS, { sticky: true, className: 'mapa-tooltip' })}
+            />
+          )}
           <GeoJSON
             key={nFeatures}
             data={geojson}
             style={styleFeature}
             onEachFeature={onEachFeature}
           />
+          {limite && (
+            <GeoJSON
+              key={`limite-${JSON.stringify(limite.coordinates?.[0]?.[0])}`}
+              data={limite}
+              style={ESTILO_LIMITE}
+              interactive={false}
+            />
+          )}
           <InvalidarAlRedimensionar />
         </MapContainer>
 
@@ -182,6 +210,12 @@ export default function MapaIndice({ geojson, indice = 'ndvi' }) {
               <span className="leyenda-label">{etiquetasClase[clase]}</span>
             </div>
           ))}
+          {geojson.sin_datos && (
+            <div className="leyenda-item">
+              <span className="leyenda-color leyenda-color--sin-datos" />
+              <span className="leyenda-label">Sin datos</span>
+            </div>
+          )}
         </div>
       </div>
     </MapaBoundary>

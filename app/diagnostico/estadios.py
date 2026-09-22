@@ -49,6 +49,32 @@ ESTADIOS_VALIDOS_POR_CULTIVO: dict[CultivoEnum, set[str]] = {
 }
 
 
+# Lista que ve el usuario al cargar un análisis, en orden fenológico. El texto
+# elegido se guarda tal cual en vuelos.estadio_fenologico y el motor lo lleva
+# a token con normalizar_estadio() — por eso cada etiqueta tiene que
+# normalizar a los tokens de ESTADIOS_VALIDOS_POR_CULTIVO (lo verifica
+# tests/test_estadios.py). Puede tener estadios que ninguna regla usa: solo
+# dejan de aplicar las reglas que exigen un estadio puntual.
+ESTADIOS_POR_CULTIVO: dict[CultivoEnum, list[str]] = {
+    CultivoEnum.soja: (
+        ["VE", "VC"] + [f"V{n}" for n in range(1, 11)] + [f"R{n}" for n in range(1, 9)]
+    ),
+    CultivoEnum.maiz: (
+        ["VE"] + [f"V{n}" for n in range(1, 19)] + ["VT"] + [f"R{n}" for n in range(1, 7)]
+    ),
+    CultivoEnum.algodon: (
+        ["VE"] + [f"V{n}" for n in range(1, 9)]
+        + ["Botón floral", "Floración"]
+        + [f"R{n}" for n in range(1, 6)]
+        + ["Apertura de cápsulas"]
+    ),
+    CultivoEnum.sorgo: (
+        ["VE"] + [f"V{n}" for n in range(1, 13)]
+        + ["VT", "Espigado", "Floración", "Llenado de grano"]
+    ),
+}
+
+
 def estadio_coincide(estadio_normalizado: str | None, estadios_regla: frozenset[str] | None) -> bool:
     """
     estadios_regla=None significa "todos los estadios" (la regla no filtra

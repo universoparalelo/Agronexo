@@ -81,8 +81,17 @@ class ZonaDiagnosticoProperties(BaseModel):
     productos_sugeridos: list[ProductoSugerido]
 
 
+class EstadiosFenologicosResponse(BaseModel):
+    """Estadios elegibles por tipo de cultivo (clave = valor de CultivoEnum)."""
+    estadios: dict[str, list[str]]
+
+
 class DiagnosticoMetadata(BaseModel):
     cultivo: str
+    cultivo_id: str | None = None
+    variedad: str | None = None
+    fecha_siembra: str | None = None
+    fecha_cosecha: str | None = None
     estadio_fenologico: str | None
     ndvi_promedio_lote: float
     indices_disponibles: list[str]

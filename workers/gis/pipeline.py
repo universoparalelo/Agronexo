@@ -6,6 +6,7 @@ La lógica de vectorización y exportación reutiliza workers/gis/zonas.py.
 """
 
 import io
+import json
 import logging
 import time
 
@@ -47,7 +48,9 @@ def _downsample_meta(meta: dict, factor: int) -> dict:
 
 from workers.gis.indices import calcular_indice
 from workers.gis.reproyeccion import reproyectar_a_4326
-from workers.gis.zonas import clasificar_ndvi, exportar_geojson, suavizar_indice, vectorizar_zonas
+from workers.gis.clasificacion import calcular_umbrales, clasificar_con_umbrales
+from workers.gis.sin_datos import calcular_sin_datos
+from workers.gis.zonas import exportar_geojson, suavizar_indice, vectorizar_zonas
 
 # Umbrales de clasificación reutilizados del módulo de zonificación.
 # NDVI, NDRE, SAVI y GNDVI son índices "razón" (diferencia sobre suma) — su
@@ -56,24 +59,27 @@ from workers.gis.zonas import clasificar_ndvi, exportar_geojson, suavizar_indice
 # ronda 0.1-0.4 para el mismo canopeo donde NDVI ronda 0.4-0.8), así que cada
 # uno usa su propia tabla de umbrales "fijo" — ver
 # workers/gis/clasificacion.py::_UMBRALES_POR_INDICE.
-# ExG (2*GREEN-RED-BLUE) NO es una razón — es una resta lineal absoluta cuya
-# escala depende de las unidades crudas de la cámara (reflectancia 0-1 da
-# valores ~[-2,2]; DN 8-bit sin calibrar da valores de cientos). Ningún
-# umbral fijo tiene sentido ahí — ver _metodo_umbral_efectivo().
+# ExG está normalizado por el brillo total (ver indices.calcular_exg) y tiene
+# su propia tabla de cortes fijos en _UMBRALES_POR_INDICE.
 
 
-def _metodo_umbral_efectivo(indice: str, metodo_umbral: str) -> str:
+def _agregar_metadatos_al_geojson(ruta: str, umbrales: list[float], metodo: str, sin_datos: dict | None) -> None:
     """
-    ExG no es un índice normalizado (a diferencia de NDVI/NDRE/SAVI) — su rango
-    depende de la escala cruda de las bandas de entrada, así que el umbral
-    "fijo" [0.20, 0.40, 0.70] (pensado para índices razón en [-1,1]) puede
-    clasificar todo el lote en una sola clase sin relación con el vigor real.
-    Si el caller no pidió explícitamente un método adaptativo, forzamos "otsu"
-    para ExG, que calcula el corte según la distribución real de los datos.
+    Guarda en el GeoJSON (miembros externos de la FeatureCollection, permitidos
+    por el estándar):
+    - los cortes de clase realmente usados: con umbral adaptativo (Otsu/percentil)
+      cambian por vuelo y el frontend los necesita para rotular la leyenda;
+    - `sin_datos`: la parte del lote sin información real (ver gis/sin_datos.py).
+      Siempre está la clave — con valor None si no hay nada sin datos — para que
+      "no hay" se distinga de "análisis viejo que no lo registró".
     """
-    if indice == "exg" and metodo_umbral == "fijo":
-        return "otsu"
-    return metodo_umbral
+    with open(ruta, encoding="utf-8") as f:
+        datos = json.load(f)
+    datos["umbrales"] = [round(float(u), 4) for u in umbrales]
+    datos["metodo_umbral"] = metodo
+    datos["sin_datos"] = sin_datos
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(datos, f)
 
 
 def _leer_banda(src: rasterio.DatasetReader, num: int, factor: int) -> np.ndarray:
@@ -127,6 +133,7 @@ def _procesar_indice_desde_bandas(
     metodo_umbral: str,
     area_minima_m2: int,
     t0: float | None = None,
+    limite_wgs84: dict | None = None,
 ) -> dict:
     """
     Núcleo del pipeline a partir de bandas ya leídas (a la resolución que
@@ -162,18 +169,20 @@ def _procesar_indice_desde_bandas(
     valores_suavizados = suavizar_indice(valores)
     logger.info("[pipeline] suavizado: %.2fs", time.perf_counter() - t3)
 
-    metodo_efectivo = _metodo_umbral_efectivo(indice, metodo_umbral)
-
     t4 = time.perf_counter()
-    clase = clasificar_ndvi(valores_suavizados, metodo=metodo_efectivo, indice=indice)
-    logger.info("[pipeline] clasificacion (%s): %.2fs", metodo_efectivo, time.perf_counter() - t4)
+    umbrales = calcular_umbrales(valores_suavizados, metodo_umbral, indice)
+    clase = clasificar_con_umbrales(valores_suavizados, umbrales)
+    logger.info("[pipeline] clasificacion (%s): %.2fs", metodo_umbral, time.perf_counter() - t4)
 
     t5 = time.perf_counter()
-    gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2)
+    gdf = vectorizar_zonas(clase, valores, meta, area_minima_m2=area_minima_m2, limite=limite_wgs84)
     logger.info("[pipeline] vectorizacion (%d poligonos): %.2fs", len(gdf), time.perf_counter() - t5)
 
     t6 = time.perf_counter()
     ruta_salida = exportar_geojson(gdf, geojson_destino)
+    _agregar_metadatos_al_geojson(
+        ruta_salida, umbrales, metodo_umbral, calcular_sin_datos(valores, meta["transform"], limite_wgs84),
+    )
     logger.info("[pipeline] exportacion geojson: %.2fs", time.perf_counter() - t6)
 
     logger.info("[pipeline] TOTAL %s: %.2fs", indice.upper(), time.perf_counter() - t0)
@@ -182,7 +191,7 @@ def _procesar_indice_desde_bandas(
     estadisticas: dict = {
         "indice": indice,
         "sensor": sensor,
-        "metodo_umbral": metodo_efectivo,
+        "metodo_umbral": metodo_umbral,
         "geojson": ruta_salida,
         "total_poligonos": len(gdf),
         f"{indice}_promedio_lote": round(float(np.nanmean(valores)), 4),
@@ -264,6 +273,7 @@ def ejecutar_pipeline_archivo(
     geojson_destino: str,
     metodo_umbral: str = "fijo",
     area_minima_m2: int = 10_000,
+    limite_wgs84: dict | None = None,
 ) -> dict:
     """
     Variante de ejecutar_pipeline para archivos grandes (> 500 MB / 3 GB+).
@@ -311,6 +321,7 @@ def ejecutar_pipeline_archivo(
 
         return _procesar_indice_desde_bandas(
             indice, sensor, bandas, nodata, meta, geojson_destino, metodo_umbral, area_minima_m2, t0=t0,
+            limite_wgs84=limite_wgs84,
         )
 
     finally:
@@ -328,6 +339,7 @@ def ejecutar_pipeline_multi_indice_archivo(
     area_minima_m2: int = 10_000,
     on_indice_completado=None,
     on_indice_error=None,
+    limite_wgs84: dict | None = None,
 ) -> dict[str, dict]:
     """
     Variante batch de ejecutar_pipeline_archivo: reproyecta y abre el
@@ -393,6 +405,7 @@ def ejecutar_pipeline_multi_indice_archivo(
                     estadisticas = _procesar_indice_desde_bandas(
                         indice, sensor, bandas_indice, meta["nodata"], meta,
                         geojson_destino_por_indice[indice], metodo_umbral, area_minima_m2,
+                        limite_wgs84=limite_wgs84,
                     )
                     resultados[indice] = estadisticas
                     if on_indice_completado is not None:

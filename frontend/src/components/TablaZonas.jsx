@@ -1,11 +1,8 @@
+import { ETIQUETA_CLASE } from '../utils/clasesIndice'
+
 const ORDEN = ['vigorosa', 'normal', 'deficiente', 'critica']
 
-const ETIQUETAS = {
-  vigorosa:   'Vigorosa',
-  normal:     'Normal',
-  deficiente: 'Deficiente',
-  critica:    'Crítica',
-}
+const ETIQUETAS = ETIQUETA_CLASE
 
 const COLORES = {
   critica:    '#ef4444',

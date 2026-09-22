@@ -1,0 +1,706 @@
+/* Panel (dashboard, lotes, detalle, resultados): fondo claro con barras oscuras, con los
+   acentos verde salvia de la landing y el login. Se importa después de index.css. */
+
+:root {
+  --panel-vidrio: 7, 15, 9;
+}
+
+.dashboard {
+  background: #f3f6f3;
+  color: #1a1a1a;
+}
+
+/* Barra lateral */
+.sidebar-nav {
+  background: rgba(var(--panel-vidrio), 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-logo-wrap,
+.sidebar-user {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-beta {
+  background: rgba(156, 194, 168, 0.18);
+  color: #9cc2a8;
+}
+
+.sidebar-link--active,
+.sidebar-link--active:hover {
+  background: rgba(156, 194, 168, 0.14);
+  color: #c4dccb;
+  border-left-color: #9cc2a8;
+}
+
+.sidebar-badge {
+  background: #9cc2a8;
+  color: #0b1a10;
+}
+
+.sidebar-user-avatar {
+  background: #3a6650;
+}
+
+/* Barra superior */
+.topbar {
+  background: rgba(var(--panel-vidrio), 0.96);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbar-breadcrumb {
+  color: #a9bfb0;
+}
+
+.breadcrumb-sep {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.breadcrumb-active {
+  color: #e8f0ea;
+}
+
+.topbar-icon-btn {
+  color: #a9bfb0;
+}
+
+.topbar-icon-btn:hover {
+  color: #e8f0ea;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.topbar-date {
+  color: #a9bfb0;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn-salir {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #eef4ef;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.btn-salir:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+/* Tarjetas */
+.card,
+.kpi-card,
+.lote-card,
+.vuelo-card {
+  background: #fff;
+  border-color: #e5e8df;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Animación de entrada (igual que la landing y el login) ──
+   fill-mode "backwards": al terminar no queda ningún transform/filter aplicado, así los
+   modales con position: fixed y el mapa no cambian de contenedor. */
+@keyframes panel-revelar {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes panel-aparecer {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar-nav,
+.topbar {
+  animation: panel-aparecer 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.dashboard-main > *,
+.detalle-main > *,
+.resultados-sidebar {
+  animation: panel-revelar 0.85s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.dashboard-main > :nth-child(1),
+.detalle-main > :nth-child(1) {
+  animation-delay: 60ms;
+}
+
+.dashboard-main > :nth-child(2),
+.detalle-main > :nth-child(2),
+.resultados-sidebar {
+  animation-delay: 150ms;
+}
+
+.dashboard-main > :nth-child(3),
+.detalle-main > :nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.dashboard-main > :nth-child(n + 4),
+.detalle-main > :nth-child(n + 4) {
+  animation-delay: 320ms;
+}
+
+.resultados-mapa {
+  animation: panel-aparecer 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav,
+  .topbar,
+  .dashboard-main > *,
+  .detalle-main > *,
+  .resultados-sidebar,
+  .resultados-mapa {
+    animation: none;
+  }
+}
+
+/* ── Dashboard (pantalla Resumen): portada + tarjetas suaves ──
+   Todo va bajo .dashboard--resumen para no afectar a Lotes, que comparte estilos. */
+.dashboard--resumen {
+  background: linear-gradient(180deg, #e6eee7 0%, #f4f7f4 360px);
+}
+
+.hero-panel {
+  position: relative;
+  border-radius: 20px;
+  padding: 2.25rem 2.25rem 2.5rem;
+  color: #f0f6f1;
+  background:
+    linear-gradient(105deg, rgba(7, 15, 9, 0.9) 0%, rgba(12, 30, 21, 0.72) 55%, rgba(12, 30, 21, 0.4) 100%),
+    url('/fondozaira1.jpeg') center / cover;
+  box-shadow: 0 12px 40px rgba(7, 15, 9, 0.2);
+}
+
+.hero-panel-titulo {
+  margin: 0;
+  font-size: clamp(1.7rem, 3.2vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f0f6f1;
+}
+
+.hero-panel-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef4ef;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.hero-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+.hero-btn--principal {
+  background: rgba(156, 194, 168, 0.28);
+  border-color: rgba(156, 194, 168, 0.6);
+}
+
+.hero-btn--principal:hover:not(:disabled) {
+  background: rgba(156, 194, 168, 0.4);
+  border-color: rgba(156, 194, 168, 0.8);
+}
+
+.hero-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* KPIs */
+.dashboard--resumen .kpi-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.dashboard--resumen .kpi-card {
+  border: 1px solid #e7ede5;
+  border-radius: 16px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 4px 18px rgba(15, 40, 25, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard--resumen .kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(15, 40, 25, 0.08);
+}
+
+.dashboard--resumen .kpi-card-top {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dashboard--resumen .kpi-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.dashboard--resumen .kpi-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  background: #e6f0e8;
+  color: #3a6650;
+}
+
+.dashboard--resumen .kpi-value {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  color: #12261a;
+}
+
+.dashboard--resumen .kpi-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dashboard--resumen .kpi-delta--up {
+  color: #256b46;
+}
+
+.dashboard--resumen .kpi-delta--neutral {
+  color: #64748b;
+}
+
+.dashboard--resumen .kpi-delta--warn {
+  color: #b45309;
+}
+
+.dashboard--resumen .kpi-delta--down {
+  color: #b91c1c;
+}
+
+.dashboard--resumen .kpi-card--highlight {
+  background: linear-gradient(135deg, #eaf4ec 0%, #fff 70%);
+}
+
+/* La grilla de abajo usa las mismas 4 columnas que los KPIs: tabla y mapa ocupan 3
+   (terminan donde "Análisis completados") y la actividad la cuarta ("Área monitoreada"). */
+.dashboard--resumen .dashboard-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard--resumen .dashboard-col-main {
+  grid-column: span 3;
+}
+
+.dashboard--resumen .dashboard-col-side {
+  grid-column: span 1;
+}
+
+/* Tarjetas */
+.dashboard--resumen .card {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15, 40, 25, 0.07);
+}
+
+.dashboard--resumen .card-header {
+  padding: 1.15rem 1.3rem 0.7rem;
+  border-bottom: none;
+}
+
+.dashboard--resumen .card-title {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: #12261a;
+}
+
+.dashboard--resumen .card-link {
+  color: #3a6650;
+}
+
+/* Tabla */
+.dashboard--resumen .analisis-table th {
+  border-bottom: 1px solid #edf1ed;
+  background: #f7faf7;
+}
+
+.dashboard--resumen .analisis-table td {
+  border-bottom: 1px solid #f1f4f1;
+}
+
+.dashboard--resumen .analisis-table tbody tr:hover td {
+  background: #f6faf6;
+}
+
+/* Actividad como línea de tiempo */
+.dashboard--resumen .actividad-item {
+  position: relative;
+  border-bottom: none;
+  padding: 0.65rem 0 0.65rem 1.45rem;
+}
+
+.dashboard--resumen .actividad-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.95rem;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #94a3b8; /* Gris para eventos anteriores */
+  box-shadow: 0 0 0 3px #f1f4f1;
+}
+
+.dashboard--resumen .actividad-item::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1.75rem;
+  bottom: -0.5rem;
+  width: 1px;
+  background: #e2e8df;
+}
+
+.dashboard--resumen .actividad-item:last-child::after {
+  display: none;
+}
+
+/* El evento más reciente (superior) es el que lleva el verde activo */
+.dashboard--resumen .actividad-item:first-child::before {
+  background: #256b46;
+  box-shadow: 0 0 0 4px rgba(37, 107, 70, 0.2);
+}
+
+.dashboard--resumen .actividad-item:first-child .actividad-texto {
+  font-weight: 600;
+  color: #12261a;
+}
+
+.dashboard--resumen .actividad-item--alerta::before {
+  background: #d97706 !important;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15) !important;
+}
+
+/* ── KPIs: franja única ── */
+.kpi-franja {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15, 40, 25, 0.08);
+}
+
+.kpi-franja-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1.3rem 1.6rem;
+}
+
+.kpi-franja-item + .kpi-franja-item {
+  border-left: 1px solid #edf1ed;
+}
+
+.kpi-franja-etiqueta {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #7a887f;
+}
+
+.kpi-franja-valor {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #12261a;
+}
+
+.kpi-franja-unidad {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #6b7a70;
+}
+
+.kpi-franja-nota {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+  color: #6b7a70;
+}
+
+.kpi-franja-nota::before {
+  content: '';
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b6c0b9;
+}
+
+.kpi-franja-nota--ok::before {
+  background: #2e9e5b;
+}
+
+.kpi-franja-nota--aviso::before {
+  background: #d9930d;
+}
+
+@media (max-width: 1100px) {
+  .kpi-franja {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi-franja-item:nth-child(odd) {
+    border-left: none;
+  }
+
+  .kpi-franja-item:nth-child(n + 3) {
+    border-top: 1px solid #edf1ed;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TARJETAS DE LOTES REGISTRADOS (REDiseño Moderno & Sin Emojis)
+   ══════════════════════════════════════════════════════════════════ */
+.lotes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 1.15rem;
+  margin-top: 1.25rem;
+}
+
+.lote-card {
+  background: #ffffff;
+  border: 1px solid #e5ebe2;
+  border-radius: 18px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  box-shadow: 0 4px 18px rgba(18, 38, 26, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.lote-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -4px rgba(18, 38, 26, 0.09);
+  border-color: #bcd8ba;
+}
+
+.lote-card-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid #e1e9de;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+  background: #f0f6ee;
+}
+
+.lote-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.lote-card:hover .lote-card-thumb img {
+  transform: scale(1.06);
+}
+
+.lote-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0;
+}
+
+.lote-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.lote-card-nombre {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #12261a;
+  letter-spacing: -0.015em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.lote-crop-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #256b46;
+  background: #eaf4ec;
+  padding: 0.12rem 0.5rem;
+  border-radius: 6px;
+  margin-top: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.lote-card-acciones {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.lote-card-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.15rem;
+}
+
+.lote-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  color: #4b5e52;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.lote-meta-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: #eaf4ec;
+  color: #256b46;
+  border: 1px solid #d3e7d5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lote-meta-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+
+/* ── Navegación nueva: estructura común de Detalle y Resultados ── */
+.breadcrumb-link {
+  color: #a9bfb0;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.breadcrumb-link:hover {
+  color: #e8f0ea;
+  text-decoration: underline;
+}
+
+.pagina-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.85rem;
+}
+
+.pagina-encabezado h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #12261a;
+}
+
+.pagina-encabezado-meta {
+  font-size: 0.9rem;
+  color: #6b7a70;
+}
+
+.panel-shell .detalle-main {
+  margin: 0;
+  max-width: none;
+  padding: 1.5rem;
+}
+
+.panel-shell--alto {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.resultados-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.1rem 1.5rem 0;
+}
+
+.resultados-shell .resultados-main {
+  flex: 1;
+  min-height: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 4px 24px rgba(15, 40, 25, 0.1);
+}
+
+.resultados-shell .resultados-sidebar {
+  border-left-color: #edf1ed;
+}

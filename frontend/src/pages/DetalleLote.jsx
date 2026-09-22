@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
+import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import { listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
+import BotonVolver from '../components/BotonVolver'
+import PanelLayout from '../components/PanelLayout'
 
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
@@ -13,10 +16,6 @@ const ESTADO_LABELS = {
 const SENSOR_LABELS = {
   sentinel2:  'Sentinel-2',
   dji_mavic3: 'DJI Mavic 3',
-}
-
-const CULTIVO_LABELS = {
-  soja: 'Soja', maiz: 'Maíz', algodon: 'Algodón', sorgo: 'Sorgo',
 }
 
 export default function DetalleLote() {
@@ -74,96 +73,101 @@ export default function DetalleLote() {
   if (error) return (
     <div className="page-error">
       <p>{error}</p>
-      <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
+      <BotonVolver to="/dashboard" claro>Volver a mis lotes</BotonVolver>
     </div>
   )
 
-  return (
-    <div className="detalle-page">
-      <header className="detalle-header">
-        <div className="detalle-header-left">
-          <Link to="/dashboard" className="btn-back">← Mis lotes</Link>
-          <div className="detalle-titulo">
-            <h1>{lote.nombre}</h1>
-            <span className={`cultivo-badge cultivo-${lote.cultivo}`}>
-              {CULTIVO_LABELS[lote.cultivo] || lote.cultivo}
-            </span>
-          </div>
+  const contenido = (
+    <>
+      <h2 className="vuelos-title">Vuelos registrados</h2>
+
+      {vuelos.length === 0 && (
+        <div className="empty-state">
+          <p>No hay vuelos registrados para este lote.</p>
+          <p className="empty-hint">Usá "Cargar Ortomosaico" desde el Dashboard para subir un vuelo a este lote.</p>
         </div>
-        {lote.area_ha && (
-          <span className="detalle-area">
-            {lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha
-          </span>
-        )}
-      </header>
+      )}
 
-      <main className="detalle-main">
-        <h2 className="vuelos-title">Vuelos registrados</h2>
+      <div className="vuelos-lista">
+        {vuelos.map(vuelo => {
+          const estadoActual = estados[vuelo.vuelo_id] || vuelo
+          const estadoStr = estadoActual.estado || vuelo.estado
+          const progreso = estadoActual.progreso ?? null
 
-        {vuelos.length === 0 && (
-          <div className="empty-state">
-            <p>No hay vuelos registrados para este lote.</p>
-            <p className="empty-hint">Usá "Cargar Ortomosaico" desde el Dashboard para subir un vuelo a este lote.</p>
-          </div>
-        )}
-
-        <div className="vuelos-lista">
-          {vuelos.map(vuelo => {
-            const estadoActual = estados[vuelo.vuelo_id] || vuelo
-            const estadoStr = estadoActual.estado || vuelo.estado
-            const progreso = estadoActual.progreso ?? null
-
-            return (
-              <div key={vuelo.vuelo_id} className="vuelo-card">
-                <div className="vuelo-card-info">
-                  <p className="vuelo-fecha">
-                    {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
-                      day: '2-digit', month: 'long', year: 'numeric',
-                    })}
-                  </p>
-                  <p className="vuelo-sensor">{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</p>
-                  {vuelo.estadio_fenologico && (
-                    <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span>
-                  )}
-                </div>
-
-                <div className="vuelo-card-estado">
-                  <span className={`estado-badge estado-${estadoStr}`}>
-                    {estadoStr === 'procesando' && <span className="estado-spinner" />}
-                    {ESTADO_LABELS[estadoStr] || estadoStr}
-                  </span>
-
-                  {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
-                    <div className="progreso-bar-wrapper">
-                      <div className="progreso-bar" style={{ width: `${progreso}%` }} />
-                      <span className="progreso-pct">{progreso}%</span>
-                    </div>
-                  )}
-
-                  {estadoActual.mensaje && estadoStr === 'procesando' && (
-                    <p className="vuelo-mensaje">{estadoActual.mensaje}</p>
-                  )}
-
-                  {estadoStr === 'error' && (estadoActual.error || vuelo.error_detalle) && (
-                    <p className="vuelo-error">{estadoActual.error || vuelo.error_detalle}</p>
-                  )}
-                </div>
-
-                <div className="vuelo-card-acciones">
-                  {vuelo.estado === 'completado' && (
-                    <button
-                      className="btn-primary btn-sm"
-                      onClick={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
-                    >
-                      Ver resultados
-                    </button>
-                  )}
-                </div>
+          return (
+            <div key={vuelo.vuelo_id} className="vuelo-card">
+              <div className="vuelo-card-info">
+                <p className="vuelo-fecha">
+                  {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
+                    day: '2-digit', month: 'long', year: 'numeric',
+                  })}
+                </p>
+                <p className="vuelo-sensor">{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</p>
+                {vuelo.estadio_fenologico && (
+                  <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span>
+                )}
               </div>
-            )
-          })}
+
+              <div className="vuelo-card-estado">
+                <span className={`estado-badge estado-${estadoStr}`}>
+                  {estadoStr === 'procesando' && <span className="estado-spinner" />}
+                  {ESTADO_LABELS[estadoStr] || estadoStr}
+                </span>
+
+                {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
+                  <div className="progreso-bar-wrapper">
+                    <div className="progreso-bar" style={{ width: `${progreso}%` }} />
+                    <span className="progreso-pct">{progreso}%</span>
+                  </div>
+                )}
+
+                {estadoActual.mensaje && estadoStr === 'procesando' && (
+                  <p className="vuelo-mensaje">{estadoActual.mensaje}</p>
+                )}
+
+                {estadoStr === 'error' && (estadoActual.error || vuelo.error_detalle) && (
+                  <p className="vuelo-error">{estadoActual.error || vuelo.error_detalle}</p>
+                )}
+              </div>
+
+              <div className="vuelo-card-acciones">
+                {vuelo.estado === 'completado' && (
+                  <button
+                    className="btn-primary btn-sm"
+                    onClick={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
+                  >
+                    Ver resultados
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+
+  return (
+    <PanelLayout
+      migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Lotes', to: '/lotes' }, { label: lote.nombre }]}
+      onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
+    >
+      <main className="detalle-main">
+        <div className="pagina-encabezado">
+          <h1>{lote.nombre}</h1>
+          {cultivoMasReciente(lote) && (
+            <span className={`cultivo-badge cultivo-${cultivoMasReciente(lote).tipo_cultivo}`}>
+              {etiquetaTipoCultivo(cultivoMasReciente(lote).tipo_cultivo)}
+            </span>
+          )}
+          {lote.area_ha && (
+            <span className="pagina-encabezado-meta">
+              {lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha
+            </span>
+          )}
         </div>
+        {contenido}
       </main>
-    </div>
+    </PanelLayout>
   )
 }

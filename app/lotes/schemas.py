@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from shapely.geometry import mapping, shape
 from shapely.geometry.polygon import Polygon
 
@@ -35,15 +35,54 @@ def _validar_polygon_geojson(v: Any) -> dict:
     return v
 
 
+# ── Cultivo schemas ─────────────────────────────────────────────────
+
+def _validar_fechas_cultivo(fecha_siembra: datetime | None, fecha_cosecha: datetime | None) -> None:
+    if fecha_siembra and fecha_cosecha and fecha_cosecha < fecha_siembra:
+        raise ValueError("fecha_cosecha no puede ser anterior a fecha_siembra")
+
+
+class CultivoCreate(BaseModel):
+    tipo_cultivo: CultivoEnum = Field(..., examples=["soja"])
+    variedad: str | None = Field(None, max_length=100, examples=["DM 46i17"])
+    fecha_siembra: datetime | None = Field(None, examples=["2026-11-15T00:00:00Z"])
+    fecha_cosecha: datetime | None = Field(None, examples=["2027-04-20T00:00:00Z"])
+
+    @model_validator(mode="after")
+    def fechas_coherentes(self):
+        _validar_fechas_cultivo(self.fecha_siembra, self.fecha_cosecha)
+        return self
+
+
+class CultivoUpdate(BaseModel):
+    tipo_cultivo: CultivoEnum | None = None
+    variedad: str | None = Field(None, max_length=100)
+    fecha_siembra: datetime | None = None
+    fecha_cosecha: datetime | None = None
+
+    @model_validator(mode="after")
+    def fechas_coherentes(self):
+        _validar_fechas_cultivo(self.fecha_siembra, self.fecha_cosecha)
+        return self
+
+
+class CultivoResponse(BaseModel):
+    id: uuid.UUID
+    lote_id: uuid.UUID
+    tipo_cultivo: CultivoEnum
+    variedad: str | None
+    fecha_siembra: datetime | None
+    fecha_cosecha: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Lote schemas ────────────────────────────────────────────────────
 
 class LoteCreate(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=200, examples=["Lote Norte"])
-    cultivo: CultivoEnum = Field(..., examples=["soja"])
-    estadio_fenologico: str | None = Field(None, max_length=30, examples=["R3"])
-    variedad: str | None = Field(None, max_length=100, examples=["DM 46i17"])
     tipo_suelo: TipoSueloEnum | None = Field(None, examples=["franco_arcilloso"])
-    fecha_siembra: datetime | None = Field(None, examples=["2026-11-15T00:00:00Z"])
     geometry: dict | None = Field(
         None,
         description="Opcional. Si no se provee, el lote queda sin límites — se puede cargar después.",
@@ -69,11 +108,7 @@ class LoteCreate(BaseModel):
 
 class LoteUpdate(BaseModel):
     nombre: str | None = Field(None, min_length=1, max_length=200)
-    cultivo: CultivoEnum | None = None
-    estadio_fenologico: str | None = Field(None, max_length=30)
-    variedad: str | None = Field(None, max_length=100)
     tipo_suelo: TipoSueloEnum | None = None
-    fecha_siembra: datetime | None = None
     geometry: dict | None = None
 
     @field_validator("geometry")
@@ -87,16 +122,13 @@ class LoteUpdate(BaseModel):
 class LoteResponse(BaseModel):
     id: uuid.UUID
     nombre: str
-    cultivo: CultivoEnum
-    estadio_fenologico: str | None
-    variedad: str | None
     tipo_suelo: TipoSueloEnum | None
-    fecha_siembra: datetime | None
     geometry: dict | None
     area_ha: float | None
     usuario_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    cultivos: list["CultivoResponse"] = []
 
     model_config = {"from_attributes": True}
 
