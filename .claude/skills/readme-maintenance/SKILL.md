@@ -1,11 +1,11 @@
 ---
 name: readme-maintenance
-description: Actualiza README.md de AgroNexo cuando corresponde según las reglas de CLAUDE.md — nuevo servicio en docker-compose, cambio en instalación/requisitos, nuevo comando frecuente, nuevo módulo en app/ o workers/, solución a un problema recurrente, o cambio de variable de entorno. Usar al detectar cualquiera de estos eventos, no en cambios internos triviales.
+description: Actualiza README.md de AgroNexo cuando corresponde según las reglas de CLAUDE.md — nuevo servicio en docker-compose, cambio en instalación/requisitos, nuevo módulo en app/ o workers/, o cambio de variable de entorno. Usar al detectar cualquiera de estos eventos, no en cambios internos triviales.
 ---
 
 # README maintenance (AgroNexo)
 
-`README.md` es la puerta de entrada para colaboradores. Esta skill se dispara cuando el cambio que se acaba de hacer (o se está por hacer) cae en alguno de los triggers obligatorios de `CLAUDE.md` — no en cada commit.
+`README.md` es la puerta de entrada para colaboradores — se mantiene deliberadamente como una landing profesional (arquitectura, stack, quickstart, estructura), sin contenido de wiki interna tipo "comandos frecuentes" o "problemas comunes" (se sacaron a propósito; no reintroducirlas salvo pedido explícito). Esta skill se dispara cuando el cambio que se acaba de hacer (o se está por hacer) cae en alguno de los triggers obligatorios de `CLAUDE.md` — no en cada commit.
 
 ## Triggers que obligan a actualizar
 
@@ -13,12 +13,10 @@ description: Actualiza README.md de AgroNexo cuando corresponde según las regla
 |---|---|
 | Nuevo servicio agregado a `docker-compose.yml` | Tabla de servicios y puertos |
 | Cambia el proceso de instalación o los requisitos previos | Sección de instalación |
-| Se agrega un comando frecuente nuevo (script, migración, tarea) | Sección "Comandos frecuentes" |
 | Se crea un módulo nuevo en `app/` o `workers/` | Árbol de estructura del proyecto |
-| Se documenta la solución a un problema recurrente | Sección "Problemas comunes" |
 | Cambia alguna variable de entorno requerida | `.env.example` **y** la tabla de variables del README |
 
-Si el cambio no encaja en ninguna fila de esta tabla (refactor, renombrar función, ajustar lógica de negocio interna), **no tocar el README**.
+Si el cambio no encaja en ninguna fila de esta tabla (refactor, renombrar función, ajustar lógica de negocio interna, un comando o troubleshooting nuevo), **no tocar el README**.
 
 ## Procedimiento
 

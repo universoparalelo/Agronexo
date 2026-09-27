@@ -332,10 +332,10 @@ El archivo `README.md` es la puerta de entrada para los colaboradores del proyec
 
 - Se agrega un nuevo servicio al `docker-compose.yml` → actualizar la tabla de servicios y puertos
 - Cambia el proceso de instalación o los requisitos previos → actualizar la sección de instalación
-- Se agrega un comando frecuente nuevo (script, migración, tarea) → agregarlo en "Comandos frecuentes"
 - Se crea un módulo nuevo en `app/` o `workers/` → actualizar el árbol de estructura
-- Se documenta una solución a un problema recurrente → agregarlo en "Problemas comunes"
 - Cambia alguna variable de entorno requerida → actualizar `.env.example` Y la tabla del README
+
+El README ya no incluye "Comandos frecuentes" ni "Problemas comunes" (se sacaron por decisión explícita para mantenerlo como puerta de entrada profesional, sin contenido de wiki interna). No volver a agregar esas secciones salvo pedido explícito.
 
 No actualizar el README en cambios internos de implementación (refactors, renombrar funciones, ajustar lógica de negocio).
 
