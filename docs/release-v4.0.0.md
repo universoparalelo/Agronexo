@@ -51,6 +51,19 @@ El escaneo con el historial completo (`gitleaks detect --source . --verbose`, co
 
 **Sin acción destructiva tomada:** no se reescribió el historial (`git filter-repo`/BFG + force-push) porque es una operación de alto impacto sobre una rama compartida que afecta a todo el equipo — requiere coordinación explícita (todos deben re-clonar o resetear su copia local) y no es algo para decidir unilateralmente dentro de esta tarea. Queda como problema abierto para decidir con el equipo.
 
+#### Fixes tras el primer PR real (#20) — 4 bugs del workflow expuestos por CI real
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+El primer push a PR abrió los ojos sobre varias cosas que solo se ven corriendo en GitHub Actions de verdad (no hay forma de simular el runner completo en local):
+
+- **`aquasecurity/trivy-action@0.28.0` no resolvía** — el tag real lleva prefijo `v` (`v0.28.0`). Verificado contra la API de tags del repo (`api.github.com/repos/aquasecurity/trivy-action/tags`).
+- **Gitleaks fallaba con 403 "Resource not accessible by integration"** al listar los commits del PR — el `GITHUB_TOKEN` por defecto del repo no incluye `pull-requests: read`. Se agregó `permissions` explícito al job (mínimo privilegio: `contents: read` a nivel workflow, `pull-requests: read` solo en el job de secretos).
+- **`npm ci` fallaba** porque `frontend/package-lock.json` estaba desincronizado con `package.json` (le faltaban `geotiff`/`proj4` y sus transitivas, agregadas en el Sprint 13). Nadie lo había notado porque ni `Dockerfile.frontend` ni el job `build-frontend` de `ci.yml` usan `npm ci` — ambos usan `npm install`, que regenera el lock silenciosamente en vez de fallar. Regenerado con `npm install` (diff de 121 líneas, solo lo faltante).
+- **El propio `trivy-action` fallaba después de corregir el tag** — el instalador embebido de la action (`contrib/install.sh` de aquasecurity/trivy) fallaba con exit code 1 sin mensaje de error legible después de resolver la versión (`v0.64.1`), de forma reproducible en las 3 imágenes. Es un problema conocido de esa action con el script instalador, no de esta config. **Se reemplazó por `docker run aquasec/trivy:0.74.0 image ...` directo** montando el socket de Docker del runner — evita el instalador por completo y ya se probó en local contra una imagen real antes de subirlo.
+
+**Decisión tomada:** no se relajó ningún check para "hacerlo pasar" — Bandit, Semgrep, pip-audit y npm audit siguen en rojo en el PR porque encontraron hallazgos reales (no bugs de config), y quedan así a propósito mientras dure el rollout en modo reporte (`continue-on-error`).
+
 ### Problemas abiertos (Sprint 15)
 
 - **Decidir si se reescribe el historial de git** para eliminar los 4 secretos encontrados en `de3e308` (`docs/docs/Arquitectura.md`, `docs/sprint1y2.md`). Requiere coordinar con todo el equipo (force-push + re-clone) porque reescribe hashes de commits compartidos. Mientras no se decida, agregar esos fingerprints a un `.gitleaksignore` para que el gate de CI no falle repitiendo un hallazgo ya conocido y evaluado.

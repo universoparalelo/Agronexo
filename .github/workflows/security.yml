@@ -148,9 +148,16 @@ jobs:
       - name: Build imagen ${{ matrix.servicio }}
         run: docker build -f ${{ matrix.dockerfile }} -t agronexo-${{ matrix.servicio }}:scan .
 
+      # Se corre la imagen oficial de Trivy directo (en vez de aquasecurity/trivy-action)
+      # porque el instalador embebido de esa action (contrib/install.sh) falla de forma
+      # intermitente al bajar el binario — ver docs/release-v4.0.0.md (Sprint 15). Este
+      # camino evita ese instalador por completo: ya tenemos Docker en el runner.
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.32.0
-        with:
-          image-ref: agronexo-${{ matrix.servicio }}:scan
-          severity: "CRITICAL,HIGH"
-          exit-code: "0" # modo reporte durante el rollout inicial, ver nota arriba
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.74.0 image \
+            --severity CRITICAL,HIGH \
+            --exit-code 0 \
+            agronexo-${{ matrix.servicio }}:scan
