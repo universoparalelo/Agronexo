@@ -15,11 +15,18 @@ on:
     # cubre la detección temprana).
     - cron: "0 6 * * 1"
 
+# Permiso mínimo por defecto; cada job que necesite más lo declara explícito.
+permissions:
+  contents: read
+
 jobs:
   # ── Secretos ──────────────────────────────────────────────────────────────
   secrets:
     name: Gitleaks — secretos filtrados
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # gitleaks-action lista los commits del PR vía API para acotar el escaneo
     steps:
       - uses: actions/checkout@v4
         with:
@@ -142,7 +149,7 @@ jobs:
         run: docker build -f ${{ matrix.dockerfile }} -t agronexo-${{ matrix.servicio }}:scan .
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.32.0
         with:
           image-ref: agronexo-${{ matrix.servicio }}:scan
           severity: "CRITICAL,HIGH"
