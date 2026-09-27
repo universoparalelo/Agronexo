@@ -76,5 +76,9 @@ def obtener_escena_por_id(item_id: str) -> dict:
 
 def _get_json(url: str) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "agronexo/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    # Bandit (B310) marca cualquier urlopen por el riesgo de file:// o un host
+    # arbitrario, pero acá el scheme+host siempre viene de EARTH_SEARCH_COLLECTION_URL
+    # (constante fija arriba); solo el path/query de las dos llamadas de este modulo
+    # es dinamico, nunca la URL completa.
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
         return json.loads(resp.read())

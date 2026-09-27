@@ -35,7 +35,7 @@ pillow==10.4.0
 pyshp==2.3.1
 
 # Uploads
-python-multipart==0.0.20
+python-multipart==0.0.32
 
 # GIS (validación de geometrías en schemas Pydantic)
 shapely==2.0.6

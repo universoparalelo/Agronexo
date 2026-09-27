@@ -64,8 +64,27 @@ El primer push a PR abrió los ojos sobre varias cosas que solo se ven corriendo
 
 **Decisión tomada:** no se relajó ningún check para "hacerlo pasar" — Bandit, Semgrep, pip-audit y npm audit siguen en rojo en el PR porque encontraron hallazgos reales (no bugs de config), y quedan así a propósito mientras dure el rollout en modo reporte (`continue-on-error`).
 
+#### Triage de los primeros hallazgos reales — 3 arreglos baratos
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hacer con los hallazgos reales de la primera corrida. En vez de ajustar el pipeline para "que pase en verde", se clasificaron por costo real:
+
+- **`python-multipart` 0.0.20 → 0.0.32** (`docker/requirements.api.txt`): parcheaba 6 CVEs (PYSEC-2026-3036 a -3040, -1852). Es la librería que procesa la subida de GeoTIFF (`multipart/form-data`), así que no era un CVE cualquiera. Bump de patch, sin cambios de código. Validado con `tests/test_ingesta.py` (4), `tests/test_lotes.py` + `tests/test_vuelos_estado.py` (34) — los 3 suites pasan igual.
+- **`npm audit fix` (sin `--force`) en `frontend/`**: resolvió `postcss` solo (diff de 42 líneas en `package-lock.json`, `package.json` sin cambios). Verificado con `npm run build` y `npm test` (vitest, 9 tests) — ambos OK.
+- **Bandit B310 en `workers/gis/satelital_catalogo.py::_get_json`**: falso positivo — Bandit marca cualquier `urlopen()` sin distinguir que acá el scheme+host siempre sale de `EARTH_SEARCH_COLLECTION_URL` (constante fija del módulo); las dos llamadas del módulo solo varían el path/query, nunca pueden apuntar a `file://` ni a otro host. Se documentó con un comentario explicando el porqué + `# nosec B310` en la línea. Confirmado con Bandit local: `No issues identified` (antes: 1 Medium).
+
+**Lo que quedó afuera a propósito (no es "barato"):**
+- `react-router-dom`: el audit sugiere `npm audit fix`, pero el fix real es saltar de v6.28 a v7.18 (major, breaking) — no se fuerza sin una tarea de testing de rutas aparte.
+- `starlette` (CVEs varios, ver hallazgo de pip-audit): viene empaquetado por el pin de `fastapi==0.115.6`; arreglarlo de verdad implica subir FastAPI a una versión que soporte un Starlette parchado — riesgo de romper comportamiento, requiere correr toda la suite, no un bump aislado. Queda como problema abierto.
+- `pytest` 8.3.4 → 9.x: dependencia solo de test (no llega a producción); major version bump, puede romper config de tests. Sin apuro.
+- `ecdsa` (PYSEC-2026-1325, sin versión con fix — el maintainer no lo va a parchear, es un problema conocido de canal lateral): dependencia transitoria de `python-jose[cryptography]`, pero el proyecto firma JWT con `HS256` (`app/auth/dependencies.py`, `app/auth/router.py` — `jwt.decode(..., algorithms=[settings.jwt_algorithm])`), nunca con `ES256`. El código de `ecdsa` no se ejecuta en ningún camino real de la app — riesgo aceptado, no se persigue un CVE sin fix disponible.
+
 ### Problemas abiertos (Sprint 15)
 
 - **Decidir si se reescribe el historial de git** para eliminar los 4 secretos encontrados en `de3e308` (`docs/docs/Arquitectura.md`, `docs/sprint1y2.md`). Requiere coordinar con todo el equipo (force-push + re-clone) porque reescribe hashes de commits compartidos. Mientras no se decida, agregar esos fingerprints a un `.gitleaksignore` para que el gate de CI no falle repitiendo un hallazgo ya conocido y evaluado.
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
+- **Bump de `fastapi`/`starlette`** para resolver los CVEs de `starlette` — necesita correr toda la suite de tests antes de mergear, no es un cambio aislado.
+- **Migrar `react-router-dom` de v6 a v7** para resolver su CVE de moderate severity — major version, requiere testear todas las rutas del frontend.
+- **Revisar los 25 hallazgos de Semgrep** (todavía no se miraron en detalle, solo el conteo) y decidir si el ruleset actual (`p/security-audit` + `p/owasp-top-ten` + `p/secrets`) es el punto justo o conviene acotarlo.
