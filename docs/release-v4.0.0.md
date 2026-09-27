@@ -49,7 +49,7 @@ El escaneo con el historial completo (`gitleaks detect --source . --verbose`, co
 
 **Riesgo evaluado como bajo pero no nulo:** por la config de auth del proyecto (`ACCESS_TOKEN_EXPIRE_MINUTES=30`, `REFRESH_TOKEN_EXPIRE_DAYS=7`) y la fecha del commit (~3 meses antes de este sprint), ambos tokens ya vencieron — no son explotables hoy. No se filtró el `JWT_SECRET_KEY` en sí (eso sí habría sido crítico, porque permite firmar tokens nuevos indefinidamente), solo instancias de tokens ya vencidas.
 
-**Sin acción destructiva tomada:** no se reescribió el historial (`git filter-repo`/BFG + force-push) porque es una operación de alto impacto sobre una rama compartida que afecta a todo el equipo — requiere coordinación explícita (todos deben re-clonar o resetear su copia local) y no es algo para decidir unilateralmente dentro de esta tarea. Queda como problema abierto para decidir con el equipo.
+**Decisión final (2026-09-27): no se reescribe el historial.** Evaluado con el equipo — reescribir (`git filter-repo`/BFG + force-push) es una operación de alto impacto sobre una rama compartida (obliga a todo el equipo a re-clonar o resetear su copia local) para eliminar dos tokens que ya vencieron hace meses y no exponen el `JWT_SECRET_KEY`. El riesgo remanente no justifica esa disrupción. El `.gitleaksignore` agregado en este sprint (con los 4 fingerprints exactos) queda como mitigación permanente, no transitoria: el gate de CI sigue viendo el historial completo en cada corrida pero no vuelve a fallar por un hallazgo ya evaluado y aceptado.
 
 #### Fixes tras el primer PR real (#20) — 4 bugs del workflow expuestos por CI real
 **Fecha:** 2026-09-27
@@ -82,8 +82,7 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 
 ### Problemas abiertos (Sprint 15)
 
-- **Decidir si se reescribe el historial de git** para eliminar los 4 secretos encontrados en `de3e308` (`docs/docs/Arquitectura.md`, `docs/sprint1y2.md`). Requiere coordinar con todo el equipo (force-push + re-clone) porque reescribe hashes de commits compartidos. Mientras no se decida, agregar esos fingerprints a un `.gitleaksignore` para que el gate de CI no falle repitiendo un hallazgo ya conocido y evaluado.
-- **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
+ **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
 - **Bump de `fastapi`/`starlette`** para resolver los CVEs de `starlette` — necesita correr toda la suite de tests antes de mergear, no es un cambio aislado.
 - **Migrar `react-router-dom` de v6 a v7** para resolver su CVE de moderate severity — major version, requiere testear todas las rutas del frontend.
