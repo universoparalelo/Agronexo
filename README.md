@@ -235,6 +235,16 @@ docker compose down
 
 # Reset completo — borra todos los datos
 docker compose down -v
+
+# Auditar dependencias Python (SCA) — igual que el CI
+pip install pip-audit && pip-audit -r docker/requirements.api.txt
+pip-audit -r docker/requirements.worker.txt
+
+# Auditar dependencias npm (SCA) — igual que el CI
+cd frontend && npm audit --audit-level=high
+
+# Escanear secretos en todo el historial (no solo el diff, a diferencia del CI)
+gitleaks detect --source . --verbose
 ```
 
 ---

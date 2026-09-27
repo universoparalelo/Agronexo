@@ -2,8 +2,8 @@
 
 ## Estado actual del proyecto
 
-**Release activa:** v3.0.0 (en desarrollo) — seguimiento en `docs/release-v3.0.0.md`
-**Release anterior:** v2.0.0 — seguimiento en `docs/release-v2.0.0.md`
+**Release activa:** v4.0.0 (en desarrollo) — seguimiento en `docs/release-v4.0.0.md`
+**Release anterior:** v3.0.0 — seguimiento en `docs/release-v3.0.0.md`
 **Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
 
 ### Qué está implementado y funcionando
@@ -288,11 +288,12 @@ Cada release tiene su propio archivo de seguimiento en `docs/`. **Una release = 
 |---|---|---|
 | v1.0.0 | `docs/release-v1.0.0.md` | Cerrada |
 | v2.0.0 | `docs/release-v2.0.0.md` | Cerrada |
-| v3.0.0 | `docs/release-v3.0.0.md` | En desarrollo |
+| v3.0.0 | `docs/release-v3.0.0.md` | Cerrada |
+| v4.0.0 | `docs/release-v4.0.0.md` | En desarrollo |
 
 Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estructura de la release anterior. El archivo de la release anterior no se modifica una vez cerrada.
 
-**El archivo activo ahora es: `docs/release-v3.0.0.md`**
+**El archivo activo ahora es: `docs/release-v4.0.0.md`**
 
 **Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional:**
 - Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.

@@ -1,0 +1,7 @@
+# Hallazgos ya evaluados — ver "Problemas abiertos (Sprint 15)" en docs/release-v4.0.0.md
+# Tokens de ejemplo vencidos (access 30 min / refresh 7 días) en docs eliminados,
+# commit de3e308 (2026-06-23). No se reescribe el historial sin decisión de equipo.
+de3e308f6ffaff52ddd3a0daba5101802735b43d:docs/docs/Arquitectura.md:generic-api-key:1605
+de3e308f6ffaff52ddd3a0daba5101802735b43d:docs/docs/Arquitectura.md:generic-api-key:1617
+de3e308f6ffaff52ddd3a0daba5101802735b43d:docs/sprint1y2.md:generic-api-key:1776
+de3e308f6ffaff52ddd3a0daba5101802735b43d:docs/sprint1y2.md:generic-api-key:1788
