@@ -82,14 +82,41 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - `pytest` 8.3.4 → 9.x: dependencia solo de test (no llega a producción); major version bump, puede romper config de tests. Sin apuro.
 - `ecdsa` (PYSEC-2026-1325, sin versión con fix — el maintainer no lo va a parchear, es un problema conocido de canal lateral): dependencia transitoria de `python-jose[cryptography]`, pero el proyecto firma JWT con `HS256` (`app/auth/dependencies.py`, `app/auth/router.py` — `jwt.decode(..., algorithms=[settings.jwt_algorithm])`), nunca con `ES256`. El código de `ecdsa` no se ejecuta en ningún camino real de la app — riesgo aceptado, no se persigue un CVE sin fix disponible.
 
+#### Pinear las GitHub Actions a un commit SHA + acotar `JWT_SECRET_KEY` a los jobs que lo usan
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+Resolvió los últimos 2 grupos de hallazgos de Semgrep (17 → 0):
+
+- **`github-actions-mutable-action-tag` (17)**: las 4 acciones usadas (`actions/checkout`, `actions/setup-python`, `actions/setup-node`, `gitleaks/gitleaks-action`) se resolvieron a su commit SHA exacto vía `gh api repos/<owner>/<repo>/git/refs/tags/<tag>` y se pinearon en `ci.yml` y `security.yml`, con el tag legible como comentario (`@11d5960a...262 # v4.4.0`). `dependabot.yml` (ecosistema `github-actions`, ya agregado en este sprint) va a mantener esos SHA actualizados solo.
+- **`gha-workflow-env-secret` (1, `ci.yml:27`)**: `JWT_SECRET_KEY` salió del `env:` a nivel workflow (donde lo veían los 3 jobs, incluido `build-frontend` que ni lo usa) y se movió al `env:` de cada job que sí lo necesita — `test-api` sigue usando `secrets.CI_JWT_SECRET_KEY` (con el mismo fallback de siempre) porque ahí sí se firman/verifican JWTs de verdad; `test-gis` pasó a un string fijo sin referenciar el secret real, porque solo necesita que el campo requerido de `Settings` no esté vacío, nunca firma nada.
+
+Verificado con Semgrep local: `Ran 350 rules on 196 files: 0 findings` (antes: 25). Los 3 jobs de `ci.yml` no se tocaron en su lógica, solo el `env:`.
+
+#### Bump de `pytest` 8.3.4 → 9.1.1
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+Resuelve el hallazgo PYSEC-2026-1845 de `pip-audit`. Es dependencia solo de test (no llega a producción), pero igual se corrió la suite completa antes de dar el bump por bueno: **313 tests pasan** (237 en la imagen `api`, 25 archivos `tests/test_*.py` menos `test_celery_integracion.py` que necesita el stack completo con MinIO — ver hallazgo abajo; 76 en la imagen `worker`, los que importan `rasterio`/`numpy`/`geopandas`). Sin cambios de código — pytest 9 no rompió nada de lo que usa este repo.
+
+**Nota sobre cómo se corrió:** las imágenes se reconstruyeron desde cero (`docker compose build`) porque un reinicio de emergencia de la máquina había limpiado todo el estado de Docker Desktop (cero imágenes, contenedores y volúmenes). `docker compose up` no pudo levantar `api`/`worker` completos porque ambos tienen `depends_on: minio: condition: service_healthy` y MinIO no arranca (ver hallazgo siguiente) — se corrieron los tests con `docker run` directo contra la red de Compose (`--network agronexo_default`), sin pasar por el chequeo de salud de `minio`.
+
+#### Hallazgo — `minio/minio` ya no se puede bajar sin cuenta (Docker Hub y quay.io)
+**Fecha:** 2026-09-27
+
+Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error response from daemon: pull access denied for minio/minio, repository does not exist or may require 'docker login'`. No es un problema de esta máquina ni de este repo — MinIO dejó de publicar `minio/minio` en Docker Hub, y su alternativa (`quay.io/minio/minio`) ahora exige autenticación incluso para tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, mismo 401). Confirmado también vía la API pública de Docker Hub: `GET /v2/repositories/minio/minio/` → `{"message":"object not found"}`.
+
+**Impacto:** cualquiera que clone el repo hoy y corra `docker compose up` desde cero no puede levantar `api`, `worker` ni `frontend` con conexión a MinIO real — todos dependen de `minio: condition: service_healthy`. El único workaround usado en este sprint (`docker run` directo contra la red de Compose) evita el problema para correr tests, pero no es una solución para el flujo normal de desarrollo (`docker compose up`) ni para el job `test-gis` de CI si en algún momento necesitara MinIO real.
+
+**Sin resolver a propósito:** se evaluaron 3 caminos (crear cuenta gratis de MinIO y `docker login`, cambiar a una imagen S3-compatible alternativa, o ignorar por ahora) y se decidió pausarlo — no es parte del alcance de esta rama (CI de seguridad) y afecta a todo el equipo, no solo a esta tarea. Queda como problema abierto de mayor prioridad que el resto de este sprint.
+
 ### Problemas abiertos (Sprint 15)
 
- **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
+- **`minio/minio` no se puede bajar sin cuenta** (ver hallazgo arriba) — bloquea `docker compose up` desde cero para cualquiera del equipo. Requiere decisión de equipo: cuenta MinIO paga/gratis con login, o migrar a otra imagen S3-compatible. Prioridad alta, afecta a todos, no solo a esta rama.
+- **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
 - **Bump de `fastapi`/`starlette`** para resolver los CVEs de `starlette` — necesita correr toda la suite de tests antes de mergear, no es un cambio aislado.
 - **Migrar `react-router-dom` de v6 a v7** para resolver su CVE de moderate severity — major version, requiere testear todas las rutas del frontend.
-- **`github-actions-mutable-action-tag`** (Semgrep, 10 hallazgos en `security.yml` + 7 más en `ci.yml` preexistente): usar `@v4`/`@v5` en vez de un commit SHA fijo es un riesgo real de supply chain (si se compromete el tag, corre código distinto sin que el diff del repo cambie), pero fijar SHAs en ~20 referencias es un cambio de mayor alcance, y tocar `ci.yml` es una decisión aparte de esta rama. Evaluar si vale la pena para acciones oficiales (`actions/checkout`, `actions/setup-python`) vs. de terceros (`gitleaks/gitleaks-action`).
-- **`gha-workflow-env-secret`** (Semgrep, `ci.yml:27`, preexistente): `JWT_SECRET_KEY` está en el `env:` a nivel workflow (visible para todos los jobs) en vez de acotado al job que lo usa. Riesgo bajo porque ya es un secreto de test documentado como "sin acceso a producción", pero es una mejora de higiene simple para una tarea aparte.
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
