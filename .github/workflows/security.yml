@@ -1,0 +1,163 @@
+name: Security
+
+# Workflow separado de ci.yml a propósito: son gates distintos (calidad
+# funcional vs. seguridad) con dueños y cadencia de revisión distintos, y
+# separarlos permite tunear/silenciar reglas de seguridad sin tocar el
+# pipeline de tests.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Corre igual aunque no haya push — para agarrar CVEs nuevos sobre
+    # dependencias que no cambiaron (Dependabot cubre el update, esto
+    # cubre la detección temprana).
+    - cron: "0 6 * * 1"
+
+# Permiso mínimo por defecto; cada job que necesite más lo declara explícito.
+permissions:
+  contents: read
+
+jobs:
+  # ── Secretos ──────────────────────────────────────────────────────────────
+  secrets:
+    name: Gitleaks — secretos filtrados
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # gitleaks-action lista los commits del PR vía API para acotar el escaneo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks necesita el historial completo, no solo el último commit
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── SAST — análisis estático del código propio ───────────────────────────
+  sast-semgrep:
+    name: SAST — Semgrep (Python + JS/React)
+    runs-on: ubuntu-latest
+    # continue-on-error: rollout inicial en modo "solo reportar" — ver
+    # docs/release-v4.0.0.md (Sprint 15) para el plan de sacar este flag
+    # una vez triageados los hallazgos existentes.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Semgrep
+        run: pip install semgrep
+
+      - name: Semgrep (reglas OWASP + secretos + seguridad genérica)
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --config p/secrets \
+            --error \
+            --exclude 'tests/*' \
+            --exclude 'frontend/dist/*'
+
+  sast-bandit:
+    name: SAST — Bandit (Python)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Bandit
+        run: pip install bandit
+
+      - name: Bandit sobre app/ y workers/
+        run: bandit -r app workers -x "*/tests/*" -ll
+
+  # ── SCA — dependencias de la aplicación ──────────────────────────────────
+  sca-python:
+    name: SCA — pip-audit (API + worker)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar pip-audit
+        run: pip install pip-audit
+
+      - name: Auditar requirements.api.txt
+        run: pip-audit -r docker/requirements.api.txt
+
+      - name: Auditar requirements.worker.txt
+        run: pip-audit -r docker/requirements.worker.txt
+
+  sca-npm:
+    name: SCA — npm audit (frontend)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias (respetando el lockfile)
+        working-directory: frontend
+        run: npm ci
+
+      - name: npm audit (alta severidad y crítica)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+  # ── Imágenes Docker — CVEs del SO base ───────────────────────────────────
+  container-scan:
+    name: Trivy — imágenes Docker
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        include:
+          - servicio: api
+            dockerfile: docker/Dockerfile.api
+          - servicio: worker
+            dockerfile: docker/Dockerfile.worker
+          - servicio: frontend
+            dockerfile: docker/Dockerfile.frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build imagen ${{ matrix.servicio }}
+        run: docker build -f ${{ matrix.dockerfile }} -t agronexo-${{ matrix.servicio }}:scan .
+
+      # Se corre la imagen oficial de Trivy directo (en vez de aquasecurity/trivy-action)
+      # porque el instalador embebido de esa action (contrib/install.sh) falla de forma
+      # intermitente al bajar el binario — ver docs/release-v4.0.0.md (Sprint 15). Este
+      # camino evita ese instalador por completo: ya tenemos Docker en el runner.
+      - name: Trivy scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:0.74.0 image \
+            --severity CRITICAL,HIGH \
+            --exit-code 0 \
+            agronexo-${{ matrix.servicio }}:scan

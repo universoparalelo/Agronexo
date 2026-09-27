@@ -1,0 +1,53 @@
+version: 2
+
+# cooldown en cada ecosistema: espera unos días desde que una versión se
+# publica antes de que Dependabot la proponga — evita adoptar de un día
+# para el otro una release recién salida que resulte comprometida o rota
+# (ventana en la que se detectan la mayoría de los incidentes de supply
+# chain, ver Semgrep dependabot-missing-cooldown).
+updates:
+  # Backend + worker — ambos requirements viven en docker/
+  - package-ecosystem: "pip"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Frontend
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+    labels:
+      - "dependencies"
+      - "security"
+
+  # Imágenes base de los Dockerfiles (node:20-slim, ghcr.io/osgeo/gdal, etc.)
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    labels:
+      - "dependencies"
+      - "security"
+
+  # El propio pipeline de CI
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    labels:
+      - "dependencies"
+      - "security"

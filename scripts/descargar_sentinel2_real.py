@@ -43,7 +43,8 @@ def consultar_stac(bbox: str, max_nubes: int = 30) -> dict:
         f"?bbox={bbox}&limit=20&sortby=-properties.datetime"
     )
     req = urllib.request.Request(url, headers={"User-Agent": "agronexo/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    # host fijo (earth-search.aws.element84.com arriba), solo bbox/limit son dinamicos
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310  # nosemgrep: dynamic-urllib-use-detected
         catalog = json.loads(resp.read())
 
     features = catalog.get("features", [])

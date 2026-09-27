@@ -96,7 +96,8 @@ def buscar_escenas(bbox: tuple[float, float, float, float], fecha_centro: str, v
     url = f"https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items?{params}"
 
     req = urllib.request.Request(url, headers={"User-Agent": "agronexo-poc/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    # host fijo (earth-search.aws.element84.com arriba), solo bbox/fechas son dinamicos
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310  # nosemgrep: dynamic-urllib-use-detected
         catalog = json.loads(resp.read())
 
     features = catalog.get("features", [])
