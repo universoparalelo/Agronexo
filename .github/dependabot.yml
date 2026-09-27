@@ -1,5 +1,10 @@
 version: 2
 
+# cooldown en cada ecosistema: espera unos días desde que una versión se
+# publica antes de que Dependabot la proponga — evita adoptar de un día
+# para el otro una release recién salida que resulte comprometida o rota
+# (ventana en la que se detectan la mayoría de los incidentes de supply
+# chain, ver Semgrep dependabot-missing-cooldown).
 updates:
   # Backend + worker — ambos requirements viven en docker/
   - package-ecosystem: "pip"
@@ -7,6 +12,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "security"
@@ -17,6 +24,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "security"
@@ -26,6 +35,8 @@ updates:
     directory: "/docker"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "security"
@@ -35,6 +46,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "security"
