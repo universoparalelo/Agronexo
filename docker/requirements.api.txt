@@ -11,7 +11,7 @@ sqlalchemy==2.0.54
 geoalchemy2==0.15.2
 asyncpg==0.30.0
 alembic==1.20.0
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.13
 
 # Auth
 python-jose[cryptography]==3.3.0
