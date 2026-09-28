@@ -2,11 +2,11 @@
 
 **Estado:** En desarrollo
 **Rama principal:** `main`
-**Inicio:** Sprint 15
+**Inicio:** Sprint 14
 
 ---
 
-## Sprint 15 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
+## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
 
 **Período:** 2026-09-27
 
@@ -20,6 +20,8 @@
 | Workflow `security.yml`: escaneo de imágenes Docker (Trivy) | Completada |
 | `dependabot.yml` (pip, npm, docker, github-actions) | Completada |
 | Escaneo de secretos sobre todo el historial (una sola vez) | Completada — ver hallazgo abajo |
+| Reemplazar la imagen de MinIO en `docker-compose.yml` (`minio/minio` dado de baja) | Completada |
+| Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -82,12 +84,13 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - `pytest` 8.3.4 → 9.x: dependencia solo de test (no llega a producción); major version bump, puede romper config de tests. Sin apuro.
 - `ecdsa` (PYSEC-2026-1325, sin versión con fix — el maintainer no lo va a parchear, es un problema conocido de canal lateral): dependencia transitoria de `python-jose[cryptography]`, pero el proyecto firma JWT con `HS256` (`app/auth/dependencies.py`, `app/auth/router.py` — `jwt.decode(..., algorithms=[settings.jwt_algorithm])`), nunca con `ES256`. El código de `ecdsa` no se ejecuta en ningún camino real de la app — riesgo aceptado, no se persigue un CVE sin fix disponible.
 
-### Problemas abiertos (Sprint 15)
+### Problemas abiertos (Sprint 14)
 
- **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
+- **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
-- **Bump de `fastapi`/`starlette`** para resolver los CVEs de `starlette` — necesita correr toda la suite de tests antes de mergear, no es un cambio aislado.
-- **Migrar `react-router-dom` de v6 a v7** para resolver su CVE de moderate severity — major version, requiere testear todas las rutas del frontend.
+- ~~Bump de `fastapi`/`starlette`~~ — **resuelto**: `fastapi` 0.115.6 → 0.141.1 (PR de Dependabot #32, mergeado) trajo `starlette` a 1.7.0.
+- **Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`vite`/`vitest`/`@vitejs/plugin-react`** (PRs de Dependabot #39, #44, #45, #40, #43, #41) — confirmado que rompe `npm run build` en seco (`react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19). Necesita su propia tarea con testeo real de todas las pantallas con mapas. Incluye migrar `react-router-dom` v6→v7 para resolver su CVE.
+- **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **`github-actions-mutable-action-tag`** (Semgrep, 10 hallazgos en `security.yml` + 7 más en `ci.yml` preexistente): usar `@v4`/`@v5` en vez de un commit SHA fijo es un riesgo real de supply chain (si se compromete el tag, corre código distinto sin que el diff del repo cambie), pero fijar SHAs en ~20 referencias es un cambio de mayor alcance, y tocar `ci.yml` es una decisión aparte de esta rama. Evaluar si vale la pena para acciones oficiales (`actions/checkout`, `actions/setup-python`) vs. de terceros (`gitleaks/gitleaks-action`).
 - **`gha-workflow-env-secret`** (Semgrep, `ci.yml:27`, preexistente): `JWT_SECRET_KEY` está en el `env:` a nivel workflow (visible para todos los jobs) en vez de acotado al job que lo usa. Riesgo bajo porque ya es un secreto de test documentado como "sin acceso a producción", pero es una mejora de higiene simple para una tarea aparte.
 
@@ -98,17 +101,19 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - **`dependabot-missing-cooldown` (4)**: la regla exige literalmente `cooldown.default-days: 7` en cada `package-ecosystem` de `dependabot.yml` — probado en local que `default-days: 5` seguía marcando el hallazgo (el mensaje de la regla lo dice explícito: "wait 7 days"). Se agregó `cooldown: default-days: 7` a los 4 ecosistemas — evita adoptar una versión recién publicada (potencialmente comprometida o rota) antes de que pase una semana.
 - **`github-actions-mutable-action-tag` (10) y `gha-workflow-env-secret` (1)**: quedan como problemas abiertos (ver arriba) — no son arreglos de una línea, ameritan su propia decisión de alcance.
 
----
+#### Segunda tanda de bumps de Dependabot probados y aplicados (Grupo E)
+**Fecha:** 2026-09-28
+**Rama:** `fix/dependencias-pendientes`
 
-## Sprint 16 — Fix crítico: `minio/minio` ya no se puede levantar sin cuenta
+De las PR de Dependabot que quedaban en el "Grupo E" (majors puntuales sin probar), se validaron y aplicaron 5:
 
-**Período:** 2026-09-28
+- **`redis` (cliente Python) 5.2.1 → 8.1.0** (PR #35, `requirements.api.txt` + `requirements.worker.txt`) — salto de 3 versiones mayores. Validado con los 3 tests de `test_celery_integracion.py`, incluido el ciclo completo E2E (encolar → Celery → worker → Redis como result backend).
+- **`weasyprint` 63.1 → 70.0** (PR #28, `requirements.api.txt`) — genera los reportes PDF. Validado: 237 tests de la imagen `api` pasan, incluidos `test_reportes_api.py` y `test_orden_trabajo_pdf_api.py`.
+- **`pyshp` 2.3.1 → 3.1.6** (PR #27, `requirements.api.txt`) — exportación de zonas a Shapefile. Validado con `test_exportacion_api.py` dentro de la misma corrida de 237 tests.
+- **`geotiff` (frontend) 2.1.3 → 3.0.5** (PR #30, `frontend/package.json`) — la única breaking change real de la v3.0.0 es "deferred tag reading" (lectura diferida de tags), que podía afectar `getGeoKeys()`/`getBoundingBox()` en `frontend/src/utils/geotiffLimites.js` de forma silenciosa (esa función tiene un `try/catch` que traga cualquier error y devuelve `null`, así que una regresión no se ve como un crash). `npm run build` + `npm test` no alcanzaban para confirmarlo — se corrió un smoke test aparte con Node contra `tests/fixtures/sentinel_ndvi_test.tif` (el único GeoTIFF real del repo) llamando `fromArrayBuffer` + `getImage().getBoundingBox()/getGeoKeys()` directamente: mismo bbox, mismas claves, objeto plano (no una Promise). Script descartado después de verificar, no se commiteó.
+- **`node` 20-slim → 25-slim** (PR #24, `docker/Dockerfile.frontend`) — validado build + `docker run` real del contenedor (`vite --host` arranca y responde `200`), no solo que compile la imagen.
 
-### Tareas completadas
-
-| Tarea | Estado |
-|---|---|
-| Reemplazar la imagen de MinIO en `docker-compose.yml` | Completada |
+**Sin aplicar del Grupo E:** `osgeo/gdal` (PR #21) — ver "Problemas abiertos" arriba, requiere bumpear `rasterio` también.
 
 #### `docker-compose.yml`: `minio/minio` → `cgr.dev/chainguard/minio`
 **Fecha:** 2026-09-28
@@ -116,7 +121,7 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 
 Al reconstruir el stack desde cero (tras un reinicio de la máquina que limpió todo el estado de Docker), `docker compose up` dejó de poder levantar `minio` — bloqueaba a `api` y `worker` (ambos con `depends_on: minio: condition: service_healthy`), es decir, a cualquiera que clonara el repo hoy y quisiera correr la app.
 
-**Causa raíz (no es un problema de esta máquina):** MinIO dio de baja `minio/minio` de Docker Hub el 2026-09-11, y desde el 2026-09-24 su alternativa (`quay.io/minio/minio`) exige login incluso en tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, 401) — empuja a todos hacia su producto pago (AIStor). Confirmado con la API pública de Docker Hub (`GET /v2/repositories/minio/minio/` → `object not found`) y con varias fuentes externas (ver detalle completo en el hallazgo del Sprint 15, rama `feat/ci-seguridad-sast-sca`, todavía sin mergear).
+**Causa raíz (no es un problema de esta máquina):** MinIO dio de baja `minio/minio` de Docker Hub el 2026-09-11, y desde el 2026-09-24 su alternativa (`quay.io/minio/minio`) exige login incluso en tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, 401) — empuja a todos hacia su producto pago (AIStor). Confirmado con la API pública de Docker Hub (`GET /v2/repositories/minio/minio/` → `object not found`) y con varias fuentes externas (ver detalle completo en el hallazgo del Sprint 14, rama `feat/ci-seguridad-sast-sca`, todavía sin mergear).
 
 **Decisiones tomadas:**
 - Se eligió `cgr.dev/chainguard/minio:latest` sobre las otras alternativas evaluadas (SeaweedFS/Garage, LocalStack, compilar desde fuente): mismo binario/API de MinIO (no hay que cambiar nada del código de `app`/`workers` que ya habla el protocolo S3), gratis, sin login, y activamente actualizado (`RELEASE.2026-09-22T19-25-18Z` al momento de probarlo, no una imagen congelada).
