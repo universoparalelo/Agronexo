@@ -4,12 +4,12 @@ redis==5.2.1
 
 # Configuración compartida con app/
 pydantic==2.10.4
-pydantic-settings==2.7.0
+pydantic-settings==2.15.0
 
 # Base de datos (para escribir resultados)
-sqlalchemy==2.0.36
+sqlalchemy==2.0.54
 geoalchemy2==0.15.2
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.13
 
 # MinIO
 minio==7.2.11
@@ -19,10 +19,10 @@ rasterio==1.3.11
 
 # GIS vectorial
 geopandas==1.0.1
-shapely==2.0.6
+shapely==2.1.2
 
 # Procesamiento de imágenes
-scikit-image==0.24.0
+scikit-image==0.26.0
 
 # Tests
 pytest==9.1.1

@@ -1,17 +1,17 @@
 # Web framework
-fastapi==0.115.6
+fastapi==0.141.1
 uvicorn[standard]==0.32.1
 
 # Validación y configuración
 pydantic==2.10.4
-pydantic-settings==2.7.0
+pydantic-settings==2.15.0
 
 # Base de datos
-sqlalchemy==2.0.36
+sqlalchemy==2.0.54
 geoalchemy2==0.15.2
 asyncpg==0.30.0
-alembic==1.14.0
-psycopg2-binary==2.9.10
+alembic==1.20.0
+psycopg2-binary==2.9.13
 
 # Auth
 python-jose[cryptography]==3.3.0
@@ -38,7 +38,7 @@ pyshp==2.3.1
 python-multipart==0.0.32
 
 # GIS (validación de geometrías en schemas Pydantic)
-shapely==2.0.6
+shapely==2.1.2
 
 # Utils
 httpx==0.28.1
