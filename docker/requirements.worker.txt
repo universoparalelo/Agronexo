@@ -7,7 +7,7 @@ pydantic==2.10.4
 pydantic-settings==2.7.0
 
 # Base de datos (para escribir resultados)
-sqlalchemy==2.0.36
+sqlalchemy==2.0.54
 geoalchemy2==0.15.2
 psycopg2-binary==2.9.10
 
