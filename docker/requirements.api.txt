@@ -32,7 +32,7 @@ pillow==10.4.0
 
 # Exportación de zonas (GeoJSON / Shapefile) — pyshp es Python puro, sin
 # GDAL/Fiona (ver app/diagnostico/service.py: FastAPI no lleva GIS pesado)
-pyshp==2.3.1
+pyshp==3.1.6
 
 # Uploads
 python-multipart==0.0.32
