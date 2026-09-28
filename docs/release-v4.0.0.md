@@ -84,15 +84,54 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - `pytest` 8.3.4 → 9.x: dependencia solo de test (no llega a producción); major version bump, puede romper config de tests. Sin apuro.
 - `ecdsa` (PYSEC-2026-1325, sin versión con fix — el maintainer no lo va a parchear, es un problema conocido de canal lateral): dependencia transitoria de `python-jose[cryptography]`, pero el proyecto firma JWT con `HS256` (`app/auth/dependencies.py`, `app/auth/router.py` — `jwt.decode(..., algorithms=[settings.jwt_algorithm])`), nunca con `ES256`. El código de `ecdsa` no se ejecuta en ningún camino real de la app — riesgo aceptado, no se persigue un CVE sin fix disponible.
 
+#### Pinear las GitHub Actions a un commit SHA + acotar `JWT_SECRET_KEY` a los jobs que lo usan
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+Resolvió los últimos 2 grupos de hallazgos de Semgrep (17 → 0):
+
+- **`github-actions-mutable-action-tag` (17)**: las 4 acciones usadas (`actions/checkout`, `actions/setup-python`, `actions/setup-node`, `gitleaks/gitleaks-action`) se resolvieron a su commit SHA exacto vía `gh api repos/<owner>/<repo>/git/refs/tags/<tag>` y se pinearon en `ci.yml` y `security.yml`, con el tag legible como comentario (`@11d5960a...262 # v4.4.0`). `dependabot.yml` (ecosistema `github-actions`, ya agregado en este sprint) va a mantener esos SHA actualizados solo.
+- **`gha-workflow-env-secret` (1, `ci.yml:27`)**: `JWT_SECRET_KEY` salió del `env:` a nivel workflow (donde lo veían los 3 jobs, incluido `build-frontend` que ni lo usa) y se movió al `env:` de cada job que sí lo necesita — `test-api` sigue usando `secrets.CI_JWT_SECRET_KEY` (con el mismo fallback de siempre) porque ahí sí se firman/verifican JWTs de verdad; `test-gis` pasó a un string fijo sin referenciar el secret real, porque solo necesita que el campo requerido de `Settings` no esté vacío, nunca firma nada.
+
+Verificado con Semgrep local: `Ran 350 rules on 196 files: 0 findings` (antes: 25). Los 3 jobs de `ci.yml` no se tocaron en su lógica, solo el `env:`.
+
+#### Bump de `pytest` 8.3.4 → 9.1.1
+**Fecha:** 2026-09-27
+**Rama:** `feat/ci-seguridad-sast-sca`
+
+Resuelve el hallazgo PYSEC-2026-1845 de `pip-audit`. Es dependencia solo de test (no llega a producción), pero igual se corrió la suite completa antes de dar el bump por bueno: **313 tests pasan** (237 en la imagen `api`, 25 archivos `tests/test_*.py` menos `test_celery_integracion.py` que necesita el stack completo con MinIO — ver hallazgo abajo; 76 en la imagen `worker`, los que importan `rasterio`/`numpy`/`geopandas`). Sin cambios de código — pytest 9 no rompió nada de lo que usa este repo.
+
+**Nota sobre cómo se corrió:** las imágenes se reconstruyeron desde cero (`docker compose build`) porque un reinicio de emergencia de la máquina había limpiado todo el estado de Docker Desktop (cero imágenes, contenedores y volúmenes). `docker compose up` no pudo levantar `api`/`worker` completos porque ambos tienen `depends_on: minio: condition: service_healthy` y MinIO no arranca (ver hallazgo siguiente) — se corrieron los tests con `docker run` directo contra la red de Compose (`--network agronexo_default`), sin pasar por el chequeo de salud de `minio`.
+
+#### Hallazgo — `minio/minio` ya no se puede bajar sin cuenta (Docker Hub y quay.io)
+**Fecha:** 2026-09-27
+
+Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error response from daemon: pull access denied for minio/minio, repository does not exist or may require 'docker login'`. No es un problema de esta máquina ni de este repo — MinIO dejó de publicar `minio/minio` en Docker Hub, y su alternativa (`quay.io/minio/minio`) ahora exige autenticación incluso para tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, mismo 401). Confirmado también vía la API pública de Docker Hub: `GET /v2/repositories/minio/minio/` → `{"message":"object not found"}`.
+
+**Impacto:** cualquiera que clone el repo hoy y corra `docker compose up` desde cero no puede levantar `api`, `worker` ni `frontend` con conexión a MinIO real — todos dependen de `minio: condition: service_healthy`. El único workaround usado en este sprint (`docker run` directo contra la red de Compose) evita el problema para correr tests, pero no es una solución para el flujo normal de desarrollo (`docker compose up`).
+
+**El CI de GitHub Actions no se ve afectado** (verificado, no es una suposición): ni `ci.yml` ni `security.yml` dependen de `docker compose` ni de la imagen de MinIO. `test-api`/`test-gis` levantan Postgres/Redis como `services:` nativos de GitHub Actions e instalan las dependencias con `pip install` directo en el runner; Trivy en `security.yml` hace `docker build` de cada Dockerfile individual, que tampoco usa MinIO como base. El único test que necesita MinIO real (`test_celery_integracion.py`, el E2E) ya estaba excluido de CI desde antes de este sprint — solo corre manualmente con `docker compose exec worker`.
+
+**Investigación de alternativas gratis (2026-09-27):** confirmado con múltiples fuentes independientes, no es un problema de esta máquina ni transitorio:
+- El 11 de septiembre de 2026 MinIO borró `minio/minio` y `minio/mc` de Docker Hub por completo.
+- Desde el 24 de septiembre, `quay.io/minio/minio` también rechaza pulls anónimos — probado localmente contra un tag viejo (`RELEASE.2025-04-22T22-12-26Z`), mismo 401. Ni siquiera el último release "congelado" antes del cambio (`RELEASE.2025-09-07`) queda accesible sin cuenta.
+- Es una decisión de negocio de MinIO: empujar a todos hacia su producto pago (AIStor), discontinuando las imágenes gratis de la edición community.
+- **Alternativa gratis probada y funcional:** `cgr.dev/chainguard/minio:latest` — se puede bajar sin login, corrida localmente respondió `200` en `/minio/health/live` con una versión reciente (`RELEASE.2026-09-22T19-25-18Z`), no una imagen vieja congelada. Es el mismo binario de MinIO (misma API S3), solo cambia el registro/imagen. Contra: es una imagen "distroless" (sin shell adentro, no se puede hacer `docker exec -it ... sh` para debuggear).
+- Otras alternativas evaluadas pero no probadas: SeaweedFS/Garage (S3-compatible pero no es MinIO, cambio de producto), LocalStack (pensado para mockear S3 en tests, no como backend persistente de desarrollo), compilar MinIO desde su fuente AGPLv3 en GitHub (gratis pero con mantenimiento propio).
+- Fuentes: [Minimus — MinIO Docker Image Changes](https://www.minimus.io/post/minio-docker-image-changes-how-to-find-a-secure-minio-alternative), [bex.co — MinIO Vanished From Docker Hub](https://bex.co/blog/2026/09/25/minio-docker-hub-removal-quay-repoint), [byteiota — MinIO Is Gone From Docker Hub and Quay.io](https://byteiota.com/minio-docker-hub-quay-anonymous-pull-fix/), [GitHub — CloudTAK#1803](https://github.com/dfpc-coe/CloudTAK/issues/1803).
+
+**Sin resolver a propósito:** no se tocó `docker-compose.yml` — el cambio de imagen (a `cgr.dev/chainguard/minio` o cualquier otra) es una decisión de equipo que afecta el entorno de desarrollo de todos, no solo a esta rama de CI de seguridad. Queda como problema abierto de mayor prioridad que el resto de este sprint, con una solución concreta ya investigada y verificada para cuando se decida aplicarla.
+
 ### Problemas abiertos (Sprint 14)
 
+- ~~`minio/minio` no se puede bajar sin cuenta~~ — **resuelto**, ver "`docker-compose.yml`: `minio/minio` → `cgr.dev/chainguard/minio`" más abajo.
+- ~~Bump de `fastapi`/`starlette`~~ — **resuelto**: `fastapi` 0.115.6 → 0.141.1 (PR de Dependabot #32, mergeado) trajo `starlette` a 1.7.0.
+- ~~`github-actions-mutable-action-tag` / `gha-workflow-env-secret`~~ — **resueltos** por el pinning a SHA y el scoping de `JWT_SECRET_KEY` de arriba (Semgrep: 0 findings).
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
-- ~~Bump de `fastapi`/`starlette`~~ — **resuelto**: `fastapi` 0.115.6 → 0.141.1 (PR de Dependabot #32, mergeado) trajo `starlette` a 1.7.0.
 - **Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`vite`/`vitest`/`@vitejs/plugin-react`** (PRs de Dependabot #39, #44, #45, #40, #43, #41) — confirmado que rompe `npm run build` en seco (`react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19). Necesita su propia tarea con testeo real de todas las pantallas con mapas. Incluye migrar `react-router-dom` v6→v7 para resolver su CVE.
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
-- **`github-actions-mutable-action-tag`** (Semgrep, 10 hallazgos en `security.yml` + 7 más en `ci.yml` preexistente): usar `@v4`/`@v5` en vez de un commit SHA fijo es un riesgo real de supply chain (si se compromete el tag, corre código distinto sin que el diff del repo cambie), pero fijar SHAs en ~20 referencias es un cambio de mayor alcance, y tocar `ci.yml` es una decisión aparte de esta rama. Evaluar si vale la pena para acciones oficiales (`actions/checkout`, `actions/setup-python`) vs. de terceros (`gitleaks/gitleaks-action`).
-- **`gha-workflow-env-secret`** (Semgrep, `ci.yml:27`, preexistente): `JWT_SECRET_KEY` está en el `env:` a nivel workflow (visible para todos los jobs) en vez de acotado al job que lo usa. Riesgo bajo porque ya es un secreto de test documentado como "sin acceso a producción", pero es una mejora de higiene simple para una tarea aparte.
+- **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
@@ -100,6 +139,21 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - **`dynamic-urllib-use-detected` (3)**: mismo falso positivo que el de Bandit (`workers/gis/satelital_catalogo.py`, más 2 scripts de POC — `scripts/descargar_sentinel2_real.py`, `scripts/poc_satelital_earthsearch.py`) — el scheme+host de la URL siempre es la constante fija de Earth Search, solo cambia el path/query. Resuelto con `# nosemgrep: dynamic-urllib-use-detected` + comentario, en los 3 archivos. Tests de `test_satelital_catalogo.py` (6) siguen pasando.
 - **`dependabot-missing-cooldown` (4)**: la regla exige literalmente `cooldown.default-days: 7` en cada `package-ecosystem` de `dependabot.yml` — probado en local que `default-days: 5` seguía marcando el hallazgo (el mensaje de la regla lo dice explícito: "wait 7 days"). Se agregó `cooldown: default-days: 7` a los 4 ecosistemas — evita adoptar una versión recién publicada (potencialmente comprometida o rota) antes de que pase una semana.
 - **`github-actions-mutable-action-tag` (10) y `gha-workflow-env-secret` (1)**: quedan como problemas abiertos (ver arriba) — no son arreglos de una línea, ameritan su propia decisión de alcance.
+
+#### Primera tanda de Dependabot (25 PR) — triage y merge del grupo seguro
+**Fecha:** 2026-09-28
+
+Al agregar `dependabot.yml` en este sprint, Dependabot escaneó todo el repo de una sola vez y abrió **25 PR** (uno por dependencia desactualizada, topeado en 10 para `pip` y `npm` por `open-pull-requests-limit`). Se armó un triage por riesgo real (no solo por semver) mirando el estado de CI de cada uno:
+
+- **Grupo A — mergeados sin objeción** (parche/minor, CI limpio salvo los 3 hallazgos esperados de Semgrep/pip-audit/npm-audit que no bloquean): `alembic` #38, `shapely` #37, `scikit-image` #36, `psycopg2-binary` #33, `pydantic-settings` #31, `sqlalchemy` #29, `axios` #34, `@geoman-io/leaflet-geoman-free` #42.
+- **Grupo B — mergeado, prioridad**: `fastapi` 0.115.6 → 0.141.1 #32. Trajo `starlette` a 1.7.0, **resolviendo el CVE de `starlette` que quedaba como problema abierto** (verificado: `pip-audit` ya no lo lista). 237 tests de la imagen `api` siguen pasando.
+- **Grupo C — sin mergear a propósito**: `actions/checkout` #26, `actions/setup-node` #25, `actions/setup-python` #23, `gitleaks/gitleaks-action` #22 (bumps de v4/v5/v2 a tags mayores más nuevos). Mergearlos ahora pisaría el pinning a SHA hecho en este mismo sprint (ver más arriba) — hay que esperar a que ese trabajo llegue a `main` y dejar que Dependabot regenere los bumps correctos sobre los SHA.
+- **Grupo D — no mergear individual, ya rompió CI**: `react` #45, `react-dom` #39, `react-leaflet` #44, `vite` #40, `vitest` #43, `@vitejs/plugin-react` #41. Confirmado con el log real de CI: `react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19 — el PR de `react`/`react-dom` rompe `npm run build` en seco. Es un upgrade coordinado (los 6 juntos) que necesita su propia tarea con testeo real de todas las pantallas con mapas, no PRs individuales de Dependabot.
+- **Grupo E — majors puntuales, sin mergear, necesitan prueba**: `osgeo/gdal` #21 (**ya rompió** el build de `worker` — `pip install` falla contra el GDAL nuevo), `redis` (cliente Python) #35, `weasyprint` #28 (genera los reportes PDF, es funcionalidad core), `pyshp` #27, `geotiff` (frontend) #30, `node` 20→25-slim #24.
+
+**Conflicto entre PRs de Dependabot al mergear varias seguidas:** mergear 4 PRs de `pip` que tocan `docker/requirements.api.txt` (`alembic`, `shapely`, `scikit-image`, más otra) dejó a `psycopg2-binary` #33 en conflicto (`mergeable: CONFLICTING`) porque el diff de Dependabot no se recalcula solo al mergear una PR hermana que cambió una línea cercana en el mismo archivo. Se resolvió pidiéndole a Dependabot que recalcule el diff (comentario `@dependabot rebase` en el PR) en vez de resolver el conflicto a mano.
+
+**Nota — merge de PRs bloqueado para Claude Code:** el modo automático de la herramienta rechaza explícitamente `gh pr merge` ("Merge Without Review"), incluso pedido de forma expresa por el usuario. Los 9 merges del grupo A+B los hizo el usuario manualmente desde GitHub siguiendo el orden sugerido.
 
 #### Segunda tanda de bumps de Dependabot probados y aplicados (Grupo E)
 **Fecha:** 2026-09-28
