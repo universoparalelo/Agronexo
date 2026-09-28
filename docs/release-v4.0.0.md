@@ -2,11 +2,11 @@
 
 **Estado:** En desarrollo
 **Rama principal:** `main`
-**Inicio:** Sprint 15
+**Inicio:** Sprint 14
 
 ---
 
-## Sprint 15 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
+## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
 
 **Período:** 2026-09-27
 
@@ -120,7 +120,7 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 
 **Sin resolver a propósito:** no se tocó `docker-compose.yml` — el cambio de imagen (a `cgr.dev/chainguard/minio` o cualquier otra) es una decisión de equipo que afecta el entorno de desarrollo de todos, no solo a esta rama de CI de seguridad. Queda como problema abierto de mayor prioridad que el resto de este sprint, con una solución concreta ya investigada y verificada para cuando se decida aplicarla.
 
-### Problemas abiertos (Sprint 15)
+### Problemas abiertos (Sprint 14)
 
 - **`minio/minio` no se puede bajar sin cuenta** (ver hallazgo arriba) — bloquea `docker compose up` desde cero para cualquiera del equipo (el CI no se ve afectado). Solución ya investigada y verificada (`cgr.dev/chainguard/minio:latest`, gratis, sin login), falta decidir en equipo si se aplica y aplicarla en `docker-compose.yml`. Prioridad alta, afecta a todos, no solo a esta rama.
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
