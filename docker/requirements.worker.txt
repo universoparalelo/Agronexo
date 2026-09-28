@@ -1,6 +1,6 @@
 # Cola de tareas
 celery==5.4.0
-redis==5.2.1
+redis==8.1.0
 
 # Configuración compartida con app/
 pydantic==2.10.4
