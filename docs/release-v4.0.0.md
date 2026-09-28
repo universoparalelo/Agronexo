@@ -20,6 +20,8 @@
 | Workflow `security.yml`: escaneo de imágenes Docker (Trivy) | Completada |
 | `dependabot.yml` (pip, npm, docker, github-actions) | Completada |
 | Escaneo de secretos sobre todo el historial (una sola vez) | Completada — ver hallazgo abajo |
+| Reemplazar la imagen de MinIO en `docker-compose.yml` (`minio/minio` dado de baja) | Completada |
+| Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -122,10 +124,13 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 
 ### Problemas abiertos (Sprint 14)
 
-- **`minio/minio` no se puede bajar sin cuenta** (ver hallazgo arriba) — bloquea `docker compose up` desde cero para cualquiera del equipo (el CI no se ve afectado). Solución ya investigada y verificada (`cgr.dev/chainguard/minio:latest`, gratis, sin login), falta decidir en equipo si se aplica y aplicarla en `docker-compose.yml`. Prioridad alta, afecta a todos, no solo a esta rama.
+- ~~`minio/minio` no se puede bajar sin cuenta~~ — **resuelto**, ver "`docker-compose.yml`: `minio/minio` → `cgr.dev/chainguard/minio`" más abajo.
+- ~~Bump de `fastapi`/`starlette`~~ — **resuelto**: `fastapi` 0.115.6 → 0.141.1 (PR de Dependabot #32, mergeado) trajo `starlette` a 1.7.0.
+- ~~`github-actions-mutable-action-tag` / `gha-workflow-env-secret`~~ — **resueltos** por el pinning a SHA y el scoping de `JWT_SECRET_KEY` de arriba (Semgrep: 0 findings).
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
-- **Migrar `react-router-dom` de v6 a v7** para resolver su CVE de moderate severity — major version, requiere testear todas las rutas del frontend. Ver detalle en la sección de Dependabot abajo.
+- **Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`vite`/`vitest`/`@vitejs/plugin-react`** (PRs de Dependabot #39, #44, #45, #40, #43, #41) — confirmado que rompe `npm run build` en seco (`react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19). Necesita su propia tarea con testeo real de todas las pantallas con mapas. Incluye migrar `react-router-dom` v6→v7 para resolver su CVE.
+- **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
@@ -149,3 +154,38 @@ Al agregar `dependabot.yml` en este sprint, Dependabot escaneó todo el repo de 
 **Conflicto entre PRs de Dependabot al mergear varias seguidas:** mergear 4 PRs de `pip` que tocan `docker/requirements.api.txt` (`alembic`, `shapely`, `scikit-image`, más otra) dejó a `psycopg2-binary` #33 en conflicto (`mergeable: CONFLICTING`) porque el diff de Dependabot no se recalcula solo al mergear una PR hermana que cambió una línea cercana en el mismo archivo. Se resolvió pidiéndole a Dependabot que recalcule el diff (comentario `@dependabot rebase` en el PR) en vez de resolver el conflicto a mano.
 
 **Nota — merge de PRs bloqueado para Claude Code:** el modo automático de la herramienta rechaza explícitamente `gh pr merge` ("Merge Without Review"), incluso pedido de forma expresa por el usuario. Los 9 merges del grupo A+B los hizo el usuario manualmente desde GitHub siguiendo el orden sugerido.
+
+#### Segunda tanda de bumps de Dependabot probados y aplicados (Grupo E)
+**Fecha:** 2026-09-28
+**Rama:** `fix/dependencias-pendientes`
+
+De las PR de Dependabot que quedaban en el "Grupo E" (majors puntuales sin probar), se validaron y aplicaron 5:
+
+- **`redis` (cliente Python) 5.2.1 → 8.1.0** (PR #35, `requirements.api.txt` + `requirements.worker.txt`) — salto de 3 versiones mayores. Validado con los 3 tests de `test_celery_integracion.py`, incluido el ciclo completo E2E (encolar → Celery → worker → Redis como result backend).
+- **`weasyprint` 63.1 → 70.0** (PR #28, `requirements.api.txt`) — genera los reportes PDF. Validado: 237 tests de la imagen `api` pasan, incluidos `test_reportes_api.py` y `test_orden_trabajo_pdf_api.py`.
+- **`pyshp` 2.3.1 → 3.1.6** (PR #27, `requirements.api.txt`) — exportación de zonas a Shapefile. Validado con `test_exportacion_api.py` dentro de la misma corrida de 237 tests.
+- **`geotiff` (frontend) 2.1.3 → 3.0.5** (PR #30, `frontend/package.json`) — la única breaking change real de la v3.0.0 es "deferred tag reading" (lectura diferida de tags), que podía afectar `getGeoKeys()`/`getBoundingBox()` en `frontend/src/utils/geotiffLimites.js` de forma silenciosa (esa función tiene un `try/catch` que traga cualquier error y devuelve `null`, así que una regresión no se ve como un crash). `npm run build` + `npm test` no alcanzaban para confirmarlo — se corrió un smoke test aparte con Node contra `tests/fixtures/sentinel_ndvi_test.tif` (el único GeoTIFF real del repo) llamando `fromArrayBuffer` + `getImage().getBoundingBox()/getGeoKeys()` directamente: mismo bbox, mismas claves, objeto plano (no una Promise). Script descartado después de verificar, no se commiteó.
+- **`node` 20-slim → 25-slim** (PR #24, `docker/Dockerfile.frontend`) — validado build + `docker run` real del contenedor (`vite --host` arranca y responde `200`), no solo que compile la imagen.
+
+**Sin aplicar del Grupo E:** `osgeo/gdal` (PR #21) — ver "Problemas abiertos" arriba, requiere bumpear `rasterio` también.
+
+#### `docker-compose.yml`: `minio/minio` → `cgr.dev/chainguard/minio`
+**Fecha:** 2026-09-28
+**Rama:** `fix/minio-imagen-chainguard`
+
+Al reconstruir el stack desde cero (tras un reinicio de la máquina que limpió todo el estado de Docker), `docker compose up` dejó de poder levantar `minio` — bloqueaba a `api` y `worker` (ambos con `depends_on: minio: condition: service_healthy`), es decir, a cualquiera que clonara el repo hoy y quisiera correr la app.
+
+**Causa raíz (no es un problema de esta máquina):** MinIO dio de baja `minio/minio` de Docker Hub el 2026-09-11, y desde el 2026-09-24 su alternativa (`quay.io/minio/minio`) exige login incluso en tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, 401) — empuja a todos hacia su producto pago (AIStor). Confirmado con la API pública de Docker Hub (`GET /v2/repositories/minio/minio/` → `object not found`) y con varias fuentes externas (ver detalle completo en el hallazgo del Sprint 14, rama `feat/ci-seguridad-sast-sca`, todavía sin mergear).
+
+**Decisiones tomadas:**
+- Se eligió `cgr.dev/chainguard/minio:latest` sobre las otras alternativas evaluadas (SeaweedFS/Garage, LocalStack, compilar desde fuente): mismo binario/API de MinIO (no hay que cambiar nada del código de `app`/`workers` que ya habla el protocolo S3), gratis, sin login, y activamente actualizado (`RELEASE.2026-09-22T19-25-18Z` al momento de probarlo, no una imagen congelada).
+- El healthcheck (`mc ready local`) sigue funcionando sin cambios — la imagen de Chainguard también trae el cliente `mc`.
+- Único trade-off conocido: es una imagen "distroless" (sin shell), así que `docker exec -it agronexo-minio-1 sh` para debuggear no va a funcionar. No se usó nunca en este proyecto, así que no es una pérdida real hoy.
+
+**Verificación (stack completo desde cero, no solo el contenedor de MinIO):**
+- `docker compose up -d` — los 6 servicios (`db`, `redis`, `minio`, `api`, `worker`, `frontend`) llegan a `healthy`/`running` sin intervención manual.
+- `GET /minio/health/live` → `200`, consola en `:9001` → `200`.
+- `GET /api/v1/health` y `/api/v1/health/db` → `ok`.
+- `tests/test_celery_integracion.py` (los 3 tests, incluido el ciclo completo E2E que sube un archivo real a MinIO y lo procesa vía Celery+worker — antes solo se podía correr con el stack completo levantado) — **los 3 pasan**.
+
+**Resultado:** cualquiera que clone el repo hoy y corra `docker compose up -d --build` puede levantar la app completa de nuevo, sin crear ninguna cuenta.
