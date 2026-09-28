@@ -2,11 +2,11 @@
 
 **Estado:** En desarrollo
 **Rama principal:** `main`
-**Inicio:** Sprint 15
+**Inicio:** Sprint 14
 
 ---
 
-## Sprint 15 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
+## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
 
 **Período:** 2026-09-27
 
@@ -20,6 +20,7 @@
 | Workflow `security.yml`: escaneo de imágenes Docker (Trivy) | Completada |
 | `dependabot.yml` (pip, npm, docker, github-actions) | Completada |
 | Escaneo de secretos sobre todo el historial (una sola vez) | Completada — ver hallazgo abajo |
+| Reemplazar la imagen de MinIO en `docker-compose.yml` (`minio/minio` dado de baja) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -82,7 +83,7 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - `pytest` 8.3.4 → 9.x: dependencia solo de test (no llega a producción); major version bump, puede romper config de tests. Sin apuro.
 - `ecdsa` (PYSEC-2026-1325, sin versión con fix — el maintainer no lo va a parchear, es un problema conocido de canal lateral): dependencia transitoria de `python-jose[cryptography]`, pero el proyecto firma JWT con `HS256` (`app/auth/dependencies.py`, `app/auth/router.py` — `jwt.decode(..., algorithms=[settings.jwt_algorithm])`), nunca con `ES256`. El código de `ecdsa` no se ejecuta en ningún camino real de la app — riesgo aceptado, no se persigue un CVE sin fix disponible.
 
-### Problemas abiertos (Sprint 15)
+### Problemas abiertos (Sprint 14)
 
  **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
@@ -98,25 +99,13 @@ Con el workflow ya corriendo bien (sin bugs de config), tocaba decidir qué hace
 - **`dependabot-missing-cooldown` (4)**: la regla exige literalmente `cooldown.default-days: 7` en cada `package-ecosystem` de `dependabot.yml` — probado en local que `default-days: 5` seguía marcando el hallazgo (el mensaje de la regla lo dice explícito: "wait 7 days"). Se agregó `cooldown: default-days: 7` a los 4 ecosistemas — evita adoptar una versión recién publicada (potencialmente comprometida o rota) antes de que pase una semana.
 - **`github-actions-mutable-action-tag` (10) y `gha-workflow-env-secret` (1)**: quedan como problemas abiertos (ver arriba) — no son arreglos de una línea, ameritan su propia decisión de alcance.
 
----
-
-## Sprint 16 — Fix crítico: `minio/minio` ya no se puede levantar sin cuenta
-
-**Período:** 2026-09-28
-
-### Tareas completadas
-
-| Tarea | Estado |
-|---|---|
-| Reemplazar la imagen de MinIO en `docker-compose.yml` | Completada |
-
 #### `docker-compose.yml`: `minio/minio` → `cgr.dev/chainguard/minio`
 **Fecha:** 2026-09-28
 **Rama:** `fix/minio-imagen-chainguard`
 
 Al reconstruir el stack desde cero (tras un reinicio de la máquina que limpió todo el estado de Docker), `docker compose up` dejó de poder levantar `minio` — bloqueaba a `api` y `worker` (ambos con `depends_on: minio: condition: service_healthy`), es decir, a cualquiera que clonara el repo hoy y quisiera correr la app.
 
-**Causa raíz (no es un problema de esta máquina):** MinIO dio de baja `minio/minio` de Docker Hub el 2026-09-11, y desde el 2026-09-24 su alternativa (`quay.io/minio/minio`) exige login incluso en tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, 401) — empuja a todos hacia su producto pago (AIStor). Confirmado con la API pública de Docker Hub (`GET /v2/repositories/minio/minio/` → `object not found`) y con varias fuentes externas (ver detalle completo en el hallazgo del Sprint 15, rama `feat/ci-seguridad-sast-sca`, todavía sin mergear).
+**Causa raíz (no es un problema de esta máquina):** MinIO dio de baja `minio/minio` de Docker Hub el 2026-09-11, y desde el 2026-09-24 su alternativa (`quay.io/minio/minio`) exige login incluso en tags viejos (`RELEASE.2025-04-22T22-12-26Z` probado, 401) — empuja a todos hacia su producto pago (AIStor). Confirmado con la API pública de Docker Hub (`GET /v2/repositories/minio/minio/` → `object not found`) y con varias fuentes externas (ver detalle completo en el hallazgo del Sprint 14, rama `feat/ci-seguridad-sast-sca`, todavía sin mergear).
 
 **Decisiones tomadas:**
 - Se eligió `cgr.dev/chainguard/minio:latest` sobre las otras alternativas evaluadas (SeaweedFS/Garage, LocalStack, compilar desde fuente): mismo binario/API de MinIO (no hay que cambiar nada del código de `app`/`workers` que ya habla el protocolo S3), gratis, sin login, y activamente actualizado (`RELEASE.2026-09-22T19-25-18Z` al momento de probarlo, no una imagen congelada).
