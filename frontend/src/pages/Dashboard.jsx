@@ -260,6 +260,18 @@ function AnalisisMap({ loteId, vueloId, indice, limite, loteAreaHa, onCompletado
       </p>
     )
   }
+  // El análisis ya terminó (estado='completado') pero el GeoJSON resumido
+  // (absorber=true) todavía no llegó — es una vista derivada que se genera
+  // en el momento, no una re-ejecución del análisis, así que no corresponde
+  // mostrar la barra de progreso del procesamiento original.
+  if (estadoActual === 'completado' && !geojson) {
+    return (
+      <div className="diagnostico-loading">
+        <span className="diagnostico-spinner" />
+        <p>Generando vista del mapa...</p>
+      </div>
+    )
+  }
   return (
     <div style={{ padding: '1rem' }}>
       <BarraProgreso progreso={estado?.progreso ?? 0} mensaje={estado?.mensaje} estado={estadoActual} />

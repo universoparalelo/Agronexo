@@ -24,6 +24,7 @@
 | Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
 | HU-R4-01 — fix IDOR en endpoints de índices adicionales del vuelo | Completada |
 | Upgrade `react`/`react-dom` 19, `react-leaflet` 5, `react-router-dom` 7 | Completada |
+| Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -229,3 +230,13 @@ Antes de tocar código se revisaron los changelogs reales contra el uso concreto
 - Imagen Docker del frontend reconstruida (`docker compose build frontend`) para tomar las versiones nuevas — `node_modules` no está bind-mounteado en `docker-compose.yml`, así que un `npm install` en el host no alcanza para probar contra el contenedor real.
 - Recorrido manual en el browser pane con el stack completo: login → dashboard → `/lotes` → `/lotes/{id}` → `/lotes/{id}/vuelos/{id}` (rutas con parámetros dinámicos, todas con `useNavigate`/`useParams`/`Link`) — sin errores de consola.
 - Los 3 patrones de uso de `react-leaflet` probados contra datos reales: mapa de zonas NDVI coloreado (`MapaZonas`), mapa de diagnóstico con color por severidad y redibujo de la capa `GeoJSON` al cambiar de tab (mismo componente, sin remount manual), y dibujo de polígono interactivo con `@geoman-io/leaflet-geoman-free` (`MapaDibujoLote`, modal "Nuevo lote") — cálculo de área en vivo correcto (41.42 ha sobre el polígono dibujado). Los tres, sin errores de consola.
+
+#### Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard
+**Fecha:** 2026-09-30
+**Rama:** `feat/upgrade-react19-leaflet-router`
+
+Encontrado al probar el upgrade de React contra datos reales, no causado por él — el widget "Vista geoespacial" del Dashboard (`AnalisisMap` en `frontend/src/pages/Dashboard.jsx`) pide el GeoJSON resumido del vuelo con `?absorber=true` (zonas chicas combinadas con la vecina, para una vista de vistazo — ver `useVueloProgreso.js`). Mientras ese cómputo geométrico corre (puede tardar bastante en un lote real grande, ver hallazgo del Sprint 14 sobre polígonos con muchos vértices), el componente caía en el mismo branch que muestra la barra de progreso del procesamiento original con el vuelo ya en `estado='completado'`, mostrando "Procesando imagen... 0%" — sugiere que se está reanalizando desde cero cuando en realidad el análisis ya terminó y solo falta generar la vista resumida.
+
+**Fix:** nuevo branch explícito para `estadoActual === 'completado' && !geojson` que muestra "Generando vista del mapa..." con el mismo spinner que ya usa la pestaña Diagnóstico (`.diagnostico-loading`/`.diagnostico-spinner`, reusado en vez de duplicar CSS), en lugar de la `BarraProgreso` con porcentaje falso.
+
+**Verificación:** confirmado en el browser pane que el mensaje nuevo aparece mientras el fetch está en curso; el spinner se confirmó en el DOM (`getComputedStyle`) porque el pane tuvo un glitch de captura de screenshot en el momento de probar. Sin errores de consola.
