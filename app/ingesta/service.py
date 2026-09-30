@@ -43,6 +43,7 @@ async def crear_lote_y_vuelo_desde_geotiff(
         fecha_vuelo=datetime.now(timezone.utc),
         estadio_fenologico=estadio_fenologico,
         estado=EstadoVueloEnum.pendiente,
+        subido_por_id=usuario_id,
     )
     db.add(vuelo)
     await db.flush()
@@ -101,6 +102,7 @@ async def crear_vuelo_desde_upload(
         fecha_vuelo=fecha_vuelo,
         estadio_fenologico=estadio_fenologico,
         estado=EstadoVueloEnum.pendiente,
+        subido_por_id=usuario_id,
     )
     db.add(vuelo)
     await db.flush()
@@ -187,6 +189,7 @@ async def crear_vuelo_desde_satelite(
         fecha_vuelo=fecha_vuelo,
         estadio_fenologico=estadio_fenologico,
         estado=EstadoVueloEnum.pendiente,
+        subido_por_id=usuario_id,
     )
     db.add(vuelo)
     await db.flush()

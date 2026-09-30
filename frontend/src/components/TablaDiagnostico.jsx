@@ -117,6 +117,7 @@ export default function TablaDiagnostico({
                 })}
               </span>
             )}
+            {metadata.motor_version && ` · motor de reglas v${metadata.motor_version}`}
           </p>
           {metadata.resumen_general && (
             <p className="diagnostico-resumen">{metadata.resumen_general}</p>

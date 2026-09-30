@@ -273,6 +273,26 @@ def test_analisis_con_cultivo_existente(monkeypatch):
     print("✓ análisis sobre un cultivo ya cargado → 202 y el vuelo queda asociado")
 
 
+def test_subir_geotiff_registra_quien_lo_subio(monkeypatch):
+    # Trazabilidad (HU-R4-02): quién subió el vuelo y el archivo de MinIO se
+    # graban al crearlo; metodo_umbral/mapeo_bandas los completa el worker
+    # real al terminar de procesar (no se ejercen acá, sin Celery/MinIO real).
+    _simular_infraestructura(monkeypatch)
+    cultivo = _crear_cultivo(tipo_cultivo="soja")
+    r = _post_geotiff(cultivo_id=cultivo["id"])
+    assert r.status_code == 202, r.text
+    vuelo_id = r.json()["vuelo_id"]
+
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos", headers=_auth())
+    vuelo = next(v for v in r.json() if v["vuelo_id"] == vuelo_id)
+    assert vuelo["archivo_original"] == "usuario/lote/vuelo/original.tif"
+    assert vuelo["subido_por"]["email"] == _EMAIL
+    assert vuelo["subido_por"]["nombre"] == "Test Cultivos"
+    assert vuelo["metodo_umbral"] is None
+    assert vuelo["mapeo_bandas"] is None
+    print("✓ POST /vuelos registra archivo y usuario que lo subió")
+
+
 def test_analisis_creando_cultivo_nuevo(monkeypatch):
     _simular_infraestructura(monkeypatch)
     antes = len(_tc.get(f"/api/v1/lotes/{_lote_id}/cultivos", headers=_auth()).json())

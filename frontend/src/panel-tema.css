@@ -674,6 +674,35 @@
   color: #6b7a70;
 }
 
+.trazabilidad-panel {
+  width: 100%;
+  font-size: 0.82rem;
+  background: #f7f9f7;
+  border: 1px solid #e2e8e2;
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin: -0.3rem 0 0.6rem;
+}
+.trazabilidad-panel summary {
+  cursor: pointer;
+  color: #1a3a2a;
+  font-weight: 600;
+}
+.trazabilidad-lista {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 0.75rem;
+  margin: 0.6rem 0 0.1rem;
+}
+.trazabilidad-lista dt {
+  color: #6b7a70;
+}
+.trazabilidad-lista dd {
+  margin: 0;
+  color: #1a1a1a;
+  overflow-wrap: break-word;
+}
+
 .panel-shell .detalle-main {
   margin: 0;
   max-width: none;

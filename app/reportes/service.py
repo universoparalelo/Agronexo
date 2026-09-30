@@ -86,6 +86,13 @@ def generar_pdf_reporte(diagnostico: dict) -> bytes:
         "ndvi_promedio_lote": metadata.get("ndvi_promedio_lote", 0.0),
         "n_unidades_manejo": metadata.get("n_unidades_manejo", len(diagnostico.get("unidades_manejo", []))),
         "zonas": zonas,
+        # Trazabilidad (HU-R4-02) — para justificar la prescripción ante el
+        # productor o un control según la Ley 6.312.
+        "archivo_original": metadata.get("archivo_original"),
+        "subido_por": metadata.get("subido_por"),
+        "metodo_umbral": metadata.get("metodo_umbral"),
+        "mapeo_bandas": _formatear_mapeo_bandas(metadata.get("mapeo_bandas")),
+        "motor_version": metadata.get("motor_version"),
     }
 
     template = _env.get_template("reporte_ejecutivo.html")
@@ -123,3 +130,14 @@ def _formatear_fecha(valor: str | None) -> str | None:
         return dt.strftime("%d/%m/%Y")
     except ValueError:
         return valor
+
+
+_BANDA_LABELS = {"BLUE": "Azul", "GREEN": "Verde", "RED": "Rojo", "RE": "Red Edge", "NIR": "NIR"}
+
+
+def _formatear_mapeo_bandas(mapeo: dict | None) -> str | None:
+    """Ver frontend/src/pages/ResultadosVuelo.jsx (BANDA_LABELS) — mismo criterio."""
+    if not mapeo:
+        return None
+    partes = [f"{_BANDA_LABELS.get(nombre, nombre)}: banda {num}" for nombre, num in mapeo.items() if num is not None]
+    return " · ".join(partes) or None

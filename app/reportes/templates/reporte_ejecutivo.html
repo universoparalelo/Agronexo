@@ -200,6 +200,17 @@
   <p class="footer-legal">Todas las zonas del lote están dentro de rangos normales — sin causas para reportar.</p>
   {% endif %}
 
+  <h2>Trazabilidad del análisis</h2>
+  <table class="zonas">
+    <tbody>
+      <tr><td style="width: 40%;"><strong>Archivo de origen</strong></td><td>{{ archivo_original or '—' }}</td></tr>
+      <tr><td><strong>Subido por</strong></td><td>{{ subido_por or '—' }}</td></tr>
+      <tr><td><strong>Mapeo de bandas</strong></td><td>{{ mapeo_bandas or 'Sin calcular' }}</td></tr>
+      <tr><td><strong>Método de umbral</strong></td><td>{{ metodo_umbral or 'Sin calcular' }}</td></tr>
+      <tr><td><strong>Versión del motor de reglas</strong></td><td>{{ motor_version or '—' }}</td></tr>
+    </tbody>
+  </table>
+
   <div class="footer-legal">
     Reporte generado automáticamente por AgroNexo a partir de imágenes multiespectrales.
     El diagnóstico es orientativo — la confirmación en campo queda a criterio del agrónomo responsable (RFDR-04).
