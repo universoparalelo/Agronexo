@@ -1,16 +1,16 @@
 # Release v1.0.0 — AgroNexo
 
-**Estado:** En desarrollo  
+**Estado:** Cerrada  
 **Fecha de inicio:** 2026-06-24  
-**Fecha de cierre estimada:** _por definir_  
-**Responsables:** _completar con nombres del equipo_  
+**Fecha de cierre estimada:** 2026-07-07 (demo)  
+**Responsables:** Matías Machado (Scrum Master), Celeste Martin Rodich, Denise Macarena Pujalte, Zaira Rosin, Amilcar Aguirre  
 **Contexto:** Primera release del proyecto. Presentación académica incluida.
 
 ---
 
 ## Objetivo de la release
 
-_Describir en 2-3 oraciones qué debe poder hacer el sistema al cierre de esta release. Qué puede ver o hacer un usuario al final._
+Construir el pipeline completo de agricultura de precisión, desde la ingesta de un ortomosaico GeoTIFF hasta la visualización de zonas clasificadas por índice de vegetación en un mapa Leaflet interactivo. Al cierre, el usuario se autentica, gestiona sus lotes con límites geográficos, sube un GeoTIFF multiespectral y, tras el procesamiento asíncrono en el worker, ve el mapa de zonas y un dashboard con estadísticas por zona.
 
 ---
 
@@ -18,9 +18,11 @@ _Describir en 2-3 oraciones qué debe poder hacer el sistema al cierre de esta r
 
 | Nombre | Rol | Área principal |
 |---|---|---|
-| _nombre_ | _rol_ | _backend / frontend / GIS / infra_ |
-| _nombre_ | _rol_ | _backend / frontend / GIS / infra_ |
-| _nombre_ | _rol_ | _backend / frontend / GIS / infra_ |
+| Matías Machado | Scrum Master · Desarrollo | frontend / API |
+| Celeste Martin Rodich | Desarrollo | backend / GIS / infra (DevOps) |
+| Zaira Rosin | Desarrollo | GIS / análisis espacial |
+| Denise Macarena Pujalte | QA | testing / documentación |
+| Amilcar Aguirre | Desarrollo | frontend / UI |
 
 ---
 
@@ -778,10 +780,10 @@ _Ir completando a medida que avanza el desarrollo._
 
 | Tarea | Responsable | Estado | Rama |
 |---|---|---|---|
-| Upload GeoTIFF → MinIO | _nombre_ | completado | main |
-| Conectar pipeline NDVI a tarea Celery | _nombre_ | completado | main |
-| Frontend — modal carga GeoTIFF | _nombre_ | completado | main |
-| Frontend — dashboard de resultados (mapa + tabla) | _nombre_ | completado | main |
+| Upload GeoTIFF → MinIO | universoparalelo | completado | main |
+| Conectar pipeline NDVI a tarea Celery | universoparalelo | completado | main |
+| Frontend — modal carga GeoTIFF | universoparalelo (modal, `760d716`) · Amilcar Aguirre (wizard, `7fe91fb`) | completado | main |
+| Frontend — dashboard de resultados (mapa + tabla) | Matías Machado, Denise Macarena Pujalte | completado | main |
 | Optimización de rendimiento del pipeline GIS | _nombre_ | completado | feat/optimizar-pipeline |
 | Motor de diagnóstico (RFDR-01) | _nombre_ | completado (sin persistencia, ver Problemas abiertos) | main |
 | Exportación Shapefile y PDF | _nombre_ | pendiente | — |
@@ -988,13 +990,14 @@ _Espacio libre para observaciones, aprendizajes o cosas a recordar para la prese
 ## Checklist de cierre de release
 
 - [ ] Todos los endpoints del sprint responden correctamente
-- [ ] Migraciones corren sin errores desde cero (`docker compose down -v` + `upgrade head`)
-- [ ] Tests del pipeline GIS pasan (`docker compose exec worker python3 tests/test_ndvi_pipeline.py`)
+- [x] Migraciones corren sin errores desde cero (`docker compose down -v` + `upgrade head`)
+- [x] Tests del pipeline GIS pasan (`docker compose exec worker python3 tests/test_ndvi_pipeline.py`)
 - [ ] No hay secretos ni `.env` commiteados
 - [ ] README actualizado con cambios de esta release
 - [ ] Tag `v1.0.0` creado en GitHub
 - [ ] Branch `release/v1.0.0` mergeada y cerrada
-- [ ] _agregar checks específicos del proyecto_
+- [ ] CI de GitHub Actions en verde en el commit de corte `f35e422`
+- [ ] Flujo de demo end-to-end verificado con un GeoTIFF real (DJI Mavic 3M)
 
 ---
 
@@ -1003,18 +1006,41 @@ _Espacio libre para observaciones, aprendizajes o cosas a recordar para la prese
 _Completar antes de la presentación._
 
 **¿Qué problema resuelve AgroNexo?**
-_completar_
+AgroNexo es una plataforma de agricultura de precisión que procesa ortomosaicos GeoTIFF multiespectrales (dron o satélite), calcula índices de vegetación y detecta zonas de distinto vigor dentro de un lote, como base para el diagnóstico agronómico y la aplicación diferenciada de insumos. Foco: NEA (Chaco, Formosa, Corrientes).
 
 **¿Qué puede hacer el sistema en esta release?**
-_completar_
+Login con JWT; lotes con límite GeoJSON (vista previa en mapa) y área calculada en PostGIS; carga de GeoTIFF con inspección de bandas según sensor; procesamiento asíncrono en Celery con barra de progreso; mapa de zonas clasificadas por índice (NDVI/NDRE/SAVI/ExG) con zonas atípicas (z-score); estadísticas por zona (área, índice promedio).
 
 **Decisiones técnicas a mencionar:**
-- _completar_
+- Worker GIS separado con Celery + Redis: la API nunca procesa GeoTIFF.
+- PostGIS para vectores, MinIO para archivos binarios.
+- Umbralización dinámica (fijo/Otsu/percentil) + suavizado gaussiano contra la fragmentación "sal y pimienta".
+- Vectorización con connectivity=8, área mínima y z-score por polígono.
+- Stack completo con `docker compose up` + CI en GitHub Actions con 3 jobs.
 
 **Demo flow sugerido:**
-1. _paso 1_
-2. _paso 2_
-3. _paso 3_
+1. Login con el usuario seed de desarrollo.
+2. Pantalla Lotes → crear lote con formulario y límite GeoJSON (vista previa en mapa).
+3. "Cargar ortomosaico": wizard de 2 pasos (lote, sensor e índices + inspección preliminar de bandas).
+4. Seguir el procesamiento con la barra de progreso.
+5. Ver el mapa de zonas y cambiar de índice con el selector.
+6. Revisar la tabla de estadísticas por zona.
+7. Eliminar / reintentar un análisis desde la lista.
 
 **Preguntas frecuentes que pueden surgir:**
-- _completar_
+- ¿Por qué la API no procesa el GeoTIFF? → Worker separado para no bloquear la API con archivos grandes.
+- ¿Qué pasa con archivos grandes? → En R1 el worker es lento con archivos reales; la optimización se planifica para R2.
+- ¿Por qué todavía no hay diagnóstico agronómico? → El motor de reglas es alcance de R2.
+- ¿Por qué no hay ExG para DJI Mavic 3M? → El sensor no tiene banda azul (limitación del hardware, no un bug).
+(propuesta, revisar con el equipo)
+
+---
+
+## Cierre de release
+
+- **Corte de la release:** commit `f35e422` (2026-07-06, Amilcar Aguirre, "Pantalla para mostrar e eliminar lotes"), último commit antes de la demo del 2026-07-07. No se creó el tag `v1.0.0` ni la rama `release/v1.0.0`; en R1 no se usaron PRs.
+- **Entradas de esta bitácora que corresponden a la Release 2:** todas las posteriores al corte — las tareas de agosto 2026 (optimización del pipeline GIS, streaming de GeoTIFF > 3 GB, pre-compresión, fix pantalla en blanco, fix CRS EngineeringCRS/BigTIFF, motor de reglas RFDR-01, caché de GeoTIFF preparado, batch de índices, fix OOM), los problemas abiertos #2 y #3, las filas "Optimización de rendimiento del pipeline GIS", "Motor de diagnóstico (RFDR-01)" y "Exportación Shapefile y PDF" de Tareas en progreso, y las dos últimas filas de "Decisiones de arquitectura" (motor de diagnóstico). Los commits `2b0566e` y `8644be4` (2026-07-09) también son de R2.
+- **Verificadas en el corte:** las entradas del 2026-07-03 al 2026-07-06 sin hash de commit (eliminar/reintentar, wizard de carga, perfil `dji_mavic3`, fix "sal y pimienta", rename `zonas.py`, multi-índice, pantalla Lotes) están presentes en el código de `f35e422`.
+- **CI en el corte:** 2 de 3 jobs en verde (build del frontend y worker GIS). El job de API pasó migraciones y health, pero falló en el paso `pytest tests/test_vuelos_estado.py` (1 failed, 12 passed): `test_listar_vuelos_de_lote` da `KeyError: 'id'` porque `GET /lotes/{id}/vuelos` devuelve el campo `vuelo_id` y el test espera `id`. El mismo desajuste afecta al frontend: `DetalleLote.jsx` usa `vuelo.id`, por lo que "Ver resultados" navega a `vuelos/undefined` (corregido en R2, commit `fc9ebb2`).
+- **Credenciales de desarrollo:** la migración 0006 incluye la contraseña del usuario seed de desarrollo (solo desarrollo). Por eso queda sin tildar "No hay secretos ni `.env` commiteados", aunque nunca se commiteó un `.env`.
+- **Documento formal de la release:** `docs/releases/v1.0.0.md`.
