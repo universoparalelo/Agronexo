@@ -566,7 +566,7 @@ async def estado_indice_vuelo(
     if not lote:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
 
-    estado = await service.obtener_estado_analisis_indice(db, vuelo_id, indice)
+    estado = await service.obtener_estado_analisis_indice(db, lote_id, vuelo_id, indice)
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Análisis no encontrado.")
     return estado
@@ -588,7 +588,7 @@ async def resultado_indice_vuelo(
     if not lote:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
 
-    geojson = await service.obtener_resultado_geojson_indice(db, vuelo_id, indice)
+    geojson = await service.obtener_resultado_geojson_indice(db, lote_id, vuelo_id, indice)
     if geojson is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
