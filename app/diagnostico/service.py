@@ -206,10 +206,10 @@ async def generar_diagnostico(
     geojson_por_indice: dict[str, dict] = {}
     for indice in _INDICES_ADICIONALES:
         try:
-            analisis = await obtener_analisis_indice(db, vuelo_id, indice)
+            analisis = await obtener_analisis_indice(db, lote.id, vuelo_id, indice)
             if analisis is None or analisis.estado != EstadoVueloEnum.completado or analisis.geojson_key is None:
                 continue
-            geojson_otro = await obtener_resultado_geojson_indice(db, vuelo_id, indice)
+            geojson_otro = await obtener_resultado_geojson_indice(db, lote.id, vuelo_id, indice)
             if not geojson_otro or not geojson_otro.get("features"):
                 continue
             geojson_por_indice[indice.value] = geojson_otro

@@ -357,10 +357,17 @@ async def listar_analisis_indices(db: AsyncSession, vuelo: Vuelo) -> list[Indice
 
 
 async def obtener_analisis_indice(
-    db: AsyncSession, vuelo_id: uuid.UUID, indice: IndiceEnum,
+    db: AsyncSession, lote_id: uuid.UUID, vuelo_id: uuid.UUID, indice: IndiceEnum,
 ) -> AnalisisIndice | None:
-    stmt = select(AnalisisIndice).where(
-        AnalisisIndice.vuelo_id == vuelo_id, AnalisisIndice.indice == indice
+    stmt = (
+        select(AnalisisIndice)
+        .join(Vuelo, Vuelo.id == AnalisisIndice.vuelo_id)
+        .where(
+            AnalisisIndice.vuelo_id == vuelo_id,
+            AnalisisIndice.indice == indice,
+            Vuelo.lote_id == lote_id,
+            Vuelo.deleted_at.is_(None),
+        )
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
@@ -371,7 +378,7 @@ async def crear_analisis_indice(
 ) -> AnalisisIndice:
     """Crea (o reencola si ya se había pedido) el análisis de un índice
     adicional, reusando el mismo GeoTIFF ya subido — sin pedir un nuevo upload."""
-    analisis = await obtener_analisis_indice(db, vuelo.id, indice)
+    analisis = await obtener_analisis_indice(db, vuelo.lote_id, vuelo.id, indice)
     if analisis is None:
         analisis = AnalisisIndice(vuelo_id=vuelo.id, indice=indice, estado=EstadoVueloEnum.pendiente)
         db.add(analisis)
@@ -403,7 +410,7 @@ async def _preparar_filas_indices(
 ) -> dict[str, AnalisisIndice]:
     filas: dict[str, AnalisisIndice] = {}
     for indice in indices:
-        analisis = await obtener_analisis_indice(db, vuelo.id, indice)
+        analisis = await obtener_analisis_indice(db, vuelo.lote_id, vuelo.id, indice)
         if analisis is None:
             analisis = AnalisisIndice(vuelo_id=vuelo.id, indice=indice, estado=EstadoVueloEnum.pendiente)
             db.add(analisis)
@@ -449,9 +456,9 @@ async def crear_analisis_indices_batch(
 
 
 async def obtener_estado_analisis_indice(
-    db: AsyncSession, vuelo_id: uuid.UUID, indice: IndiceEnum,
+    db: AsyncSession, lote_id: uuid.UUID, vuelo_id: uuid.UUID, indice: IndiceEnum,
 ) -> IndiceEstadoResponse | None:
-    analisis = await obtener_analisis_indice(db, vuelo_id, indice)
+    analisis = await obtener_analisis_indice(db, lote_id, vuelo_id, indice)
     if analisis is None:
         return None
 
@@ -474,9 +481,9 @@ async def obtener_estado_analisis_indice(
 
 
 async def obtener_resultado_geojson_indice(
-    db: AsyncSession, vuelo_id: uuid.UUID, indice: IndiceEnum,
+    db: AsyncSession, lote_id: uuid.UUID, vuelo_id: uuid.UUID, indice: IndiceEnum,
 ) -> dict | None:
-    analisis = await obtener_analisis_indice(db, vuelo_id, indice)
+    analisis = await obtener_analisis_indice(db, lote_id, vuelo_id, indice)
     if analisis is None or analisis.estado != EstadoVueloEnum.completado or analisis.geojson_key is None:
         return None
     try:

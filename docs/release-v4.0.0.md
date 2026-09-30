@@ -22,6 +22,7 @@
 | Escaneo de secretos sobre todo el historial (una sola vez) | Completada — ver hallazgo abajo |
 | Reemplazar la imagen de MinIO en `docker-compose.yml` (`minio/minio` dado de baja) | Completada |
 | Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
+| HU-R4-01 — fix IDOR en endpoints de índices adicionales del vuelo | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -189,3 +190,21 @@ Al reconstruir el stack desde cero (tras un reinicio de la máquina que limpió 
 - `tests/test_celery_integracion.py` (los 3 tests, incluido el ciclo completo E2E que sube un archivo real a MinIO y lo procesa vía Celery+worker — antes solo se podía correr con el stack completo levantado) — **los 3 pasan**.
 
 **Resultado:** cualquiera que clone el repo hoy y corra `docker compose up -d --build` puede levantar la app completa de nuevo, sin crear ninguna cuenta.
+
+#### HU-R4-01 · Aislamiento multi-tenencia — fix IDOR en endpoints de índices adicionales
+**Fecha:** 2026-09-30
+**Rama:** `fix/idor-indices-vuelo`
+
+Auditoría del estado actual de aislamiento por tenant (no hay `tenant_id`, es ownership por `lotes.usuario_id`; `vuelos`/`cultivos`/`analisis_indices` se aíslan transitivamente vía `lote_id`). El patrón dominante en todos los routers (`obtener_lote(db, lote_id, usuario_id=current_user.id)` → 404 antes de tocar hijos) está bien aplicado en lotes, cultivos, vuelos, diagnóstico, reportes y órdenes de trabajo.
+
+**Hallazgo (IDOR real):** `GET /lotes/{lote_id}/vuelos/{vuelo_id}/indices/{indice}/estado` y `.../indices/{indice}/resultado` (`app/ingesta/router.py`) validaban que `lote_id` fuera del usuario, pero la función de servicio detrás (`obtener_analisis_indice`, `app/ingesta/service.py`) filtraba `AnalisisIndice` solo por `vuelo_id`, sin cruzar con el lote — `analisis_indices` no tiene columna de owner ni de `lote_id`, solo `vuelo_id`. Un usuario dueño de **cualquier** lote podía pasar su propio `lote_id` junto con un `vuelo_id` ajeno adivinado/enumerado y leer el estado y el GeoJSON de índices (NDRE/SAVI/ExG) de otro tenant.
+
+**Fix:** `obtener_analisis_indice` ahora hace `JOIN` con `Vuelo` y filtra por `Vuelo.lote_id == lote_id` además de `vuelo_id`. Se propagó el parámetro `lote_id` a través de `obtener_estado_analisis_indice` y `obtener_resultado_geojson_indice`, y a sus 3 llamadores (`app/ingesta/router.py` × 2, `app/diagnostico/service.py::generar_diagnostico`, que ya tenía el `lote` validado disponible).
+
+**Decisiones tomadas:**
+- No se creó una dependencia FastAPI centralizada nueva para reemplazar el patrón repetido `obtener_lote(...) or 404` — ya es consistente en todos los routers y un refactor a esta altura suma riesgo sin ganancia real de seguridad. El criterio de aceptación de "dependencia centralizada" se interpreta como la reutilización de la misma función de servicio en todos lados, no como un `Depends()` nuevo.
+- No se tocó el modelo de datos (no se agregó `lote_id`/owner a `analisis_indices`) — el `JOIN` con `Vuelo` alcanza y evita una migración para esto.
+
+**Tests nuevos (`tests/test_multi_tenant_indices.py`, 7 casos):** acceso cruzado a ambos endpoints con `lote_id` propio + `vuelo_id` ajeno (el caso exacto del IDOR) → 404; con `lote_id` ajeno (control, ya bloqueado antes del fix) → 404; camino propio sigue en 200; sin auth → 401. Corridos junto con toda la suite de la imagen `api` (244 tests, antes 237) — sin regresiones.
+
+**Sin tocar a propósito:** el resto de los criterios de aceptación de HU-R4-01 (URLs de MinIO prefirmadas — ya verificado que la cobertura es completa, un solo punto de generación en `app/core/storage.py::presigned_url` con expiración siempre seteada) ya estaban resueltos de releases anteriores; esta tarea se acotó al gap real encontrado.
