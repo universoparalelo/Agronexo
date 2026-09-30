@@ -60,8 +60,12 @@ class Lote(Base):
     )
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    # as_uuid=False a propósito, igual que Vuelo.subido_por_id — tiene que
+    # matchear el tipo Python de Usuario.id para que un eager load futuro de
+    # la relación `usuario` no quede en None en silencio (mismo bug real que
+    # ese, encontrado y documentado en HU-R4-02).
+    usuario_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
