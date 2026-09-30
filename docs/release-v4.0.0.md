@@ -23,6 +23,8 @@
 | Reemplazar la imagen de MinIO en `docker-compose.yml` (`minio/minio` dado de baja) | Completada |
 | Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
 | HU-R4-01 — fix IDOR en endpoints de índices adicionales del vuelo | Completada |
+| Upgrade `react`/`react-dom` 19, `react-leaflet` 5, `react-router-dom` 7 | Completada |
+| Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -130,7 +132,7 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - ~~`github-actions-mutable-action-tag` / `gha-workflow-env-secret`~~ — **resueltos** por el pinning a SHA y el scoping de `JWT_SECRET_KEY` de arriba (Semgrep: 0 findings).
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
-- **Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`vite`/`vitest`/`@vitejs/plugin-react`** (PRs de Dependabot #39, #44, #45, #40, #43, #41) — confirmado que rompe `npm run build` en seco (`react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19). Necesita su propia tarea con testeo real de todas las pantallas con mapas. Incluye migrar `react-router-dom` v6→v7 para resolver su CVE.
+- ~~Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`react-router-dom`~~ — **resuelto**, ver tarea más abajo.
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
 
@@ -208,3 +210,33 @@ Auditoría del estado actual de aislamiento por tenant (no hay `tenant_id`, es o
 **Tests nuevos (`tests/test_multi_tenant_indices.py`, 7 casos):** acceso cruzado a ambos endpoints con `lote_id` propio + `vuelo_id` ajeno (el caso exacto del IDOR) → 404; con `lote_id` ajeno (control, ya bloqueado antes del fix) → 404; camino propio sigue en 200; sin auth → 401. Corridos junto con toda la suite de la imagen `api` (244 tests, antes 237) — sin regresiones.
 
 **Sin tocar a propósito:** el resto de los criterios de aceptación de HU-R4-01 (URLs de MinIO prefirmadas — ya verificado que la cobertura es completa, un solo punto de generación en `app/core/storage.py::presigned_url` con expiración siempre seteada) ya estaban resueltos de releases anteriores; esta tarea se acotó al gap real encontrado.
+
+#### Upgrade `react`/`react-dom` 18→19, `react-leaflet` 4→5, `react-router-dom` 6→7
+**Fecha:** 2026-09-30
+**Rama:** `feat/upgrade-react19-leaflet-router`
+
+Retomaba el "Grupo D" de Dependabot (PRs #39, #44, #45, #40, #43, #41), documentado como problema abierto porque el PR de `react`/`react-dom` solo rompía `npm run build` en seco (`react-leaflet@4.2.1` exige `react-dom@^18`, incompatible con React 19).
+
+Antes de tocar código se revisaron los changelogs reales contra el uso concreto del repo:
+- `react-router-dom`: el proyecto solo usa la API declarativa clásica (`BrowserRouter`, `Routes`, `Route`, `Link`, `Navigate`, `useNavigate`, `useParams`, `useLocation`, sin data routers/loaders) — `react-router-dom` sigue existiendo como paquete propio en v7 (confirmado contra el registro de npm), sin cambios de código para este patrón.
+- `react-leaflet` v5: los únicos breaking changes documentados son "requiere React 19" y "se eliminó `LeafletProvider`" — el repo no usa `LeafletProvider` en ninguno de sus 7 componentes de mapa (`MapaZonas`, `MapaNEA`, `MiniMapaLote`, `MapaIndice`, `ModalLimites`, `ModalCargaGeoTIFF`, `MapaDibujoLote`), solo `MapContainer`/`TileLayer`/`GeoJSON`/`useMap`.
+
+**Decisiones tomadas:**
+- No se bumpearon `vite`/`vitest`/`@vitejs/plugin-react` (el resto del Grupo D). Sus peer deps reales muestran que no hace falta: `@vitejs/plugin-react@4.7.0` (ya instalado) soporta hasta `vite ^7`, así que React 19 funciona con el `vite@6.4.3` actual sin bumpear nada. Los PRs de Dependabot pedían saltar a majors mucho más nuevos (vite 8, vitest 5) — motu proprio fuera de alcance, y `vitest@5` ni siquiera es compatible con `node:25-slim` (la imagen Docker del frontend), así que forzarlo hubiera abierto un problema nuevo sin necesidad.
+- Diff final: 4 líneas en `frontend/package.json` (`react`, `react-dom`, `react-leaflet`, `react-router-dom`).
+
+**Verificación:**
+- `npm run build` y `npm test` (vitest, 9 tests) — limpios.
+- Imagen Docker del frontend reconstruida (`docker compose build frontend`) para tomar las versiones nuevas — `node_modules` no está bind-mounteado en `docker-compose.yml`, así que un `npm install` en el host no alcanza para probar contra el contenedor real.
+- Recorrido manual en el browser pane con el stack completo: login → dashboard → `/lotes` → `/lotes/{id}` → `/lotes/{id}/vuelos/{id}` (rutas con parámetros dinámicos, todas con `useNavigate`/`useParams`/`Link`) — sin errores de consola.
+- Los 3 patrones de uso de `react-leaflet` probados contra datos reales: mapa de zonas NDVI coloreado (`MapaZonas`), mapa de diagnóstico con color por severidad y redibujo de la capa `GeoJSON` al cambiar de tab (mismo componente, sin remount manual), y dibujo de polígono interactivo con `@geoman-io/leaflet-geoman-free` (`MapaDibujoLote`, modal "Nuevo lote") — cálculo de área en vivo correcto (41.42 ha sobre el polígono dibujado). Los tres, sin errores de consola.
+
+#### Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard
+**Fecha:** 2026-09-30
+**Rama:** `feat/upgrade-react19-leaflet-router`
+
+Encontrado al probar el upgrade de React contra datos reales, no causado por él — el widget "Vista geoespacial" del Dashboard (`AnalisisMap` en `frontend/src/pages/Dashboard.jsx`) pide el GeoJSON resumido del vuelo con `?absorber=true` (zonas chicas combinadas con la vecina, para una vista de vistazo — ver `useVueloProgreso.js`). Mientras ese cómputo geométrico corre (puede tardar bastante en un lote real grande, ver hallazgo del Sprint 14 sobre polígonos con muchos vértices), el componente caía en el mismo branch que muestra la barra de progreso del procesamiento original con el vuelo ya en `estado='completado'`, mostrando "Procesando imagen... 0%" — sugiere que se está reanalizando desde cero cuando en realidad el análisis ya terminó y solo falta generar la vista resumida.
+
+**Fix:** nuevo branch explícito para `estadoActual === 'completado' && !geojson` que muestra "Generando vista del mapa..." con el mismo spinner que ya usa la pestaña Diagnóstico (`.diagnostico-loading`/`.diagnostico-spinner`, reusado en vez de duplicar CSS), en lugar de la `BarraProgreso` con porcentaje falso.
+
+**Verificación:** confirmado en el browser pane que el mensaje nuevo aparece mientras el fetch está en curso; el spinner se confirmó en el DOM (`getComputedStyle`) porque el pane tuvo un glitch de captura de screenshot en el momento de probar. Sin errores de consola.
