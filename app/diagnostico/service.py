@@ -39,6 +39,7 @@ from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import CausaIndiceEnum, Diagnostico, ProductoFitosanitario, TipoProductoEnum
+from app.diagnostico.reglas import MOTOR_VERSION
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
 from app.diagnostico.zonificacion import generar_unidades_manejo
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
@@ -146,16 +147,20 @@ async def obtener_diagnostico_guardado(db: AsyncSession, vuelo_id: uuid.UUID) ->
     return result.scalar_one_or_none()
 
 
-async def guardar_diagnostico(db: AsyncSession, vuelo_id: uuid.UUID, resultado: dict, calculado_en: datetime) -> None:
+async def guardar_diagnostico(
+    db: AsyncSession, vuelo_id: uuid.UUID, resultado: dict, calculado_en: datetime, motor_version: str,
+) -> None:
     """
     Upsert — un vuelo tiene a lo sumo un diagnóstico guardado (vuelo_id
     UNIQUE en la tabla). Recalcular sobrescribe la fila existente, no
     acumula historial (ver docstring del módulo).
     """
-    stmt = pg_insert(Diagnostico).values(vuelo_id=vuelo_id, resultado=resultado, calculado_en=calculado_en)
+    stmt = pg_insert(Diagnostico).values(
+        vuelo_id=vuelo_id, resultado=resultado, calculado_en=calculado_en, motor_version=motor_version,
+    )
     stmt = stmt.on_conflict_do_update(
         index_elements=[Diagnostico.vuelo_id],
-        set_={"resultado": resultado, "calculado_en": calculado_en},
+        set_={"resultado": resultado, "calculado_en": calculado_en, "motor_version": motor_version},
     )
     await db.execute(stmt)
     await db.flush()
@@ -244,7 +249,16 @@ async def generar_diagnostico(
 
     calculado_en = datetime.now(timezone.utc)
     resultado["metadata"]["calculado_en"] = calculado_en.isoformat()
-    await guardar_diagnostico(db, vuelo_id, resultado, calculado_en)
+    # Trazabilidad (HU-R4-02): queda ligada al resultado guardado, así que un
+    # recálculo futuro con reglas nuevas no cambia lo que ya se justificó.
+    resultado["metadata"]["motor_version"] = MOTOR_VERSION
+    resultado["metadata"]["archivo_original"] = vuelo.archivo_original
+    resultado["metadata"]["subido_por"] = (
+        f"{vuelo.subido_por.nombre} ({vuelo.subido_por.email})" if vuelo.subido_por else None
+    )
+    resultado["metadata"]["metodo_umbral"] = vuelo.metodo_umbral
+    resultado["metadata"]["mapeo_bandas"] = vuelo.mapeo_bandas
+    await guardar_diagnostico(db, vuelo_id, resultado, calculado_en, MOTOR_VERSION)
 
     return resultado
 

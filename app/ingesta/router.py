@@ -324,6 +324,10 @@ async def listar_vuelos_lote(
             cultivo_id=v.cultivo_id,
             cultivo=v.cultivo,
             indices=await service.listar_analisis_indices(db, v),
+            archivo_original=v.archivo_original,
+            subido_por=v.subido_por,
+            metodo_umbral=v.metodo_umbral,
+            mapeo_bandas=v.mapeo_bandas,
         )
         for v in vuelos
     ]

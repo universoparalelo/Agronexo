@@ -86,7 +86,14 @@ def _poligono_cobertura_wkt(src) -> str:
     return cobertura.wkt
 
 
-def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None, geojson_key: str | None = None) -> None:
+def _actualizar_vuelo(
+    vuelo_id: str,
+    estado: str,
+    error: str | None = None,
+    geojson_key: str | None = None,
+    metodo_umbral: str | None = None,
+    mapeo_bandas: dict | None = None,
+) -> None:
     # SQL directo para evitar importar app.lotes.models → app.core.database → asyncpg,
     # que no está instalado en el contenedor worker.
     from sqlalchemy import create_engine, text
@@ -100,10 +107,19 @@ def _actualizar_vuelo(vuelo_id: str, estado: str, error: str | None = None, geoj
             session.execute(
                 text(
                     "UPDATE vuelos SET estado = CAST(:estado AS estadovueloenum), "
-                    "error_detalle = :error, geojson_key = :geojson_key "
+                    "error_detalle = :error, geojson_key = :geojson_key, "
+                    "metodo_umbral = COALESCE(:metodo_umbral, metodo_umbral), "
+                    "mapeo_bandas = COALESCE(CAST(:mapeo_bandas AS JSONB), mapeo_bandas) "
                     "WHERE id = CAST(:vuelo_id AS uuid)"
                 ),
-                {"estado": estado, "error": error, "geojson_key": geojson_key, "vuelo_id": vuelo_id},
+                {
+                    "estado": estado,
+                    "error": error,
+                    "geojson_key": geojson_key,
+                    "metodo_umbral": metodo_umbral,
+                    "mapeo_bandas": json.dumps(mapeo_bandas) if mapeo_bandas is not None else None,
+                    "vuelo_id": vuelo_id,
+                },
             )
             session.commit()
     finally:
@@ -532,7 +548,11 @@ def procesar_vuelo(self, vuelo_id: str, minio_key: str, sensor: str, indice: str
             os.unlink(geojson_path)
 
     self.update_state(state="PROGRESS", meta={"progreso": 100, "mensaje": "Procesamiento completado"})
-    _actualizar_vuelo(vuelo_id, "completado", geojson_key=geojson_key_guardado)
+    from workers.gis.band_mapping import obtener_mapeo
+    _actualizar_vuelo(
+        vuelo_id, "completado", geojson_key=geojson_key_guardado,
+        metodo_umbral=metodo_umbral, mapeo_bandas=obtener_mapeo(sensor)._asdict(),
+    )
 
     return {"vuelo_id": vuelo_id, "estadisticas": estadisticas}
 

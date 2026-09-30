@@ -324,6 +324,34 @@ def test_lote_de_otro_usuario_no_aparece_en_lista():
     print("✓ Lote de otro usuario no aparece en GET /lotes del usuario actual")
 
 
+# ── Regresión: tipos de Lote.usuario_id vs Usuario.id ───────────────────
+
+def test_lote_usuario_carga_via_selectinload():
+    """Usuario.id es str (as_uuid=False) — Lote.usuario_id tiene que matchear
+    ese tipo Python o un eager load de la relación `usuario` queda en None en
+    silencio (mismo bug real que tenía Vuelo.subido_por, ver HU-R4-02 en
+    docs/release-v4.0.0.md). No se ejerce en ningún endpoint hoy, así que sin
+    este test quedaría dormido de nuevo si alguien vuelve a romper el tipo."""
+    import uuid as _uuid
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session, selectinload
+
+    from app.core.config import settings
+    from app.lotes.models import Lote
+
+    lote = _crear_lote("Lote Para Test de Relación")
+
+    engine = create_engine(settings.database_url_sync)
+    with Session(engine) as session:
+        stmt = select(Lote).options(selectinload(Lote.usuario)).where(Lote.id == _uuid.UUID(lote["id"]))
+        cargado = session.execute(stmt).scalar_one()
+        assert cargado.usuario is not None
+        assert cargado.usuario.email == _EMAIL
+    engine.dispose()
+    print("✓ Lote.usuario carga correctamente vía selectinload (no None)")
+
+
 if __name__ == "__main__":
     setup_module(None)
     try:
@@ -349,6 +377,7 @@ if __name__ == "__main__":
         test_delete_lote_inexistente()
         test_lote_de_otro_usuario_no_accesible()
         test_lote_de_otro_usuario_no_aparece_en_lista()
+        test_lote_usuario_carga_via_selectinload()
         print("\nTodos los tests de lotes pasaron.\n")
     finally:
         teardown_module(None)

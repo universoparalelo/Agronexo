@@ -17,6 +17,39 @@ const SENSOR_LABELS = {
   dji_mavic3: 'DJI Mavic 3',
 }
 
+const BANDA_LABELS = { BLUE: 'Azul', GREEN: 'Verde', RED: 'Rojo', RE: 'Red Edge', NIR: 'NIR' }
+
+// Trazabilidad del análisis (HU-R4-02): qué archivo, quién lo subió y con qué
+// parámetros se calculó — solo lectura, para justificar una prescripción ante
+// el productor o un control según la Ley 6.312. metodo_umbral/mapeo_bandas
+// quedan en null hasta que el worker termina de procesar el vuelo.
+function PanelTrazabilidad({ vuelo }) {
+  const bandas = vuelo.mapeo_bandas
+    ? Object.entries(vuelo.mapeo_bandas)
+        .filter(([, num]) => num != null)
+        .map(([nombre, num]) => `${BANDA_LABELS[nombre] || nombre}: banda ${num}`)
+        .join(' · ')
+    : null
+
+  return (
+    <details className="trazabilidad-panel">
+      <summary>Trazabilidad del análisis</summary>
+      <dl className="trazabilidad-lista">
+        <dt>Archivo de origen</dt>
+        <dd>{vuelo.archivo_original || '—'}</dd>
+        <dt>Subido por</dt>
+        <dd>{vuelo.subido_por ? `${vuelo.subido_por.nombre} (${vuelo.subido_por.email})` : '—'}</dd>
+        <dt>Fecha de subida</dt>
+        <dd>{new Date(vuelo.created_at).toLocaleString('es-AR')}</dd>
+        <dt>Mapeo de bandas ({SENSOR_LABELS[vuelo.sensor] || vuelo.sensor})</dt>
+        <dd>{bandas || 'Sin calcular todavía'}</dd>
+        <dt>Método de umbral</dt>
+        <dd>{vuelo.metodo_umbral || 'Sin calcular todavía'}</dd>
+      </dl>
+    </details>
+  )
+}
+
 export default function ResultadosVuelo() {
   const { loteId, vueloId } = useParams()
   const navigate = useNavigate()
@@ -189,6 +222,7 @@ export default function ResultadosVuelo() {
             </span>
           )}
         </div>
+        {vuelo && <PanelTrazabilidad vuelo={vuelo} />}
         {principal}
       </div>
     </PanelLayout>

@@ -24,6 +24,7 @@
 | Bumps validados: `redis`, `weasyprint`, `pyshp`, `geotiff`, `node` (Grupo E de Dependabot) | Completada |
 | HU-R4-01 — fix IDOR en endpoints de índices adicionales del vuelo | Completada |
 | Upgrade `react`/`react-dom` 19, `react-leaflet` 5, `react-router-dom` 7 | Completada |
+| HU-R4-02 — trazabilidad completa del análisis | Completada |
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
@@ -240,3 +241,36 @@ Encontrado al probar el upgrade de React contra datos reales, no causado por él
 **Fix:** nuevo branch explícito para `estadoActual === 'completado' && !geojson` que muestra "Generando vista del mapa..." con el mismo spinner que ya usa la pestaña Diagnóstico (`.diagnostico-loading`/`.diagnostico-spinner`, reusado en vez de duplicar CSS), en lugar de la `BarraProgreso` con porcentaje falso.
 
 **Verificación:** confirmado en el browser pane que el mensaje nuevo aparece mientras el fetch está en curso; el spinner se confirmó en el DOM (`getComputedStyle`) porque el pane tuvo un glitch de captura de screenshot en el momento de probar. Sin errores de consola.
+
+#### HU-R4-02 · Trazabilidad completa del análisis
+**Fecha:** 2026-09-30
+**Rama:** `feat/hu-r4-02-trazabilidad`
+
+Auditoría previa (ver historial de la tarea) encontró que de los 4 criterios de aceptación, solo "no editable desde la interfaz" ya estaba resuelto (no existe `PUT`/`PATCH` sobre `vuelos` ni `analisis_indices`). Faltaba: quién subió cada vuelo, el mapeo de bandas y umbral usados en el NDVI primario (los índices adicionales ya tenían `metodo_umbral` en `analisis_indices`), la versión del motor de reglas, y exponer todo esto en el frontend y el PDF ejecutivo.
+
+**Migración `0021_trazabilidad_analisis`:**
+- `vuelos.subido_por_id` (FK `usuarios.id`, `SET NULL`), `vuelos.metodo_umbral`, `vuelos.mapeo_bandas` (JSONB).
+- `diagnosticos.motor_version`.
+- Backfill: `subido_por_id` se aproxima con el dueño del lote (no hay forma de saber con certeza quién subió un vuelo viejo). `metodo_umbral`/`mapeo_bandas` de vuelos ya completados **sí se reconstruyen con certeza** (no una aproximación): el NDVI primario siempre usó `metodo_umbral="fijo"` — ningún endpoint permitía elegir otro — y el mapeo de bandas es una función pura de `sensor`, así que se congelan los valores reales usados según `workers/gis/band_mapping.py::MAPEO_SENSORES`. `motor_version` de diagnósticos ya calculados se completa con `"1.0.0"`, única versión que existió hasta esta migración.
+
+**Captura:**
+- `subido_por_id` se graba en los 3 puntos donde se crea un `Vuelo` (`app/ingesta/service.py`) — ya recibían `usuario_id` como parámetro, no hizo falta tocar los routers.
+- `metodo_umbral`/`mapeo_bandas` los completa el worker al terminar de procesar (`workers/gis/tasks.py::procesar_vuelo` → `_actualizar_vuelo`), igual que ya hacía para los índices adicionales — cubre subida por dron y por satélite, porque ambos flujos terminan encolando la misma tarea `procesar_vuelo`.
+- `motor_version` (constante `MOTOR_VERSION` nueva en `app/diagnostico/reglas.py`) se graba en cada `(re)cálculo` de diagnóstico, junto con una copia de los 4 campos de arriba en `metadata` — así el PDF y el endpoint de diagnóstico los tienen sin tocar el schema de `VueloListItem` para eso.
+
+**Error encontrado — `Vuelo.subido_por` devolvía `None` con `subido_por_id` bien seteado**
+Un test de trazabilidad (`test_diagnostico_incluye_trazabilidad_completa`) mostró `assert None == 'Test Diagnostico (...)'` a pesar de que `subido_por_id` estaba correcto en la base. Causa: `Usuario.id` está tipado `UUID(as_uuid=False)` (Python `str`) pero `subido_por_id` se definió `UUID(as_uuid=True)` (Python `uuid.UUID`) — el loader `selectin` compara los valores cargados en memoria para emparejar filas, y `uuid.UUID(...) != str(...)` en Python, así que la relación nunca se resolvía (sin ningún error, silenciosamente `None`). Se corrigió tipando `subido_por_id` como `UUID(as_uuid=False)` para que coincida con `Usuario.id`. `Lote.usuario_id` tiene el mismo mismatch de tipos con `Usuario.id` pero está dormido (nada hace eager load de esa relación hoy) — se dejó flagueado como tarea aparte en vez de tocarlo en esta rama, fuera de alcance de HU-R4-02.
+
+**Frontend:**
+- `ResultadosVuelo.jsx`: panel colapsable "Trazabilidad del análisis" (`<details>`, solo lectura) con archivo de origen, quién subió, fecha de subida, mapeo de bandas (con labels legibles) y método de umbral.
+- `TablaDiagnostico.jsx`: la versión del motor de reglas se suma a la línea de metadata existente del diagnóstico.
+
+**PDF ejecutivo:** nueva sección "Trazabilidad del análisis" en `reporte_ejecutivo.html`, alimentada desde `app/reportes/service.py` (mismo dict de metadata que ya recibía la función, sin cambiar su firma).
+
+**Verificación:**
+- Migración probada con `downgrade`/`upgrade` reales contra la base de dev — backfill correcto verificado con `psql` directo.
+- 246 tests de la imagen `api` pasan (244 + 2 nuevos: captura de uploader al subir un vuelo, y metadata completa de trazabilidad en el diagnóstico).
+- PDF probado en 3 niveles: render directo del template Jinja2 (assert de contenido), generación completa de bytes PDF con `generar_pdf_reporte`, y llamada real al endpoint `GET .../reporte/pdf` contra el stack levantado (200, `application/pdf`, tamaño consistente con la generación anterior).
+- Recorrido manual en el browser pane: panel de trazabilidad expandido con datos reales de un vuelo real (`Lote Cele`), incluido un recálculo de diagnóstico que confirma `motor de reglas v1.0.0` en la barra de metadata. Sin errores de consola.
+
+**Extra (a pedido, mismo bug, mismo branch):** `Lote.usuario_id` tenía el mismo mismatch de tipos que `Vuelo.subido_por_id` frente a `Usuario.id` — dormido porque nada hacía eager load de `Lote.usuario`, pero se corrigió acá mismo en vez de dejarlo como tarea aparte (investigado el impacto: solo afecta cómo se deserializa el valor al leerlo del ORM, no las comparaciones en cláusulas `WHERE` de SQLAlchemy ni la validación de los schemas Pydantic, que coercionan `str`→`uuid.UUID` sin problema). Test de regresión nuevo: `tests/test_lotes.py::test_lote_usuario_carga_via_selectinload` — carga un lote con `selectinload(Lote.usuario)` y confirma que no da `None`. 247 tests pasan (246 + este).

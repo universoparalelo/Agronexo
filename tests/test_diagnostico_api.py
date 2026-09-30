@@ -74,15 +74,23 @@ def _auth() -> dict:
 def _insertar_vuelo(
     lote_id: str, estado: str = "pendiente", geojson_key: str | None = None,
     cultivo_id: str | None = None, estadio_fenologico: str | None = None,
+    archivo_original: str | None = None, subido_por_id: str | None = None,
+    metodo_umbral: str | None = None, mapeo_bandas: str | None = None,
 ) -> str:
-    """Inserta un vuelo directamente en la BD, sin pasar por MinIO ni Celery."""
+    """Inserta un vuelo directamente en la BD, sin pasar por MinIO ni Celery.
+
+    mapeo_bandas se recibe ya como JSON string (json.dumps) para el CAST —
+    igual que hace el worker real en _actualizar_vuelo."""
     vuelo_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     engine = create_engine(settings.database_url_sync)
     with engine.connect() as conn:
         conn.execute(text(
-            "INSERT INTO vuelos (id, lote_id, cultivo_id, estadio_fenologico, sensor, fecha_vuelo, estado, geojson_key, created_at) "
-            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), CAST(:cultivo_id AS uuid), :estadio, :sensor, :fecha, :estado, :geojson_key, :created_at)"
+            "INSERT INTO vuelos (id, lote_id, cultivo_id, estadio_fenologico, sensor, fecha_vuelo, estado, "
+            "geojson_key, archivo_original, subido_por_id, metodo_umbral, mapeo_bandas, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), CAST(:cultivo_id AS uuid), :estadio, :sensor, "
+            ":fecha, :estado, :geojson_key, :archivo_original, CAST(:subido_por_id AS uuid), :metodo_umbral, "
+            "CAST(:mapeo_bandas AS JSONB), :created_at)"
         ), {
             "id": vuelo_id,
             "lote_id": lote_id,
@@ -92,6 +100,10 @@ def _insertar_vuelo(
             "fecha": now,
             "estado": estado,
             "geojson_key": geojson_key,
+            "archivo_original": archivo_original,
+            "subido_por_id": subido_por_id,
+            "metodo_umbral": metodo_umbral,
+            "mapeo_bandas": mapeo_bandas,
             "created_at": now,
         })
         conn.commit()
@@ -215,6 +227,45 @@ def test_diagnostico_vuelo_sin_cultivo_es_409(monkeypatch):
     assert "cultivo" in r.json()["detail"].lower()
     print("✓ GET /diagnostico vuelo sin cultivo → 409")
 
+
+# ── Trazabilidad (HU-R4-02) ──────────────────────────────────────────
+
+def test_diagnostico_incluye_trazabilidad_completa(monkeypatch):
+    import json
+
+    from app.diagnostico.reglas import MOTOR_VERSION
+
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+
+    engine = create_engine(settings.database_url_sync)
+    with engine.connect() as conn:
+        usuario_id = conn.execute(
+            text("SELECT id FROM usuarios WHERE email = :email"), {"email": _EMAIL},
+        ).scalar_one()
+    engine.dispose()
+
+    cultivo = _crear_cultivo("soja", None)
+    vuelo_id = _insertar_vuelo(
+        _lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo, estadio_fenologico="R2",
+        archivo_original=f"{usuario_id}/{_lote_id}/vuelo/original.tif",
+        subido_por_id=str(usuario_id),
+        metodo_umbral="otsu",
+        mapeo_bandas=json.dumps({"NIR": 4, "RED": 2, "RE": 3, "GREEN": 1, "BLUE": None}),
+    )
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 200, r.text
+    meta = r.json()["metadata"]
+    assert meta["motor_version"] == MOTOR_VERSION
+    assert meta["archivo_original"] == f"{usuario_id}/{_lote_id}/vuelo/original.tif"
+    assert meta["subido_por"] == f"Test Diagnostico ({_EMAIL})"
+    assert meta["metodo_umbral"] == "otsu"
+    assert meta["mapeo_bandas"] == {"NIR": 4, "RED": 2, "RE": 3, "GREEN": 1, "BLUE": None}
+    print("✓ GET /diagnostico incluye archivo, uploader, umbral, mapeo de bandas y versión del motor")
 
 
 # ── Auth ──────────────────────────────────────────────────────────────

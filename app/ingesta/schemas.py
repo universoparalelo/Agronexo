@@ -7,6 +7,15 @@ from app.lotes.models import EstadoVueloEnum, IndiceEnum, SensorEnum
 from app.lotes.schemas import CultivoCreate, CultivoResponse
 
 
+class UsuarioResumen(BaseModel):
+    """Identifica a quién subió un vuelo (HU-R4-02, trazabilidad) — solo lo
+    necesario para mostrarlo, no el perfil completo de UsuarioResponse."""
+    nombre: str
+    email: str
+
+    model_config = {"from_attributes": True}
+
+
 class IndiceAnalisisItem(BaseModel):
     """Un índice ya calculado (o en curso) para un vuelo — incluye el NDVI
     "primario" sintetizado desde el propio vuelo, y cualquier adicional
@@ -32,6 +41,12 @@ class VueloListItem(BaseModel):
     cultivo_id: uuid.UUID | None = None
     cultivo: CultivoResponse | None = None
     indices: list[IndiceAnalisisItem] = []
+    # Trazabilidad (HU-R4-02): metodo_umbral y mapeo_bandas quedan en None
+    # hasta que el worker termina de procesar (ver Vuelo.mapeo_bandas).
+    archivo_original: str | None = None
+    subido_por: UsuarioResumen | None = None
+    metodo_umbral: str | None = None
+    mapeo_bandas: dict | None = None
 
 
 class VueloUploadResponse(BaseModel):
