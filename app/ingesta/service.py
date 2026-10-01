@@ -225,7 +225,7 @@ async def listar_vuelos(
     stmt = (
         select(Vuelo)
         .where(Vuelo.lote_id == lote_id, Vuelo.deleted_at.is_(None))
-        .order_by(Vuelo.created_at.desc())
+        .order_by(Vuelo.fecha_vuelo.desc())
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())

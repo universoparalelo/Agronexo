@@ -98,6 +98,20 @@ function onEachUnidad(feature, layer) {
   `)
 }
 
+// Leaflet fija el tamaño del mapa al montarlo y no se entera solo si el
+// contenedor cambia después (ej. al abrir/cerrar el panel de calendario) —
+// sin esto queda una franja vacía del ancho que el mapa "perdió".
+function AutoResize() {
+  const map = useMap()
+  useEffect(() => {
+    const contenedor = map.getContainer()
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(contenedor)
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
 function FitBounds({ geojson }) {
   const map = useMap()
   useEffect(() => {
@@ -136,6 +150,7 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
+        <AutoResize />
         {sinDatos && (
           <GeoJSON
             key={`sin-datos-${JSON.stringify(sinDatos.coordinates?.[0]?.[0])}`}
