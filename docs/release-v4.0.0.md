@@ -318,3 +318,24 @@ Se modificó la migración para leer `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno 
 
 **Problema abierto — sin servidor real para probar el resto de los criterios**
 Faltan: HTTPS real (necesita dominio + Certbot contra una IP pública real), prueba con GeoTIFF >500MB, y firewall del proveedor (los scripts de backup de Postgres/MinIO ya están escritos, ver arriba — falta instalar el cron en un servidor real). Se intentó Oracle Cloud Free Tier (instancia ARM `VM.Standard.A1.Flex`) en la región `sa-vinhedo-1`, con reintentos automatizados vía script (`oci compute instance launch` en loop) durante casi dos semanas (17/09 → 30/09) sin conseguir capacidad ni con 4 OCPU/24GB ni con 2 OCPU/12GB — la región está saturada de forma sostenida, no es mala suerte puntual. Nota: otro compañero (`cmartinrodich@gmail.com`) agregó entradas de `.gitignore` para un script propio (`scripts/oci_arm_watch.*`) el mismo día — evaluar si conviene unificar esfuerzos en vez de que cada uno reintente por su cuenta. Decisión pendiente: insistir con Oracle vs. migrar a un VPS pago (Hetzner CPX31 evaluado como alternativa, ~USD 12/mes, sin espera de capacidad).
+
+**Error encontrado — Semgrep `request-host-used` en `docker/nginx/nginx.conf` (commit `cbf1e4d`)**
+El PR #54 falló el job *SAST — Semgrep* con 3 hallazgos bloqueantes de `generic.nginx.security.request-host-used.request-host-used`: `proxy_set_header Host $host;` (línea activa y copia comentada del bloque HTTPS) y `return 301 https://$host$request_uri;` en el bloque comentado de redirect.
+Se reemplazó `$host` por `$server_name` en los `proxy_set_header` y por `DOMINIO_AQUI` fijo en el redirect. Es seguro porque la API no lee el header `Host` (sin `TrustedHostMiddleware`, `request.url` ni `base_url` en `app/`). Semgrep pasa tras el fix.
+
+**Estado del CI del PR #54 — 2 checks siguen en rojo, heredados de `main`**
+*SCA — pip-audit* (`pillow 10.4.0`, `jinja2 3.1.4`, `ecdsa 0.19.2`) y *SCA — npm audit* (`vitest ^2.1.8` → `vite`/`esbuild` vulnerables; 1 high + 1 critical, solo en devDependencies) fallan idénticos en `main` (corrida del push del 2026-10-01), así que no vienen de esta rama. Son deuda de dependencias que el workflow de seguridad (2026-09-27) sacó a la luz; `pillow` ya figura en "Problemas abiertos (Sprint 14)". Hay que resolverlos en un PR aparte (`chore/`), y además es requisito de la HU ("CI en verde antes de cada deploy"). `ecdsa` es transitiva (probablemente `python-jose`) y no tenía fix publicado al momento de revisar.
+
+**Evaluación de proveedores de hosting (2026-09-30)** — referencia para la decisión pendiente, montos tomados de blogs/comparadores, a confirmar en las páginas oficiales:
+
+| Opción | Crédito / costo | Duración |
+|---|---|---|
+| Oracle Cloud ARM (free tier) | Gratis | Indefinida, si hay capacidad |
+| Google Cloud | USD 300 | 90 días, cuenta nueva, pide tarjeta |
+| AWS cuenta nueva (São Paulo) | USD 100 + hasta 100 por tareas de onboarding | ~2–5 meses, pide tarjeta |
+| Azure for Students | USD 100/año, sin tarjeta | ~1,5 meses encendida 24/7 |
+| Linode | USD 100 | 60 días |
+| Hetzner (VPS x86) | ~USD 12–15/mes | Mientras se pague |
+| Vultr | USD 100 | 14 días |
+
+Descartados: infra de la UTN (no existe), DigitalOcean vía GitHub Student Pack (el crédito terminó el 31/07/2026), AWS Educate (no da créditos), Heroku (no corre docker-compose con PostGIS/MinIO/Celery). El dominio gratis de Namecheap (Student Pack) sirve para el HTTPS con Let's Encrypt. Decisión pendiente del equipo.
