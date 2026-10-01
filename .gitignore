@@ -53,3 +53,9 @@ docs/ind_veg_asoc_causas.md
 docs/investigacion_fitosanitaria.md
 docs/pantallas/
 docs/valid_indices.md
+
+# Watcher local de capacidad ARM (OCI) + aviso Telegram — no se trackea
+scripts/oci_arm_watch.sh
+scripts/oci_arm_watch.env.example
+scripts/oci_arm_watch.env
+scripts/oci_arm_watch.log
