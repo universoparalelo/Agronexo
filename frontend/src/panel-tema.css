@@ -167,6 +167,7 @@
   .dashboard-main > *,
   .detalle-main > *,
   .resultados-sidebar,
+  .resultados-calendario-panel,
   .resultados-mapa {
     animation: none;
   }
@@ -674,6 +675,26 @@
   color: #6b7a70;
 }
 
+.resultados-panel-fecha {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #27500a;
+}
+
+.resultados-vuelos-boton {
+  margin-left: auto;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.resultados-vuelos-boton:hover { border-color: #27500a; color: #27500a; }
+
 .trazabilidad-panel {
   width: 100%;
   font-size: 0.82rem;
@@ -722,6 +743,43 @@
   gap: 1rem;
   padding: 1.1rem 1.5rem 0;
 }
+
+.resultados-comparacion {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1rem;
+}
+
+.resultados-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0.6rem;
+}
+
+.resultados-panel-encabezado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.resultados-panel-cerrar-comparacion {
+  margin-left: auto;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.resultados-panel-cerrar-comparacion:hover { border-color: #b91c1c; color: #b91c1c; }
 
 .resultados-shell .resultados-main {
   flex: 1;
