@@ -41,11 +41,21 @@ COLORES_SEVERIDAD = {
     "vigorosa": "#3b82f6",
 }
 
-ETIQUETAS = {
+# Etiquetas de "clase" (valor real del índice) — mismos nombres que
+# frontend/src/utils/clasesIndice.js::ETIQUETA_CLASE, distinto de la
+# severidad del diagnóstico (crítica/moderada/leve), que habla de la
+# gravedad del problema, no del valor del índice.
+ETIQUETAS_CLASE = {
+    "critica": "Muy bajo",
+    "deficiente": "Bajo",
+    "normal": "Medio",
+    "vigorosa": "Alto",
+}
+
+ETIQUETAS_SEVERIDAD = {
     "critica": "Crítica",
     "moderada": "Moderada",
     "leve": "Leve",
-    "deficiente": "Deficiente",
     "normal": "Normal",
     "vigorosa": "Vigorosa",
 }
@@ -69,16 +79,20 @@ def _cargar_fuente(size: int = 13) -> ImageFont.FreeTypeFont | ImageFont.ImageFo
 
 
 def generar_imagen_mapa_zonas(
-    geojson: dict, modo: str = "severidad", ancho: int = 900, alto: int = 640,
+    geojson: dict, modo: str = "clase", ancho: int = 900, alto: int = 640,
 ) -> bytes:
     """
     Dibuja las zonas del GeoJSON de diagnóstico (el mismo que devuelve
     app.diagnostico.service.generar_diagnostico) como polígonos rellenos,
-    coloreados por 'clase' o 'severidad' según `modo`. Devuelve bytes PNG
-    listos para incrustar en el template del reporte como data URI.
+    coloreados por 'clase' (valor real del índice — default, a pedido: la
+    severidad relativa al promedio del lote dejaba casi todo el mapa en
+    'normal'/verde en lotes con variación moderada) o 'severidad' según
+    `modo`. Devuelve bytes PNG listos para incrustar en el template del
+    reporte como data URI.
     """
     prop_color = modo if modo in ("severidad", "clase") else "clase"
     paleta = COLORES_SEVERIDAD if prop_color == "severidad" else COLORES_CLASE
+    etiquetas = ETIQUETAS_SEVERIDAD if prop_color == "severidad" else ETIQUETAS_CLASE
 
     features = geojson.get("features", [])
     imagen = Image.new("RGB", (ancho, alto), _COLOR_FONDO)
@@ -116,7 +130,7 @@ def generar_imagen_mapa_zonas(
         color = paleta.get(valor, _COLOR_SIN_DATO)
         _dibujar_geometria(draw, geom_local, a_px, color)
 
-    _dibujar_leyenda(draw, alto, paleta)
+    _dibujar_leyenda(draw, alto, paleta, etiquetas)
 
     return _a_bytes(imagen)
 
@@ -129,13 +143,15 @@ def _dibujar_geometria(draw: ImageDraw.ImageDraw, geom: BaseGeometry, a_px, colo
             draw.polygon(puntos, fill=color, outline="#ffffff")
 
 
-def _dibujar_leyenda(draw: ImageDraw.ImageDraw, alto: int, paleta: dict[str, str]) -> None:
+def _dibujar_leyenda(
+    draw: ImageDraw.ImageDraw, alto: int, paleta: dict[str, str], etiquetas: dict[str, str],
+) -> None:
     fuente = _cargar_fuente()
     x = _MARGEN_PX
     y = alto - _ALTO_LEYENDA_PX + 8
     for clave, color in paleta.items():
         draw.rectangle([x, y, x + 14, y + 14], fill=color, outline="#333333")
-        draw.text((x + 20, y + 1), ETIQUETAS.get(clave, clave), fill="#111111", font=fuente)
+        draw.text((x + 20, y + 1), etiquetas.get(clave, clave), fill="#111111", font=fuente)
         x += 110
 
 

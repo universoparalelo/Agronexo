@@ -93,7 +93,18 @@ class TestGenerarTextoZona:
         assert "fúngica" in texto
         assert "confianza alta" in texto
         assert "Amistar Xtra" in texto
-        assert "fungicida" in texto.lower()
+
+    def test_accion_recomendada_no_se_repite_en_el_parrafo(self):
+        # accion_recomendada tiene su propia sección en el frontend
+        # ("Acción recomendada:") y en el PDF — no debe duplicarse acá.
+        props = {
+            "area_ha": 2.5, "ndvi_promedio": 0.35,
+            "patron_espacial": "circular", "causa_indice": "estres_biotico_fungico",
+            "confianza": "alta", "regla_id": "R20",
+            "accion_recomendada": "Aplicar fungicida foliar de contacto ahora mismo.",
+        }
+        texto = generar_texto_zona(props, 0.70)
+        assert "fungicida" not in texto.lower()
 
     def test_desviacion_porcentual_correcta(self):
         props = {

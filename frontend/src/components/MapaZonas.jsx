@@ -39,16 +39,6 @@ function estiloZona(feature) {
   }
 }
 
-function estiloSeveridad(feature) {
-  const severidad = feature.properties?.severidad || 'normal'
-  return {
-    fillColor: COLORES_SEVERIDAD[severidad] || '#999',
-    fillOpacity: 0.6,
-    color: '#fff',
-    weight: 1.5,
-  }
-}
-
 function estiloUnidad(feature) {
   const severidad = feature.properties?.severidad || 'normal'
   return {
@@ -74,12 +64,13 @@ function onEachZona(feature, layer) {
   })
 }
 
-function onEachZonaSeveridad(feature, layer) {
+function onEachZonaDiagnostico(feature, layer) {
   const p = feature.properties || {}
+  const clase = ETIQUETAS_CLASE[p.clase] || p.clase || '—'
   const severidad = ETIQUETAS_SEVERIDAD[p.severidad] || p.severidad || '—'
   layer.bindPopup(`
     <strong>${p.regla_nombre || 'Sin diagnóstico'}</strong><br/>
-    Severidad: <strong>${severidad}</strong><br/>
+    Clase (NDVI): <strong>${clase}</strong> · Severidad: <strong>${severidad}</strong><br/>
     NDVI: <strong>${p.ndvi_promedio?.toFixed(3) ?? '—'}</strong><br/>
     Área: <strong>${p.area_ha?.toFixed(2) ?? '—'} ha</strong>
   `)
@@ -112,17 +103,23 @@ function FitBounds({ geojson }) {
 }
 
 export default function MapaZonas({ geojson, diagnostico, sinDatos = null }) {
-  const modo = diagnostico ? 'severidad' : 'clase'
+  // El relleno siempre se colorea por clase (valor real del NDVI) — a
+  // pedido: colorear por severidad (relativa al promedio del lote) dejaba
+  // casi todo el mapa en "normal"/verde en lotes con variación moderada,
+  // sin distinguir zonas con NDVI realmente distinto. La severidad del
+  // diagnóstico sigue visible en el popup y en el contorno de las
+  // unidades de manejo (estiloUnidad), que es la señal de "esto requiere
+  // atención", separada de "así está el índice en esta zona".
   const dataMapa = diagnostico || geojson
   const unidades = diagnostico?.unidades_manejo || []
 
-  const featuresKey = `${dataMapa?.features?.length ?? 0}-${modo}`
+  const featuresKey = `${dataMapa?.features?.length ?? 0}-${diagnostico ? 'diag' : 'zonas'}`
   const unidadesKey = `u-${unidades.length}`
 
-  const colores = modo === 'severidad' ? COLORES_SEVERIDAD : COLORES_CLASE
-  const etiquetas = modo === 'severidad' ? ETIQUETAS_SEVERIDAD : ETIQUETAS_CLASE
-  const estilo = modo === 'severidad' ? estiloSeveridad : estiloZona
-  const onEach = modo === 'severidad' ? onEachZonaSeveridad : onEachZona
+  const colores = COLORES_CLASE
+  const etiquetas = ETIQUETAS_CLASE
+  const estilo = estiloZona
+  const onEach = diagnostico ? onEachZonaDiagnostico : onEachZona
 
   return (
     <div className="mapa-zonas-wrapper">

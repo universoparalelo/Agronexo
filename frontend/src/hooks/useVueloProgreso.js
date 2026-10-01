@@ -24,11 +24,23 @@ export function useVueloProgreso(loteId, vueloId, indice = 'ndvi', { absorber = 
       + (absorber ? '?absorber=true' : '')
 
     let cancelled = false
+    // Solo un error sin `response` (conexión caída, timeout, CORS) es
+    // transitorio y vale la pena reintentar en silencio. Un error CON
+    // response (404 porque el vuelo/lote ya no existe, 500, etc.) nunca se
+    // va a resolver solo reintentando — antes se lo trataba igual que uno
+    // transitorio y el polling quedaba reintentando cada 2s para siempre,
+    // sin mostrar nada (el análisis "no se mostraba", ver reporte de usuario).
+    // Además, si los errores realmente transitorios se repiten demasiado
+    // (backend caído, no solo un blip), tampoco tiene sentido quedar
+    // reintentando en silencio de forma indefinida.
+    let fallosDeRedSeguidos = 0
+    const MAX_FALLOS_RED_SEGUIDOS = 5
 
     async function poll() {
       try {
         const { data } = await client.get(urlEstado)
         if (cancelled) return
+        fallosDeRedSeguidos = 0
         setEstado(data)
 
         if (data.estado === 'completado') {
@@ -43,8 +55,23 @@ export function useVueloProgreso(loteId, vueloId, indice = 'ndvi', { absorber = 
           clearInterval(intervalRef.current)
           if (!cancelled) setErrorMsg(data.error ?? 'El procesamiento falló.')
         }
-      } catch {
-        // error de red transitorio — mantener polling
+      } catch (err) {
+        if (cancelled) return
+        if (err?.response) {
+          clearInterval(intervalRef.current)
+          setErrorMsg(
+            err.response.status === 404
+              ? 'Este análisis ya no está disponible.'
+              : 'No se pudo consultar el estado del análisis.'
+          )
+          return
+        }
+        // sin `response` → error de red transitorio, reintentar
+        fallosDeRedSeguidos += 1
+        if (fallosDeRedSeguidos >= MAX_FALLOS_RED_SEGUIDOS) {
+          clearInterval(intervalRef.current)
+          setErrorMsg('No se pudo conectar con el servidor. Revisá tu conexión e intentá de nuevo.')
+        }
       }
     }
 

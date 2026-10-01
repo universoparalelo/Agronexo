@@ -586,3 +586,59 @@ Se unificó el aspecto de la landing, el login y el panel (dashboard, lotes, det
 **Problemas a tener en cuenta:**
 - El merge con `origin/main` trajo la dependencia `geotiff`; hubo que reconstruir la imagen (`docker compose build frontend`), porque `npm install` dentro del contenedor no ve el `package.json` nuevo (solo `src` está montado).
 - Los estilos inline de algunos componentes (mapas, leyendas) no siguen la paleta; quedan con sus colores propios.
+
+## Sprint 15 — Cierre de release v3.0.0
+
+#### Mapa de zonas por clase NDVI en Diagnóstico y PDF (en vez de severidad)
+**Fecha:** 2026-09-22
+**Rama:** `main`
+
+Reporte de usuario: el mapa de la pestaña Diagnóstico y el del reporte PDF ejecutivo se veían "todo verde". Causa confirmada: ambos coloreaban el relleno por **severidad** (crítica/moderada/leve/normal/vigorosa, relativa al promedio NDVI del lote — `calcular_severidad()` en `app/diagnostico/texto.py`), y en un lote sin variación extrema casi todas las zonas caen en "normal", cuyo color es un verde claro. La pestaña "Zonas" (no-diagnóstico) sí coloreaba por clase real del índice y se veía variada — la inconsistencia entre pestañas era la señal de que era un problema de diseño, no de datos.
+
+Verificado con un caso sintético de 4 zonas (crítica/deficiente/normal/vigorosa) pero todas con severidad "normal": el PNG generado por `generar_imagen_mapa_zonas()` salía en un solo color (`#86efac`) en modo severidad, y en 4 colores distintos en modo clase.
+
+**Decisiones tomadas (a pedido, ver opciones planteadas al usuario):**
+- El relleno de zonas pasa a colorear siempre por `clase` (valor real del NDVI/índice, mismos identificadores `critica/deficiente/normal/vigorosa` y mismas etiquetas `Muy bajo/Bajo/Medio/Alto` que la pestaña Zonas) en `frontend/src/components/MapaZonas.jsx` y `app/reportes/mapa.py` (`generar_imagen_mapa_zonas()` cambia su default de `modo="severidad"` a `modo="clase"`). No se agregó un toggle — el usuario prefirió una sola vista fija.
+- La severidad del diagnóstico no desaparece: sigue en el popup de cada zona (ahora muestra clase y severidad juntas) y en el contorno punteado de las unidades de manejo (`estiloUnidad`), que es la señal de "esto requiere atención" — separada de "así está el índice acá".
+- `mapa.py` sigue soportando `modo="severidad"` internamente (paleta y etiquetas separadas) por si hiciera falta más adelante, pero ningún caller lo pide hoy.
+
+**Verificación:**
+- Test manual con GeoJSON sintético (4 zonas, todas severidad "normal" pero clases distintas): PNG en modo severidad = 1 color; en modo clase = 4 colores, leyenda "Muy bajo/Bajo/Medio/Alto" correcta.
+- `docker compose exec frontend npm run build` y `npm test` sin errores.
+- Suite completa del backend (238 tests, excluyendo los del worker que no corren en el contenedor `api`) pasa sin cambios de comportamiento inesperados.
+
+#### Restaurar "Acción recomendada" como sección propia en el diagnóstico
+**Fecha:** 2026-09-22
+**Rama:** `main`
+
+Reporte de usuario: en algún momento dejó de verse un bloque de "cómo actuar" en el diagnóstico por zona — solo quedaba "Cómo confirmar en campo". Investigado con `git log -p`: el commit `e435402` (30-ago, introducción de `app/diagnostico/texto.py`) sacó el bloque `<p><strong>Acción recomendada:</strong> {accion_recomendada}</p>` de `TablaDiagnostico.jsx` y en su lugar empezó a incluir `accion_recomendada` diluida dentro del párrafo narrativo (`texto_explicativo`) — el dato nunca se perdió del backend, dejó de tener una sección visible propia.
+
+**Fix:** se restauró el bloque `<p className="diagnostico-accion"><strong>Acción recomendada:</strong> …</p>` en `TablaDiagnostico.jsx`, antes del `<details>` de "Cómo confirmar en campo" (mismo lugar y estilo que tenía originalmente). Para no duplicar el texto, se sacó el `accion_recomendada` del párrafo narrativo (`generar_texto_zona()` en `app/diagnostico/texto.py`).
+
+**Decisión tomada:** el reporte PDF ejecutivo (`app/reportes/`) también arma su texto de zona a partir de `texto_explicativo` y nunca tuvo una sección separada para la acción (el módulo de reportes es de sprint 11, posterior al commit que fusionó el texto) — para no perder esa información ahí también, se agregó `accion_recomendada` al contexto de zona (`_zona_a_contexto()` en `app/reportes/service.py`) y un párrafo `<strong>Acción recomendada:</strong>` propio en `reporte_ejecutivo.html`, mismo criterio que el dashboard.
+
+**Verificación:**
+- `tests/test_texto.py`: se ajustó `test_zona_con_problema_incluye_causa_y_patron` (ya no espera "fungicida" en el párrafo narrativo) y se agregó `test_accion_recomendada_no_se_repite_en_el_parrafo`.
+- PDF generado con `generar_pdf_reporte()` sobre un caso sintético, texto extraído con `pypdf` (temporal, no es dependencia del proyecto): confirma "Acción recomendada: Programar riego suplementario…" en el cuerpo del PDF.
+- Suite completa (238 tests) pasa.
+
+#### Fix: análisis que no se muestran al hacer clic en 🔍 (Dashboard)
+**Fecha:** 2026-09-22
+**Rama:** `main`
+
+Reporte de usuario: al hacer clic en el ícono de lupa de la tabla "Análisis Recientes" para ver el mapa de un índice, en algunos análisis no se mostraba nada. No se pudo reproducir en vivo (la extensión de Chrome del entorno se colgó/no navegó en los dos intentos — se abandonó esa vía para no insistir en una herramienta que estaba fallando). Se investigó primero por datos: se revisaron todos los vuelos e índices reales del usuario de desarrollo (9 vuelos, 30 análisis de índices adicionales) contra la API real — todos devuelven 200 con features, no hay ningún caso de `estado=completado` sin resultado en los datos reales actuales.
+
+Encontrados **dos bugs reales** en el manejo de errores de `useVueloProgreso.js`/`Dashboard.jsx` que producen exactamente el síntoma descrito (queda "cargando" para siempre, sin mostrar nada) cuando la consulta de estado falla por cualquier motivo:
+
+1. **`useVueloProgreso.js`:** el `catch` del polling ignoraba *cualquier* error por igual, pese a que el comentario decía "error de red transitorio — mantener polling". Un error con respuesta del servidor (404 porque el vuelo ya no existe, 500, etc.) nunca se va a resolver solo reintentando cada 2s, pero se trataba igual que un error de red transitorio real — polling infinito y silencioso.
+2. **`Dashboard.jsx` (`AnalisisMap`):** aunque el punto 1 se corrigiera y `errorMsg` se seteara, el primer `if (!estado) return <p>Cargando análisis...</p>` cortaba antes de llegar a chequear `errorMsg` — si la primerísima consulta de estado fallaba, el componente quedaba mostrando "Cargando análisis..." para siempre sin importar que el hook sí hubiera detectado el error.
+
+**Decisiones tomadas:**
+- `useVueloProgreso.js` ahora distingue error de red real (sin `error.response` — conexión caída, timeout) de error HTTP (con `error.response` — 404/500): el primero sigue reintentando en silencio (es genuinamente transitorio), el segundo corta el polling y muestra un mensaje. Se agregó además un tope de 5 fallos de red seguidos (10s) para no reintentar en silencio de forma indefinida ni siquiera ante una caída real y prolongada del backend.
+- `AnalisisMap` chequea `errorMsg` antes que `!estado`, no después.
+
+**Pendiente:** no se identificó el disparador exacto que vio el usuario (dato real corrupto, sesión con vuelo borrado entre carga de tabla y clic, backend momentáneamente caído, etc.) porque no se pudo reproducir en vivo. Si vuelve a pasar, conviene guardar el nombre del lote/vuelo y el índice exactos para poder revisar el dato puntual.
+
+**Verificación:**
+- `docker compose exec frontend npm run build` y `npm test` sin errores.
+- Se descartó por datos que sea un problema de `geojson_key` faltante o de índices no calculados en los vuelos reales del usuario (verificado contra la API real, no solo la BD).

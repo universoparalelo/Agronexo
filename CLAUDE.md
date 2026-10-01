@@ -37,7 +37,7 @@
 | Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |
 | Diagnóstico explicado por zona | ✅ | Texto legible, severidad, vinculado a lote/vuelo. `app/diagnostico/texto.py` |
 | Zonificación de manejo (RFDR-02) | ✅ | Agrupa zonas contiguas por causa+severidad en unidades de manejo. `app/diagnostico/zonificacion.py` |
-| Mapa con color por severidad | ✅ | Toggle automático al activar tab Diagnóstico + contornos de unidades de manejo |
+| Mapa de zonas por clase NDVI en Diagnóstico + PDF | ✅ | Relleno siempre por clase real del índice (`MapaZonas.jsx`, `app/reportes/mapa.py`); coloreado por severidad relativa al promedio del lote quedaba "todo verde" en lotes con variación moderada. Severidad sigue visible en popup y en el contorno de unidades de manejo |
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
 | Tests unitarios del motor de diagnóstico | ✅ | 84 tests: engine, forma, texto, zonificación, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py` |
 | Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |

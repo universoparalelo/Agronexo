@@ -129,7 +129,7 @@
   </div>
 
   <div class="mapa">
-    <img src="{{ mapa_base64 }}" alt="Mapa de zonas por severidad">
+    <img src="{{ mapa_base64 }}" alt="Mapa de zonas por valor de NDVI">
   </div>
 
   <div class="resumen">
@@ -190,6 +190,9 @@
     <div class="zona-detalle {{ zona.severidad }}">
       <h3>Zona #{{ zona.zona_id }} — {{ zona.severidad_label }} ({{ "%.2f"|format(zona.area_ha) }} ha)</h3>
       <p>{{ zona.texto_explicativo }}</p>
+      {% if zona.accion_recomendada %}
+      <p><strong>Acción recomendada:</strong> {{ zona.accion_recomendada }}</p>
+      {% endif %}
       {% if zona.productos_texto %}
       <p class="productos"><strong>Productos sugeridos:</strong> {{ zona.productos_texto }}</p>
       {% endif %}
