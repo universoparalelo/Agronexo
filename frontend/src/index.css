@@ -2579,6 +2579,268 @@ body {
 .calendario-satelital-punto--disponible { background: #27500a; }
 .calendario-satelital-punto--nublado { background: #b45309; }
 
+/* ── Calendario de vuelos del lote (VuelosCalendario.jsx) ── */
+.vuelos-calendario-titulo-fila { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+.vuelos-calendario-titulo { font-size: 0.95rem; font-weight: 700; color: #1a3a2a; margin: 0; }
+
+.vuelos-calendario-cerrar {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: #9ca3af;
+  padding: 0 0.2rem;
+}
+
+.vuelos-calendario-cerrar:hover { color: #1a3a2a; }
+
+.vuelos-calendario-nuevo-analisis {
+  flex-shrink: 0;
+  margin-left: auto;
+  background: #fff;
+  color: #27500a;
+  border: 1px solid #cfe0c8;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.vuelos-calendario-nuevo-analisis:hover { background: #f0f5ec; border-color: #27500a; }
+
+.vuelos-calendario-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.vuelos-calendario-header button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #27500a;
+  padding: 0.1rem 0.4rem;
+}
+
+.vuelos-calendario-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.vuelos-calendario-diasemana {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  text-align: center;
+  padding-bottom: 0.3rem;
+}
+
+.vuelos-calendario-dia {
+  position: relative;
+  aspect-ratio: 1;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  cursor: pointer;
+}
+
+.vuelos-calendario-dia:hover {
+  background: #f0f5ec;
+}
+
+.vuelos-calendario-dia--con-vuelo {
+  background: #eaf2e4;
+  color: #27500a;
+  font-weight: 700;
+}
+
+.vuelos-calendario-dia--con-vuelo:hover {
+  background: #dcebd3;
+}
+
+.vuelos-calendario-dia--activo {
+  outline: 2px solid #27500a;
+  outline-offset: -2px;
+}
+
+.vuelos-calendario-dia--seleccionado {
+  background: #27500a;
+  color: #fff;
+}
+
+.vuelos-calendario-contador {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #fff;
+  background: #27500a;
+  border-radius: 999px;
+  min-width: 12px;
+  line-height: 12px;
+  padding: 0 2px;
+}
+
+.vuelos-calendario-leyenda {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.vuelos-calendario-punto {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 0.35rem;
+  vertical-align: -1px;
+}
+
+.vuelos-calendario-punto--con-vuelo { background: #eaf2e4; }
+
+.vuelos-calendario-anio-boton {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a1a1a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+
+.vuelos-calendario-anio-boton:hover { border-color: #27500a; color: #27500a; }
+
+.vuelos-calendario-meses-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.vuelos-calendario-mes-celda {
+  padding: 0.6rem 0.3rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #9ca3af;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.vuelos-calendario-mes-celda:hover { border-color: #27500a; }
+
+.vuelos-calendario-mes-celda--con-vuelo {
+  background: #eaf2e4;
+  color: #27500a;
+  border-color: #dcebd3;
+}
+
+.vuelos-calendario-mes-celda--activo {
+  outline: 2px solid #27500a;
+  outline-offset: -2px;
+}
+
+.vuelos-calendario-lista {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.vuelos-calendario-lista-titulo-fila {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.vuelos-calendario-lista-titulo { font-size: 0.8rem; font-weight: 700; color: #1a3a2a; margin: 0; }
+
+.vuelos-calendario-lista ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+
+.vuelos-calendario-item-fila { display: flex; align-items: center; gap: 0.3rem; }
+
+.vuelos-calendario-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.74rem;
+  color: #1a1a1a;
+}
+
+.vuelos-calendario-item:hover { border-color: #27500a; }
+.vuelos-calendario-item--activo { border-color: #27500a; background: #f0f5ec; }
+.vuelos-calendario-item:disabled { cursor: not-allowed; opacity: 0.6; }
+.vuelos-calendario-item:disabled:hover { border-color: #e5e7eb; }
+
+.vuelos-calendario-item-sensor { flex: 1; font-weight: 600; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.vuelos-calendario-item-menu { position: relative; flex-shrink: 0; }
+
+.vuelos-calendario-item-menu-boton {
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: #6b7280;
+  padding: 0.35rem 0.3rem;
+  border-radius: 6px;
+}
+
+.vuelos-calendario-item-menu-boton:hover { background: #f0f5ec; color: #27500a; }
+
+.vuelos-calendario-item-menu-lista {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 190px;
+  background: #fff;
+  border: 1px solid #e5e8df;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.3rem;
+}
+
+.vuelos-calendario-item-menu-lista button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.76rem;
+  color: #1a1a1a;
+  border-radius: 6px;
+}
+
+.vuelos-calendario-item-menu-lista button:hover { background: #f0f5ec; color: #27500a; }
+
 .mapa-dibujo-wrapper {
   position: relative;
 }
@@ -2637,8 +2899,39 @@ body {
   gap: 1.25rem;
 }
 
+.detalle-main--calendario { max-width: 1120px; }
+
+.vuelos-header-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+
+.vuelos-vista-toggle { display: flex; gap: 0.2rem; background: #f0f4f0; border-radius: 6px; padding: 2px; }
+
 .vuelos-title { font-size: 1rem; font-weight: 700; color: #1a3a2a; }
 .vuelos-lista { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.vuelos-calendario-inline { display: flex; align-items: flex-start; gap: 1.5rem; }
+
+.vuelos-calendario-inline-lista { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+
+.vuelos-calendario-inline-lista-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.vuelos-calendario-inline-calendario {
+  flex-shrink: 0;
+  width: 460px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem;
+  box-sizing: border-box;
+}
+
+.vuelos-calendario-inline-calendario .vuelos-calendario-dia { font-size: 0.95rem; }
+.vuelos-calendario-inline-calendario .vuelos-calendario-header { font-size: 1rem; margin-bottom: 0.75rem; }
+.vuelos-calendario-inline-calendario .vuelos-calendario-grid { gap: 5px; }
 
 .vuelo-card {
   background: #fff;
@@ -2707,8 +3000,45 @@ body {
 
 /* ── Resultados Vuelo ── */
 .resultados-main { flex: 1; display: grid; grid-template-columns: 1fr 340px; overflow: hidden; }
-.resultados-mapa { overflow: hidden; }
+.resultados-mapa { position: relative; overflow: hidden; }
+
+.resultados-mapa-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.55);
+}
 .resultados-sidebar { background: #fff; border-left: 1px solid #e5e7eb; overflow-y: auto; overflow-x: hidden; padding: 1.25rem; box-sizing: border-box; }
+
+.resultados-calendario-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(15, 23, 20, 0.45);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.resultados-calendario-panel {
+  width: 380px;
+  max-width: 100%;
+  height: 100%;
+  background: #fff;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.25rem;
+  box-sizing: border-box;
+  animation: resultados-calendario-entrar 0.22s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes resultados-calendario-entrar {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
 
 /* ── Mapa Zonas (usado en ResultadosVuelo) ── */
 .mapa-zonas-wrapper { position: relative; height: 100%; }
@@ -2742,7 +3072,7 @@ body {
 }
 
 /* ── Tabs Zonas/Diagnóstico (ResultadosVuelo) ── */
-.resultados-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+.resultados-tabs { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
 .resultados-tab {
   background: none; border: none; cursor: pointer;
   padding: 0.5rem 0.1rem; margin-right: 0.75rem;
@@ -2751,6 +3081,58 @@ body {
 }
 .resultados-tab:hover { color: #1a3a2a; }
 .resultados-tab--activo { color: #1a3a2a; border-bottom-color: #1a3a2a; }
+
+.resultados-tabs-acciones {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.resultados-sidebar-cerrar {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: #9ca3af;
+  padding: 0 0.1rem;
+  height: fit-content;
+}
+
+.resultados-sidebar-cerrar:hover { color: #1a3a2a; }
+
+.resultados-sidebar-pestania {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: linear-gradient(180deg, #1a3a2a, #27500a);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1rem 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resultados-sidebar-pestania:hover { background: linear-gradient(180deg, #16301f, #1e3f08); }
+
+.resultados-tab-calendario-abrir {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4b5563;
+  height: fit-content;
+}
+
+.resultados-tab-calendario-abrir:hover { border-color: #27500a; color: #27500a; }
 
 /* ── Tabla/Cards Diagnóstico ── */
 .tabla-diagnostico-wrapper { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -3178,6 +3560,17 @@ body {
 .lote-selector-fila {
   display: flex;
   gap: 0.5rem;
+}
+
+.lote-fijo-nombre {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #e2e8e2;
+  border-radius: 8px;
+  background: #f7f9f7;
+  color: #1a3a2a;
+  font-weight: 600;
+  font-size: 0.92rem;
 }
 
 .lote-selector-fila select { flex: 1; min-width: 0; }
