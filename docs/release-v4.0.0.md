@@ -26,6 +26,7 @@
 | Upgrade `react`/`react-dom` 19, `react-leaflet` 5, `react-router-dom` 7 | Completada |
 | HU-R4-02 — trazabilidad completa del análisis | Completada |
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
+| HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -274,3 +275,20 @@ Un test de trazabilidad (`test_diagnostico_incluye_trazabilidad_completa`) mostr
 - Recorrido manual en el browser pane: panel de trazabilidad expandido con datos reales de un vuelo real (`Lote Cele`), incluido un recálculo de diagnóstico que confirma `motor de reglas v1.0.0` en la barra de metadata. Sin errores de consola.
 
 **Extra (a pedido, mismo bug, mismo branch):** `Lote.usuario_id` tenía el mismo mismatch de tipos que `Vuelo.subido_por_id` frente a `Usuario.id` — dormido porque nada hacía eager load de `Lote.usuario`, pero se corrigió acá mismo en vez de dejarlo como tarea aparte (investigado el impacto: solo afecta cómo se deserializa el valor al leerlo del ORM, no las comparaciones en cláusulas `WHERE` de SQLAlchemy ni la validación de los schemas Pydantic, que coercionan `str`→`uuid.UUID` sin problema). Test de regresión nuevo: `tests/test_lotes.py::test_lote_usuario_carga_via_selectinload` — carga un lote con `selectinload(Lote.usuario)` y confirma que no da `None`. 247 tests pasan (246 + este).
+
+#### HU-R4-03 · Listado multi-lote
+**Fecha:** 2026-09-30
+**Rama:** `feat/hu-r4-03-listado-multi-lote`
+
+La tarjeta pedía nombre, productor/campo, cultivo, superficie, fecha del último vuelo, estado del último análisis, filtros (cultivo/campaña/estado) y búsqueda por nombre, paginado del lado del backend. "Productor/campo" se descartó a pedido del equipo — nunca existió ese dato, fue un error al crear la tarjeta.
+
+**Hallazgo antes de tocar código:** `GET /lotes` no tenía filtros ni paginado, y el frontend hacía un `GET /lotes/{id}/vuelos` **por cada lote** del listado (`Lotes.jsx`, `Promise.allSettled`) solo para mostrar la cantidad de vuelos — el antipatrón N+1 que la propia tarjeta pide evitar explícitamente.
+
+**Backend:** `app/lotes/service.py::listar_lotes` resuelve el último vuelo (y el cultivo actual, para filtrar) de cada lote en una sola consulta con `DISTINCT ON` (mismo patrón que ya usa la migración 0020), sin tocar la relación `Lote.cultivos` existente. Nueva firma con `q`, `cultivo`, `campana`, `estado`, `page`, `page_size`; `GET /lotes` expone los mismos query params. `LoteResponse` suma `ultimo_vuelo_fecha`/`ultimo_vuelo_estado`; `LoteListResponse` suma `page`/`page_size`. Sin migración nueva — no hizo falta ningún campo en la base, todo sale de columnas que ya existían.
+
+**Frontend:** `Lotes.jsx` ya no pide vuelos por lote — usa `ultimo_vuelo_fecha`/`ultimo_vuelo_estado` del propio `GET /lotes`. Se separó en dos listas: `lotes` (página actual, filtrada, para la grilla) y `lotesTodos` (hasta 100, sin filtrar, para los modales de "Cargar Ortomosaico" y "Elegir lote", que tienen que poder ofrecer cualquier lote del usuario — si se les pasaba la lista paginada/filtrada, un lote fuera de la página actual dejaba de poder elegirse para subir un vuelo). Barra de filtros (buscador con debounce de 350ms, cultivo, campaña, estado) y paginado agregados a la pantalla.
+
+**Verificación:**
+- 6 tests nuevos en `tests/test_lotes.py` (último vuelo sin consulta extra, lote sin vuelos, búsqueda, filtro de estado, filtro de cultivo/campaña, paginado). 253 tests de la imagen `api` pasan (247 + 6).
+- `npm run build` limpio.
+- Recorrido manual en el browser pane: búsqueda y filtro de estado confirmados contra datos reales (excluyen correctamente un lote sin vuelos/cultivo); el modal "Cargar Ortomosaico" sigue ofreciendo todos los lotes aunque la grilla esté filtrada. Sin errores de consola nuevos.

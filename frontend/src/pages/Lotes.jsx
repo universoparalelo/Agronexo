@@ -2,14 +2,22 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { listarLotes, eliminarLote } from '../api/lotes'
-import client from '../api/client'
-import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
+import { CULTIVOS, cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import SidebarNav from '../components/SidebarNav'
 import TopbarPanel from '../components/TopbarPanel'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+
+const ESTADO_LABELS = {
+  pendiente:  'Pendiente',
+  procesando: 'Procesando',
+  completado: 'Completado',
+  error:      'Error',
+}
+
+const PAGE_SIZE = 12
 
 
 const IconCalendar = () => (
@@ -69,60 +77,96 @@ export default function Lotes() {
   const navigate = useNavigate()
 
   const [lotes, setLotes] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showModalCarga, setShowModalCarga] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
 
-  const cargarLotes = useCallback(async () => {
-    setLoading(true)
+  // Filtros de la grilla — búsqueda con debounce para no pegarle a la API en cada tecla.
+  const [busqueda, setBusqueda] = useState('')
+  const [q, setQ] = useState('')
+  const [cultivoFiltro, setCultivoFiltro] = useState('')
+  const [campanaFiltro, setCampanaFiltro] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(busqueda); setPage(1) }, 350)
+    return () => clearTimeout(t)
+  }, [busqueda])
+
+  // Lista completa (sin filtros ni paginado) — la necesitan el modal de carga
+  // de ortomosaico y el de "elegir lote", que tienen que poder ofrecer
+  // cualquier lote del usuario, no solo los que entran en la página actual.
+  const [lotesTodos, setLotesTodos] = useState([])
+  const cargarLotesTodos = useCallback(async () => {
     try {
-      const data = await listarLotes()
-      const items = data.items ?? []
-      const results = await Promise.allSettled(
-        items.map(l => client.get(`/lotes/${l.id}/vuelos`))
-      )
-      setLotes(items.map((l, i) => ({
-        ...l,
-        vuelos: results[i].status === 'fulfilled' ? (results[i].value.data ?? []) : [],
-      })))
+      const data = await listarLotes({ page_size: 100 })
+      setLotesTodos(data.items ?? [])
     } catch {
-      setLotes([])
-    } finally {
-      setLoading(false)
+      setLotesTodos([])
     }
   }, [])
 
+  const cargarLotes = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await listarLotes({
+        page, page_size: PAGE_SIZE,
+        q: q || undefined,
+        cultivo: cultivoFiltro || undefined,
+        campana: campanaFiltro || undefined,
+        estado: estadoFiltro || undefined,
+      })
+      setLotes(data.items ?? [])
+      setTotal(data.total ?? 0)
+    } catch {
+      setLotes([])
+      setTotal(0)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, q, cultivoFiltro, campanaFiltro, estadoFiltro])
+
   useEffect(() => { cargarLotes() }, [cargarLotes])
+  useEffect(() => { cargarLotesTodos() }, [cargarLotesTodos])
+
+  function recargarTodo() {
+    cargarLotes()
+    cargarLotesTodos()
+  }
 
   async function handleEliminar() {
     await eliminarLote(loteParaEliminar.id)
     setLoteParaEliminar(null)
-    cargarLotes()
+    recargarTodo()
   }
 
   function handleVerDiagnosticos() {
-    if (lotes.length === 1) {
-      navigate(`/lotes/${lotes[0].id}`)
+    if (lotesTodos.length === 1) {
+      navigate(`/lotes/${lotesTodos[0].id}`)
       return
     }
     setShowModalElegirLote(true)
   }
 
+  const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
   return (
     <div className="dashboard">
       {showModalCarga && (
         <ModalCargaGeoTIFF
-          lotes={lotes}
-          onSuccess={() => { setShowModalCarga(false); cargarLotes() }}
-          onLoteCreado={cargarLotes}
+          lotes={lotesTodos}
+          onSuccess={() => { setShowModalCarga(false); recargarTodo() }}
+          onLoteCreado={recargarTodo}
           onClose={() => setShowModalCarga(false)}
         />
       )}
       {showModalNuevoLote && (
         <ModalNuevoLote
-          onSuccess={() => { setShowModalNuevoLote(false); cargarLotes() }}
+          onSuccess={() => { setShowModalNuevoLote(false); recargarTodo() }}
           onClose={() => setShowModalNuevoLote(false)}
         />
       )}
@@ -136,7 +180,7 @@ export default function Lotes() {
       )}
       {showModalElegirLote && (
         <ModalElegirLote
-          lotes={lotes}
+          lotes={lotesTodos}
           onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
           onClose={() => setShowModalElegirLote(false)}
         />
@@ -161,61 +205,119 @@ export default function Lotes() {
             </div>
           </div>
 
+          <div className="lotes-filtros">
+            <input
+              type="text"
+              className="lotes-filtro-input"
+              placeholder="Buscar por nombre..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+            <select
+              className="lotes-filtro-select"
+              value={cultivoFiltro}
+              onChange={(e) => { setCultivoFiltro(e.target.value); setPage(1) }}
+            >
+              <option value="">Todos los cultivos</option>
+              {CULTIVOS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <input
+              type="number"
+              className="lotes-filtro-input lotes-filtro-campana"
+              placeholder="Campaña"
+              value={campanaFiltro}
+              onChange={(e) => { setCampanaFiltro(e.target.value); setPage(1) }}
+            />
+            <select
+              className="lotes-filtro-select"
+              value={estadoFiltro}
+              onChange={(e) => { setEstadoFiltro(e.target.value); setPage(1) }}
+            >
+              <option value="">Cualquier estado</option>
+              {Object.entries(ESTADO_LABELS).map(([valor, label]) => (
+                <option key={valor} value={valor}>{label}</option>
+              ))}
+            </select>
+          </div>
+
           {loading ? (
             <p className="estado-msg" style={{ padding: '1rem 0' }}>Cargando lotes...</p>
           ) : lotes.length === 0 ? (
             <div className="empty-state">
-              <p>No hay lotes registrados.</p>
-              <p className="empty-hint">Usá "+ Nuevo Lote" para crear el primero.</p>
+              {q || cultivoFiltro || campanaFiltro || estadoFiltro ? (
+                <>
+                  <p>Ningún lote coincide con esos filtros.</p>
+                  <p className="empty-hint">Probá cambiarlos o limpiar la búsqueda.</p>
+                </>
+              ) : (
+                <>
+                  <p>No hay lotes registrados.</p>
+                  <p className="empty-hint">Usá "+ Nuevo Lote" para crear el primero.</p>
+                </>
+              )}
             </div>
           ) : (
-            <div className="lotes-grid">
-              {lotes.map((lote) => {
-                const cultivo = etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo)
-                return (
-                  <div className="lote-card" key={lote.id}>
-                    <div className="lote-card-thumb">
-                      <img src="/fondo.jpeg" alt={lote.nombre} />
-                    </div>
-                    <div className="lote-card-body">
-                      <div className="lote-card-title-row">
-                        <div>
-                          <h3 className="lote-card-nombre">{lote.nombre}</h3>
-                          {cultivo && <span className="lote-crop-tag">{cultivo}</span>}
-                        </div>
-                        <div className="lote-card-acciones">
-                          <button className="tbl-btn" title="Ver detalle del lote" onClick={() => navigate(`/lotes/${lote.id}`)}>
-                            <IconZoom />
-                          </button>
-                          <button className="tbl-btn tbl-btn--danger" title="Eliminar lote" onClick={() => setLoteParaEliminar(lote)}>
-                            <IconTrash />
-                          </button>
-                        </div>
+            <>
+              <div className="lotes-grid">
+                {lotes.map((lote) => {
+                  const cultivo = etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo)
+                  return (
+                    <div className="lote-card" key={lote.id}>
+                      <div className="lote-card-thumb">
+                        <img src="/fondo.jpeg" alt={lote.nombre} />
                       </div>
+                      <div className="lote-card-body">
+                        <div className="lote-card-title-row">
+                          <div>
+                            <h3 className="lote-card-nombre">{lote.nombre}</h3>
+                            {cultivo && <span className="lote-crop-tag">{cultivo}</span>}
+                          </div>
+                          <div className="lote-card-acciones">
+                            <button className="tbl-btn" title="Ver detalle del lote" onClick={() => navigate(`/lotes/${lote.id}`)}>
+                              <IconZoom />
+                            </button>
+                            <button className="tbl-btn tbl-btn--danger" title="Eliminar lote" onClick={() => setLoteParaEliminar(lote)}>
+                              <IconTrash />
+                            </button>
+                          </div>
+                        </div>
 
-                      <div className="lote-card-meta">
-                        <div className="lote-meta-item" title={`Cultivo: ${cultivo || 'Sin cultivo'}`}>
-                          <span className="lote-meta-icon"><IconPlant /></span>
-                          <span className="lote-meta-val">{cultivo || 'Sin cultivo'}</span>
-                        </div>
-                        <div className="lote-meta-item" title={`Superficie: ${lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}`}>
-                          <span className="lote-meta-icon"><IconArea /></span>
-                          <span className="lote-meta-val">{lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}</span>
-                        </div>
-                        <div className="lote-meta-item" title={`Misiones: ${lote.vuelos.length} vuelo${lote.vuelos.length !== 1 ? 's' : ''}`}>
-                          <span className="lote-meta-icon"><IconFlight /></span>
-                          <span className="lote-meta-val">{lote.vuelos.length} vuelo{lote.vuelos.length !== 1 ? 's' : ''}</span>
-                        </div>
-                        <div className="lote-meta-item" title={`Fecha de registro: ${fmtFecha(lote.created_at)}`}>
-                          <span className="lote-meta-icon"><IconCalendarMini /></span>
-                          <span className="lote-meta-val">{fmtFecha(lote.created_at)}</span>
+                        <div className="lote-card-meta">
+                          <div className="lote-meta-item" title={`Cultivo: ${cultivo || 'Sin cultivo'}`}>
+                            <span className="lote-meta-icon"><IconPlant /></span>
+                            <span className="lote-meta-val">{cultivo || 'Sin cultivo'}</span>
+                          </div>
+                          <div className="lote-meta-item" title={`Superficie: ${lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}`}>
+                            <span className="lote-meta-icon"><IconArea /></span>
+                            <span className="lote-meta-val">{lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}</span>
+                          </div>
+                          <div className="lote-meta-item" title={lote.ultimo_vuelo_estado ? `Estado del último análisis: ${ESTADO_LABELS[lote.ultimo_vuelo_estado] || lote.ultimo_vuelo_estado}` : 'Sin vuelos todavía'}>
+                            <span className="lote-meta-icon"><IconFlight /></span>
+                            <span className="lote-meta-val">{lote.ultimo_vuelo_estado ? ESTADO_LABELS[lote.ultimo_vuelo_estado] || lote.ultimo_vuelo_estado : 'Sin vuelos'}</span>
+                          </div>
+                          <div className="lote-meta-item" title={`Último vuelo: ${lote.ultimo_vuelo_fecha ? fmtFecha(lote.ultimo_vuelo_fecha) : '—'}`}>
+                            <span className="lote-meta-icon"><IconCalendarMini /></span>
+                            <span className="lote-meta-val">{lote.ultimo_vuelo_fecha ? fmtFecha(lote.ultimo_vuelo_fecha) : '—'}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+
+              {totalPaginas > 1 && (
+                <div className="lotes-paginado">
+                  <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                    ← Anterior
+                  </button>
+                  <span className="lotes-paginado-info">Página {page} de {totalPaginas} ({total} lotes)</span>
+                  <button className="btn-secondary" disabled={page >= totalPaginas} onClick={() => setPage((p) => p + 1)}>
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>

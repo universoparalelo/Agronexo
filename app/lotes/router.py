@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
 from app.lotes import service
+from app.lotes.models import CultivoEnum, EstadoVueloEnum
 from app.lotes.schemas import (
     CultivoCreate,
     CultivoResponse,
@@ -29,11 +30,21 @@ async def _get_lote_o_404(lote_id: uuid.UUID, db: AsyncSession, usuario_id: uuid
 
 @router.get("", response_model=LoteListResponse)
 async def listar_lotes(
+    q: str | None = Query(None, description="Buscar por nombre del lote"),
+    cultivo: CultivoEnum | None = Query(None, description="Filtrar por el cultivo actual del lote"),
+    campana: int | None = Query(None, description="Filtrar por año de siembra del cultivo actual"),
+    estado: EstadoVueloEnum | None = Query(None, description="Filtrar por estado del último análisis"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    lotes = await service.listar_lotes(db, usuario_id=uuid.UUID(current_user.id))
-    return LoteListResponse(total=len(lotes), items=lotes)
+    lotes, total = await service.listar_lotes(
+        db, usuario_id=uuid.UUID(current_user.id),
+        q=q, cultivo=cultivo, campana=campana, estado=estado,
+        page=page, page_size=page_size,
+    )
+    return LoteListResponse(total=total, page=page, page_size=page_size, items=lotes)
 
 
 @router.post("", response_model=LoteResponse, status_code=status.HTTP_201_CREATED)

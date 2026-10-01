@@ -21,7 +21,9 @@ export default function ModalElegirLote({ lotes, onElegir, onClose }) {
                 <span className="elegir-lote-nombre">{lote.nombre}</span>
                 <span className="elegir-lote-meta">
                   {etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo) || 'Sin cultivo'}
-                  {lote.vuelos ? ` · ${lote.vuelos.length} vuelo${lote.vuelos.length !== 1 ? 's' : ''}` : ''}
+                  {lote.ultimo_vuelo_fecha
+                    ? ` · último vuelo ${new Date(lote.ultimo_vuelo_fecha).toLocaleDateString('es-AR')}`
+                    : ' · sin vuelos'}
                 </span>
               </button>
             ))}
