@@ -13,6 +13,7 @@ Plataforma de agricultura de precisión para el NEA argentino (Chaco, Formosa, C
 - [Servicios y puertos](#servicios-y-puertos)
 - [Flujo principal de la API](#flujo-principal-de-la-api)
 - [Estructura del proyecto](#estructura-del-proyecto)
+- [Despliegue en producción](#despliegue-en-producción)
 
 ---
 
@@ -155,8 +156,65 @@ agronexo/
 ├── docker/
 │   ├── Dockerfile.api      # Python 3.11 + FastAPI
 │   ├── Dockerfile.worker   # osgeo/gdal + Celery + dependencias GIS
+│   ├── Dockerfile.nginx    # Producción: build estático del frontend + reverse proxy
+│   ├── nginx/nginx.conf    # Config del reverse proxy (HTTP y HTTPS vía Certbot)
 │   └── requirements.{api,worker}.txt
-├── docker-compose.yml
-├── .env.example            # Plantilla de variables de entorno (sin valores reales)
+├── docker-compose.yml      # Desarrollo
+├── docker-compose.prod.yml # Producción (HU-R4-06)
+├── .env.example            # Plantilla de variables de entorno de desarrollo (sin valores reales)
+├── .env.prod.example       # Plantilla de variables de entorno de producción (sin valores reales)
 └── docs/                   # Seguimiento de release y documentación técnica
 ```
+
+## Despliegue en producción
+
+`docker-compose.prod.yml` difiere del compose de desarrollo en varios puntos clave:
+
+- Sin bind mounts de código — las imágenes se buildean con el código ya copiado adentro; un cambio requiere rebuild, no hot-reload.
+- `db`, `redis` y `minio` **no publican puertos al host** — solo son alcanzables desde la red interna de Docker. Para inspeccionarlos desde el servidor usar `docker compose -f docker-compose.prod.yml exec <servicio> ...`, nunca conectarse por IP pública.
+- Las migraciones (`alembic upgrade head`) corren automáticamente al arrancar el contenedor `api`, antes de levantar uvicorn — si fallan, el contenedor no levanta.
+- El frontend se sirve como build estático (no el dev server de Vite) detrás de un reverse proxy Nginx (`docker/Dockerfile.nginx`), único punto de entrada público.
+
+### Primer despliegue en un servidor nuevo
+
+1. **Provisionar el servidor** (VPS con Docker y Docker Compose instalados).
+2. **Clonar el repo** y copiar `.env.prod.example` a `.env.prod`:
+   ```bash
+   cp .env.prod.example .env.prod
+   ```
+3. **Completar `.env.prod` con valores reales** — ningún placeholder `REEMPLAZAR_*` puede quedar sin cambiar. Generar secretos con:
+   ```bash
+   openssl rand -hex 32   # JWT_SECRET_KEY
+   openssl rand -hex 24   # POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD, ADMIN_PASSWORD
+   ```
+4. **Levantar el stack** (primer arranque: sin dominio todavía, Nginx sirve solo HTTP):
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+5. **Verificar que levantó sano**:
+   ```bash
+   docker compose -f docker-compose.prod.yml ps
+   curl http://<IP_PUBLICA>/api/v1/health
+   ```
+6. **Apuntar el dominio** (registro DNS tipo A) a la IP pública del servidor, y esperar a que propague.
+7. **Emitir el certificado HTTPS** (reemplazar `DOMINIO_AQUI` y el email real):
+   ```bash
+   docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+     --webroot -w /var/www/certbot \
+     -d DOMINIO_AQUI --email REEMPLAZAR_email --agree-tos --no-eff-email
+   ```
+8. **Activar HTTPS**: descomentar los bloques `server { listen 443 ... }` y el redirect HTTP→HTTPS en `docker/nginx/nginx.conf` (reemplazando `DOMINIO_AQUI`), y recrear el servicio `nginx`:
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build nginx
+   ```
+9. **Firewall del servidor** — dejar accesibles desde internet solo 80/443; restringir 22 (SSH) a IPs conocidas si es posible; verificar que 5432/6379/9000-9001 no respondan desde afuera (`nmap <IP_PUBLICA>` desde otra máquina, o simplemente confirmar que no están en ningún `ports:` del compose de producción — ya es el caso).
+10. **Backups** (pendiente de automatizar — ver `docs/release-v4.0.0.md`): `pg_dump` programado de la base y espejado del bucket de MinIO, ya que los GeoTIFF originales no se pueden recalcular.
+
+### Deploys siguientes (código ya en el servidor)
+
+```bash
+git pull origin main
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Las migraciones corren solas como parte del arranque del contenedor `api` — no hace falta correr `alembic upgrade head` a mano.

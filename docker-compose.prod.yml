@@ -1,0 +1,122 @@
+# Compose de producción (HU-R4-06). Diferencias clave respecto a docker-compose.yml:
+#   - Sin bind mounts de código (la imagen ya tiene todo COPY'd — cambios requieren rebuild)
+#   - API sin --reload, migraciones corren automáticamente antes de levantar uvicorn
+#   - db/redis/minio sin "ports:" publicados al host — solo alcanzables en la red interna
+#     de Docker (requisito de firewall de HU-R4-06: 5432/6379/9000-9001 no accesibles
+#     desde internet). Para inspeccionar la BD o MinIO desde el servidor, usar
+#     `docker compose exec` en vez de conectarse por IP pública.
+#   - frontend reemplazado por el servicio nginx (build estático + reverse proxy),
+#     único punto de entrada público (80/443)
+#   - Variables de entorno se cargan desde .env.prod (no versionado, ver .env.prod.example)
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file: .env.prod
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    env_file: .env.prod
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    # Migraciones como parte del deploy (HU-R4-06): corren una vez al arrancar
+    # el contenedor, antes de levantar uvicorn. Si `alembic upgrade head` falla,
+    # el contenedor no levanta — evita correr la API contra un esquema desactualizado.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --http h11"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    restart: unless-stopped
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: celery -A workers.celery_app worker --loglevel=info --queues=gis
+
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - api
+
+  # Renueva certificados Let's Encrypt automáticamente cada 12h (certbot no hace
+  # nada si todavía no venció ningún certificado). Requiere correr la emisión
+  # inicial a mano una vez — ver guía de despliegue en el README.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  certbot_certs:
+  certbot_www:
