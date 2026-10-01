@@ -48,6 +48,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
+      - ./backups/minio:/backups  # destino de scripts/backup_minio.sh (bind mount, no un volume nombrado: hay que poder ver/copiar los backups desde el host)
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s

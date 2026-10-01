@@ -208,7 +208,12 @@ agronexo/
    docker compose -f docker-compose.prod.yml up -d --build nginx
    ```
 9. **Firewall del servidor** — dejar accesibles desde internet solo 80/443; restringir 22 (SSH) a IPs conocidas si es posible; verificar que 5432/6379/9000-9001 no respondan desde afuera (`nmap <IP_PUBLICA>` desde otra máquina, o simplemente confirmar que no están en ningún `ports:` del compose de producción — ya es el caso).
-10. **Backups** (pendiente de automatizar — ver `docs/release-v4.0.0.md`): `pg_dump` programado de la base y espejado del bucket de MinIO, ya que los GeoTIFF originales no se pueden recalcular.
+10. **Backups** — instalar el cron en el servidor (`crontab -e`), ejecutando desde la raíz del repo:
+    ```cron
+    0 3 * * *  cd /ruta/al/repo && ./scripts/backup_postgres.sh >> backups/postgres/backup.log 2>&1
+    30 3 * * * cd /ruta/al/repo && ./scripts/backup_minio.sh >> backups/minio/backup.log 2>&1
+    ```
+    `scripts/backup_postgres.sh` corre `pg_dump` vía `docker compose exec` y guarda el `.sql.gz` en `backups/postgres/` (conserva los últimos 14 días). `scripts/backup_minio.sh` usa `mc mirror` dentro del propio contenedor `minio` hacia `backups/minio/` (mismo criterio de retención) — los GeoTIFF originales no se pueden recalcular, así que este backup no es opcional. Ambos scripts leen `.env.prod`, así que hay que correrlos desde la raíz del repo en el servidor.
 
 ### Deploys siguientes (código ya en el servidor)
 
