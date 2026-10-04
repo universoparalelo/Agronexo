@@ -23,7 +23,7 @@ celery==5.4.0
 redis==8.1.0
 
 # MinIO
-minio==7.2.11
+minio==7.2.20
 
 # Reportes PDF
 weasyprint==70.0
