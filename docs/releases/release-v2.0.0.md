@@ -11,7 +11,7 @@ Profesores: Acuña, César J · Mendez, Graciela L
 
 | Campo | Valor |
 |---|---|
-| Versión | v2.0.0 (sin tag; propuesto `v2.0.0` sobre [`47994a4`][47994a4], merge del PR #6, fechado en git el 7 de septiembre de 2026) |
+| Versión | v2.0.0 (tag `v2.0.0` sobre [`47994a4`][47994a4], merge del PR #6, fechado en git el 7 de septiembre de 2026) |
 | Estado | Completa — Demo: 22 de septiembre de 2026, presentada junto con la Release 3 |
 | Período | 7 de julio — 7 de septiembre de 2026 (9 semanas). Inicio: fin de la Release 1 (demo del 7 de julio, dato del equipo); la presentación ubica el inicio del Sprint 6 el 15 de julio. Cierre: fecha del último commit de R2 en git ([`47994a4`][47994a4]); la presentación planificaba el cierre para el 25 de agosto |
 | Equipo | Amilcar Aguirre, Matías Machado, Celeste Martín Rodich, Denise Pujalte, Zaira Rosin |
@@ -694,7 +694,7 @@ Ninguno afectó a una versión publicada. Los más relevantes:
 ### Despliegue de la demo
 
 Los pasos de instalación del `README.md` del corte no cambiaron respecto de R1 (la sección "Instalación" es idéntica entre `f35e422` y `47994a4`):
-1. Clonar el repositorio y posicionarse en la versión; el tag `v2.0.0` sobre `47994a4` es una propuesta, todavía no existe.
+1. Clonar el repositorio y posicionarse en la versión: `git checkout v2.0.0` (tag sobre `47994a4`).
 2. Crear `.env` a partir de `.env.example`.
 3. `docker compose up -d --build`.
 4. Correr las migraciones a mano: `docker compose exec api alembic upgrade head`.
@@ -759,7 +759,7 @@ Ninguno de estos pendientes impide el flujo principal GeoTIFF → índices → d
 | Registro desde la interfaz | Abierto | Abierto | El botón "Registrarse" de `frontend/src/pages/Login.jsx` sigue sin handler ni pantalla de registro |
 | Usuario seed con credenciales conocidas | Abierto | Abierto | `migrations/versions/0006_seed_usuario_default.py` sin cambios |
 | Archivos grandes en memoria | Mitigado | Mitigado | Streaming y sin límite de tamaño en la API ([`c5e41ae`][c5e41ae]); lectura decimada ([`fc9ebb2`][fc9ebb2]). Riesgo derivado: worker sin `mem_limit` (tabla anterior) |
-| Imagen `minio/minio:latest` | Abierto | Corregido | [`7e7182d`][7e7182d] la reemplaza por `cgr.dev/chainguard/minio:latest`; los tags `v1.0.0` y `v2.0.0` (propuesto) conservan la original |
+| Imagen `minio/minio:latest` | Abierto | Corregido | [`7e7182d`][7e7182d] la reemplaza por `cgr.dev/chainguard/minio:latest`; los tags `v1.0.0` y `v2.0.0` conservan la original |
 | Dependencias sin fijar (`scipy`, `npm install` con rangos) | Abierto | Abierto | `scipy` no está en `docker/requirements.worker.txt`; `npm install` en `docker/Dockerfile.frontend` y en `ci.yml` |
 | Migraciones manuales y downgrades incompletos | Abierto | Abierto | `docker-compose.yml` no corre Alembic; el README mantiene el paso manual |
 | Motor de diagnóstico (RFDR-01) | Corregido (implementado) | Corregido (implementado) | `app/diagnostico/` ([`fc9ebb2`][fc9ebb2]) |
