@@ -42,7 +42,7 @@ shapely==2.1.2
 
 # Utils
 httpx==0.28.1
-email-validator==2.2.0
+email-validator==2.3.0
 
 # Testing
 pytest==9.1.1
