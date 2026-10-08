@@ -13,6 +13,10 @@ class RegisterRequest(BaseModel):
     def password_minlen(cls, v: str) -> str:
         if len(v) < 8:
             raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        # bcrypt trunca/rechaza a partir de 72 bytes — validar acá da un 422
+        # claro en vez de que bcrypt.hashpw tire un ValueError sin manejar.
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("La contraseña no puede superar los 72 bytes")
         return v
 
     @field_validator("nombre")
@@ -90,4 +94,6 @@ class CambioPasswordRequest(BaseModel):
     def password_minlen(cls, v: str) -> str:
         if len(v) < 8:
             raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("La contraseña no puede superar los 72 bytes")
         return v

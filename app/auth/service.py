@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,15 +9,19 @@ from app.auth.models import Usuario
 from app.auth.schemas import PerfilUpdateRequest, RegisterRequest
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
+# Se llama a bcrypt directo (no vía passlib) porque passlib==1.7.4 (sin
+# mantenimiento) hace un self-test interno al primer hash/verify que
+# bcrypt>=5 rechaza (ValueError: password cannot be longer than 72 bytes
+# — el self-test, no la contraseña real). El formato del hash ($2b$...)
+# es el mismo que ya genera passlib, así que las contraseñas existentes
+# en la base siguen verificando sin migración.
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 def _crear_token(data: dict, expires_delta: timedelta) -> str:
