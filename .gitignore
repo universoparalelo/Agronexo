@@ -1,5 +1,6 @@
 # Entorno
 .env
+.env.prod
 *.env.local
 
 # Python
@@ -18,6 +19,9 @@ frontend/.vite/
 
 # Docker volúmenes locales (si se mapean)
 .docker/
+
+# Backups generados por scripts/backup_postgres.sh y scripts/backup_minio.sh
+backups/
 
 # Alembic (no los archivos de migración, sí los temporales)
 migrations/versions/*.pyc

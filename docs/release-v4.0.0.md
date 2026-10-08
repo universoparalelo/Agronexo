@@ -27,12 +27,13 @@
 | HU-R4-02 — trazabilidad completa del análisis | Completada |
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
+| HU-R4-06 — base de despliegue en producción (compose, Nginx/HTTPS, migraciones, credenciales) | Completada — parcial, ver detalle |
 | HU-R4-10 — personalización del perfil del usuario | Completada |
-| Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
-| Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
-| Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
-| Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
+| Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
+| Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
+| Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
+| Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -301,6 +302,54 @@ La tarjeta pedía nombre, productor/campo, cultivo, superficie, fecha del últim
 - 6 tests nuevos en `tests/test_lotes.py` (último vuelo sin consulta extra, lote sin vuelos, búsqueda, filtro de estado, filtro de cultivo/campaña, paginado). 253 tests de la imagen `api` pasan (247 + 6).
 - `npm run build` limpio.
 - Recorrido manual en el browser pane: búsqueda y filtro de estado confirmados contra datos reales (excluyen correctamente un lote sin vuelos/cultivo); el modal "Cargar Ortomosaico" sigue ofreciendo todos los lotes aunque la grilla esté filtrada. Sin errores de consola nuevos.
+
+#### HU-R4-06 · Despliegue — base de infraestructura (sin servidor real todavía)
+**Fecha:** 2026-09-30
+**Rama:** `feat/despliegue-produccion-base`
+
+La tarjeta (8 pts, Sprint 13→14) pide desplegar AgroNexo en un entorno accesible y seguro. Se armó primero toda la parte que no depende de tener un servidor real levantado, para no bloquear el sprint mientras se resuelve dónde alojarlo (ver problema abierto abajo).
+
+**Agregado:**
+- `docker-compose.prod.yml`: sin bind mounts de código, sin `--reload`; `db`/`redis`/`minio` sin `ports:` publicados al host (quedan solo en la red interna de Docker — cubre el requisito de firewall para esos puertos); `api` corre `alembic upgrade head` antes de levantar uvicorn como parte del arranque del contenedor, no manualmente.
+- `docker/Dockerfile.nginx` + `docker/nginx/nginx.conf`: reemplaza al dev server de Vite por un build estático servido detrás de Nginx como reverse proxy. Arranca en HTTP puro (funciona con solo IP pública, sin dominio); el bloque HTTPS queda comentado con instrucciones para activarlo con Certbot una vez que haya un dominio real apuntando al servidor.
+- Servicio `certbot` en el compose de producción (renovación automática cada 12h vía `certbot renew` en loop).
+- `.env.prod.example`: template de variables de producción, análogo a `.env.example` pero con placeholders `REEMPLAZAR_*` — el `.env.prod` real queda gitignored.
+- Sección "Despliegue en producción" en el README con la guía paso a paso del primer deploy y de los deploys siguientes.
+- `scripts/backup_postgres.sh` (pg_dump vía `docker compose exec`, gzip, retención 14 días) y `scripts/backup_minio.sh` (`mc mirror` dentro del propio contenedor `minio` hacia un volumen de backups separado del de datos, misma retención) — pensados para cron en el host del servidor. Documentados en el README con las líneas de `crontab` sugeridas.
+
+**Decisiones tomadas:**
+- No se tocó el `docker-compose.yml` de desarrollo — producción vive en un archivo aparte (`-f docker-compose.prod.yml`) para no arriesgar romper el flujo de dev de nadie del equipo.
+- Nginx + build estático en vez de dejar corriendo el dev server de Vite en producción (lo segundo es una mala práctica — sin HMR no aporta nada y es más lento/pesado que servir estático).
+
+**Hallazgo — migración 0006 sembraba las credenciales de desarrollo en cualquier entorno**
+`migrations/versions/0006_seed_usuario_default.py` insertaba `admin@agronexo.com` / `password123` hardcodeado. Al automatizar `alembic upgrade head` como parte del deploy (criterio explícito de HU-R4-06), esa migración iba a correr también en producción y sembrar esas mismas credenciales ahí — exactamente lo que otro criterio de la misma tarjeta prohíbe explícitamente.
+Se modificó la migración para leer `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (`os.environ.get`, con el valor de desarrollo como fallback si no están seteadas) en vez de hardcodearlas. No se creó una migración nueva porque es un cambio de comportamiento (lee del entorno), no de esquema — y la 0006 nunca llegó a aplicarse contra una base de producción real todavía.
+
+**Nota del merge con `main` (2026-10-08):** esta misma migración también cambió en `main` (fix de `bcrypt`/`passlib`, ver más abajo) — se resolvió el conflicto conservando ambos cambios: lee `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (este fix) y hashea con `bcrypt` directo en vez de `passlib` (el otro fix, porque `passlib` ya no está instalado).
+
+**Problema abierto — sin servidor real para probar el resto de los criterios**
+Faltan: HTTPS real (necesita dominio + Certbot contra una IP pública real), prueba con GeoTIFF >500MB, y firewall del proveedor (los scripts de backup de Postgres/MinIO ya están escritos, ver arriba — falta instalar el cron en un servidor real). Se intentó Oracle Cloud Free Tier (instancia ARM `VM.Standard.A1.Flex`) en la región `sa-vinhedo-1`, con reintentos automatizados vía script (`oci compute instance launch` en loop) durante casi dos semanas (17/09 → 30/09) sin conseguir capacidad ni con 4 OCPU/24GB ni con 2 OCPU/12GB — la región está saturada de forma sostenida, no es mala suerte puntual. Nota: otro compañero (`cmartinrodich@gmail.com`) agregó entradas de `.gitignore` para un script propio (`scripts/oci_arm_watch.*`) el mismo día — evaluar si conviene unificar esfuerzos en vez de que cada uno reintente por su cuenta. Decisión pendiente: insistir con Oracle vs. migrar a un VPS pago (Hetzner CPX31 evaluado como alternativa, ~USD 12/mes, sin espera de capacidad).
+
+**Error encontrado — Semgrep `request-host-used` en `docker/nginx/nginx.conf` (commit `cbf1e4d`)**
+El PR #54 falló el job *SAST — Semgrep* con 3 hallazgos bloqueantes de `generic.nginx.security.request-host-used.request-host-used`: `proxy_set_header Host $host;` (línea activa y copia comentada del bloque HTTPS) y `return 301 https://$host$request_uri;` en el bloque comentado de redirect.
+Se reemplazó `$host` por `$server_name` en los `proxy_set_header` y por `DOMINIO_AQUI` fijo en el redirect. Es seguro porque la API no lee el header `Host` (sin `TrustedHostMiddleware`, `request.url` ni `base_url` en `app/`). Semgrep pasa tras el fix.
+
+**Estado del CI del PR #54 — 2 checks siguen en rojo, heredados de `main`**
+*SCA — pip-audit* (`pillow 10.4.0`, `jinja2 3.1.4`, `ecdsa 0.19.2`) y *SCA — npm audit* (`vitest ^2.1.8` → `vite`/`esbuild` vulnerables; 1 high + 1 critical, solo en devDependencies) fallan idénticos en `main` (corrida del push del 2026-10-01), así que no vienen de esta rama. Son deuda de dependencias que el workflow de seguridad (2026-09-27) sacó a la luz; `pillow` ya figura en "Problemas abiertos (Sprint 14)". Hay que resolverlos en un PR aparte (`chore/`), y además es requisito de la HU ("CI en verde antes de cada deploy"). `ecdsa` es transitiva (probablemente `python-jose`) y no tenía fix publicado al momento de revisar.
+
+**Evaluación de proveedores de hosting (2026-09-30)** — referencia para la decisión pendiente, montos tomados de blogs/comparadores, a confirmar en las páginas oficiales:
+
+| Opción | Crédito / costo | Duración |
+|---|---|---|
+| Oracle Cloud ARM (free tier) | Gratis | Indefinida, si hay capacidad |
+| Google Cloud | USD 300 | 90 días, cuenta nueva, pide tarjeta |
+| AWS cuenta nueva (São Paulo) | USD 100 + hasta 100 por tareas de onboarding | ~2–5 meses, pide tarjeta |
+| Azure for Students | USD 100/año, sin tarjeta | ~1,5 meses encendida 24/7 |
+| Linode | USD 100 | 60 días |
+| Hetzner (VPS x86) | ~USD 12–15/mes | Mientras se pague |
+| Vultr | USD 100 | 14 días |
+
+Descartados: infra de la UTN (no existe), DigitalOcean vía GitHub Student Pack (el crédito terminó el 31/07/2026), AWS Educate (no da créditos), Heroku (no corre docker-compose con PostGIS/MinIO/Celery). El dominio gratis de Namecheap (Student Pack) sirve para el HTTPS con Let's Encrypt. Decisión pendiente del equipo.
 
 #### HU-R4-10 · Personalización del perfil
 **Fecha:** 2026-10-08
