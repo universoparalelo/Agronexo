@@ -15,7 +15,8 @@ sqlalchemy==2.1.1
 # greenlet ya no es transitiva implícita de sqlalchemy desde 2.1 — ver
 # requirements.api.txt para el detalle del error que previene este pin.
 greenlet==3.5.6
-geoalchemy2==0.15.2
+# ver requirements.api.txt — 0.15.2 incompatible con sqlalchemy 2.1
+geoalchemy2==0.20.0
 psycopg2-binary==2.9.13
 
 # MinIO
