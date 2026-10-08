@@ -34,6 +34,7 @@
 | Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 | Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
+| Fix: bump `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -146,7 +147,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
-- **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
+- ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
+- ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código).
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
@@ -463,3 +465,20 @@ Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayo
 - 253 tests de `api` + 151 de `worker` + los 3 de `test_celery_integracion.py` (E2E) — todos pasan.
 
 **Nota para el propio proceso:** a partir de ahora, cualquier bump de `sqlalchemy` (o de algo que dispare DDL, como `geoalchemy2`) se valida corriendo las migraciones contra una base realmente vacía, no reutilizando la base de desarrollo persistente — ese fue el gap que dejó pasar esto.
+
+#### Fix: `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA)
+**Fecha:** 2026-10-08
+**Rama:** `fix/security-python-jose-pillow`
+
+Últimos 2 de los 3 hallazgos de `pip-audit` que seguían en rojo en cada PR (el tercero, `ecdsa`, ya estaba evaluado y aceptado desde el Sprint 14 — sin fix disponible).
+
+**`pillow` 10.4.0 → 12.3.0:** quedaba pendiente desde el Sprint 14 ("falta probarlo antes de bumpear"). Se probó: `app/reportes/mapa.py` (único uso, dibuja el mapa del PDF) sigue generando imágenes correctamente con la API de `Image`/`ImageDraw`/`ImageFont` sin cambios de código. **Resuelve las ~25 CVEs que tenía la 10.4.0** (`pip-audit` ya no lista ninguna).
+
+**`python-jose` 3.3.0 → 3.5.0:** resuelve 3 CVEs (`PYSEC-2024-232`, `-233`, `PYSEC-2025-185`). Apareció uno nuevo al re-auditar: `CVE-2026-85394` (confusión de algoritmo — acepta claves asimétricas DER como secreto HMAC cuando no se restringen los algoritmos explícitamente en `jwt.decode`), **sin fix disponible todavía incluso en la versión más nueva**. No aplica a este código: los únicos 2 lugares que decodifican JWT (`app/auth/dependencies.py`, `app/auth/router.py`) ya pasan `algorithms=[settings.jwt_algorithm]` explícito (`HS256` fijo) — exactamente la mitigación que describe el aviso del CVE. Riesgo aceptado, mismo criterio que `ecdsa`.
+
+**Verificación:**
+- `docker compose build api` — build limpio.
+- 253 tests de la imagen `api` pasan.
+- Login real (JWT con `python-jose` 3.5.0) — `POST /auth/login` + `GET /auth/me` → 200.
+- Generación de imagen con Pillow 12.3.0 probada directo en el contenedor (`Image`/`ImageDraw`/`ImageFont`) — OK.
+- `pip-audit` local contra el `requirements.api.txt` nuevo: de 3 paquetes con hallazgos (`python-jose`, `pillow`, `ecdsa`) queda solo `ecdsa` (sin fix) y el CVE nuevo de `python-jose` (sin fix, no explotable acá) — `pillow` sale limpio.
