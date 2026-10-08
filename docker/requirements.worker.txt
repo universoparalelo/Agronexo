@@ -1,5 +1,5 @@
 # Cola de tareas
-celery==5.4.0
+celery==5.6.3
 redis==8.1.0
 
 # Configuración compartida con app/
@@ -11,18 +11,21 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 
 # Base de datos (para escribir resultados)
-sqlalchemy==2.0.54
+sqlalchemy==2.1.1
+# greenlet ya no es transitiva implícita de sqlalchemy desde 2.1 — ver
+# requirements.api.txt para el detalle del error que previene este pin.
+greenlet==3.5.6
 geoalchemy2==0.15.2
 psycopg2-binary==2.9.13
 
 # MinIO
-minio==7.2.11
+minio==7.2.20
 
 # GIS raster — GDAL y numpy vienen de la imagen base (osgeo/gdal), no reinstalar
 rasterio==1.5.1
 
 # GIS vectorial
-geopandas==1.0.1
+geopandas==1.1.4
 shapely==2.1.2
 
 # Procesamiento de imágenes
