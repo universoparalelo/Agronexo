@@ -29,6 +29,7 @@
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 | HU-R4-10 — personalización del perfil del usuario | Completada |
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
+| Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
 | Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
 | Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
 
@@ -339,6 +340,23 @@ Los 4 criterios de aceptación: editar datos personales/empresa con validaciones
 - `npm test` (vitest) — 9 tests pasan.
 - `docker compose build frontend` — build limpio, Vite 8.3.4 arranca sin errores.
 - Recorrido manual en el browser pane con el stack completo: login → `/lotes` → detalle de lote → resultados de vuelo, probando los dos modos de color del mapa (zonas NDVI y diagnóstico por severidad, que redibuja la capa `GeoJSON` de `react-leaflet` sin remount manual) — el mismo camino crítico que se probó en el upgrade de React 19 del Sprint 14. Sin errores de consola nuevos (los únicos errores vistos fueron 401/502 de un desajuste local entre contenedor `api` y rama de código al cambiar de rama, no relacionados a este cambio, resueltos reconstruyendo la imagen).
+#### Fix: `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60)
+**Fecha:** 2026-10-08
+**Rama:** `fix/bcrypt-5-sin-passlib`
+
+Tercer fix del triage de Dependabot. `passlib==1.7.4` está sin mantenimiento desde 2020 y es incompatible con bcrypt≥5 — no es un problema de la contraseña del usuario: passlib corre un self-test interno (`detect_wrap_bug`, para detectar un bug viejo de wraparound de bcrypt) que hashea un vector de prueba de más de 72 bytes, y bcrypt 5.0 ahora rechaza eso en vez de tolerarlo. El error (`ValueError: password cannot be longer than 72 bytes`) salta en el primer `hash()`/`verify()`, antes de llegar a la contraseña real.
+
+**Fix:** se sacó `passlib` de `docker/requirements.api.txt` y `app/auth/service.py::hash_password`/`verify_password` llaman a `bcrypt.hashpw`/`bcrypt.checkpw` directo. El formato del hash (`$2b$...`) es el mismo que ya generaba passlib (que internamente llamaba a las mismas funciones de `bcrypt`), así que **no hace falta migrar las contraseñas ya guardadas** — se verificó explícitamente logueando con el hash viejo del usuario admin seed (`migrations/0006`).
+
+**Efecto secundario necesario:** `migrations/versions/0006_seed_usuario_default.py` también usaba `passlib` para hashear la contraseña del usuario seed — se actualizó al mismo patrón de `bcrypt` directo (si no, cualquier `alembic upgrade head` desde una base vacía fallaría al no estar más `passlib` instalado). Es una excepción puntual a "no tocar migraciones viejas": no cambia la lógica de negocio ni el resultado (mismo formato de hash), solo repara una dependencia rota para instalaciones nuevas.
+
+**Extra (no pedido, mismo hallazgo):** se agregó validación de longitud máxima (72 bytes, el límite real de bcrypt) en `RegisterRequest.password` y `CambioPasswordRequest.password_nueva` (`app/auth/schemas.py`) — antes un password muy largo hubiera tirado un `ValueError` sin manejar (500) en vez de un 422 prolijo.
+
+**Verificación:**
+- `docker compose build api` — build limpio.
+- Login real contra el hash existente del usuario admin (generado por la versión vieja con passlib) — sigue funcionando sin cambios.
+- 253 tests de la imagen `api` pasan.
+- Probado a mano: registro con password de 100 bytes → 422 con el mensaje nuevo; registro + login con password normal → 201 / 200 (hash generado 100% con el código nuevo, sin passlib).
 #### Fix: `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64)
 **Fecha:** 2026-10-08
 **Rama:** `fix/gdal-rasterio-upgrade`
