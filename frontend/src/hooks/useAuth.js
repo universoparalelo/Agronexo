@@ -25,10 +25,18 @@ export function useAuth() {
     setUser(null)
   }, [])
 
+  // Sincroniza localStorage + estado tras editar perfil/avatar/logo — login()
+  // es el único lugar que los seteaba hasta HU-R4-10.
+  const actualizarUsuario = useCallback((usuario) => {
+    localStorage.setItem('usuario', JSON.stringify(usuario))
+    setUser(usuario)
+  }, [])
+
   return {
     user,
     isAuthenticated: !!user,
     login,
     logout,
+    actualizarUsuario,
   }
 }

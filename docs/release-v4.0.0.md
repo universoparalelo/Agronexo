@@ -27,6 +27,7 @@
 | HU-R4-02 — trazabilidad completa del análisis | Completada |
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
+| HU-R4-10 — personalización del perfil del usuario | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -292,3 +293,28 @@ La tarjeta pedía nombre, productor/campo, cultivo, superficie, fecha del últim
 - 6 tests nuevos en `tests/test_lotes.py` (último vuelo sin consulta extra, lote sin vuelos, búsqueda, filtro de estado, filtro de cultivo/campaña, paginado). 253 tests de la imagen `api` pasan (247 + 6).
 - `npm run build` limpio.
 - Recorrido manual en el browser pane: búsqueda y filtro de estado confirmados contra datos reales (excluyen correctamente un lote sin vuelos/cultivo); el modal "Cargar Ortomosaico" sigue ofreciendo todos los lotes aunque la grilla esté filtrada. Sin errores de consola nuevos.
+
+#### HU-R4-10 · Personalización del perfil
+**Fecha:** 2026-10-08
+**Rama:** `feat/hu-r4-10-personalizacion-perfil`
+
+Los 4 criterios de aceptación: editar datos personales/empresa con validaciones, logo de empresa usado en el PDF ejecutivo y la orden de trabajo, cambio de contraseña, y acceso desde el panel izquierdo.
+
+**Migración `0022_personalizacion_perfil_usuario`:** agrega a `usuarios` — `avatar_key`, `descripcion`, `cuit`, `telefono_contacto`, `matricula_aplicador`, `nombre_empresa`, `logo_empresa_key`. Todos nullable (cuentas existentes no tienen estos datos). `avatar_key`/`logo_empresa_key` guardan la clave del objeto en MinIO (mismo patrón que `lotes.geojson_key`), no una URL — se resuelve a URL firmada recién al servir `/auth/me`.
+
+**Backend:**
+- `PUT /auth/me` (datos de perfil, `PerfilUpdateRequest` con validación de formato de CUIT), `POST /auth/me/password` (requiere la contraseña actual), `POST /auth/me/avatar` y `POST /auth/me/logo-empresa` (multipart, valida extensión + magic bytes JPG/PNG en `app/auth/validator.py`, mismo criterio que `app/ingesta/validator.py` para GeoTIFF).
+- `app.auth.service.resolver_datos_aplicador(usuario)`: arma el dict de perfil (incluye el logo ya descargado de MinIO y codificado en base64) que consumen `app.reportes.service.generar_pdf_reporte` y `app.ordenes_trabajo.service.generar_pdf_orden_trabajo` — ambos módulos declaran explícitamente que no tocan MinIO (transformación pura de datos), así que el logo llega resuelto desde el router, igual que ya hace `mapa_base64`.
+
+**Decisiones tomadas:**
+- Página propia (`/perfil`) en vez de modal — a pedido explícito, por la cantidad de campos.
+- El wiring a los PDFs se incluyó en esta misma tarea (lo pide el criterio de aceptación explícitamente) en vez de dejarlo para cuando se trabaje esa historia específica.
+- El ítem "Configuración" del sidebar (marcado `proximamente: true` desde que se creó) se renombró a "Mi perfil" y se habilitó, en vez de agregar una entrada nueva — es el mismo slot que la nota original de la tarjeta describe.
+
+**Frontend:** `PerfilUsuario.jsx` (dos cards: datos personales/empresa + avatares, y cambio de contraseña), `api/perfil.js`, `useAuth.js` suma `actualizarUsuario()` para sincronizar `localStorage`/estado tras editar (antes solo `login()` los seteaba). El bloque usuario del sidebar (`SidebarNav.jsx`) ahora es clickable, muestra el avatar real si existe, y el nombre de empresa en vez de "Productor Agri" fijo.
+
+**Verificación:**
+- Backend probado contra el stack real (migración aplicada, API reiniciada): `PUT /auth/me` con datos válidos (200) y CUIT inválido (422), cambio de contraseña con clave actual incorrecta (400) y correcta (204, confirmado con login real a la clave nueva y revertido), upload de un PNG real a `/auth/me/logo-empresa` (200, URL firmada de MinIO en la respuesta).
+- `resolver_datos_aplicador` probado directo dentro del contenedor `api`: descarga el logo real de MinIO y lo codifica en base64 correctamente (prefijo `data:image/png;base64,...`).
+- Recorrido manual en el browser pane: login real, navegación a `/perfil`, edición de "Descripción" + guardado (200, mensaje de confirmación), intento de cambio de contraseña con confirmación distinta a la nueva — bloqueado del lado del cliente antes de llamar al backend, con el mensaje correcto. Sidebar muestra "Mi perfil" resaltado y el nombre de empresa cargado. Sin errores de consola.
+- No se probó el wiring del logo dentro del PDF renderizado end-to-end (requiere un lote con vuelo+diagnóstico completo) — sí se verificó que `resolver_datos_aplicador` produce el base64 correcto y que ambos templates (`reporte_ejecutivo.html`, `orden_trabajo.html`) reciben y renderizan los campos nuevos condicionalmente (`{% if %}`, no rompen si el usuario no cargó estos datos).
