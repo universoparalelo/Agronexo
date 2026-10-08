@@ -71,14 +71,19 @@ async def cargar_catalogo_dosis(db: AsyncSession) -> dict[str, dict]:
     }
 
 
-def generar_pdf_orden_trabajo(orden: dict, metadata: dict) -> bytes:
+def generar_pdf_orden_trabajo(orden: dict, metadata: dict, datos_aplicador: dict | None = None) -> bytes:
     """
     Recibe el dict de generar_orden_trabajo() (items + totales_por_producto
     + area_total_tratada_ha) y la metadata del diagnóstico del vuelo, y
     devuelve los bytes del PDF de orden de trabajo.
+
+    datos_aplicador (HU-R4-10): igual a app.reportes.service — dict ya
+    resuelto por el router con los datos de perfil del usuario (incluye
+    logo_empresa_base64 ya descargado, este módulo no toca MinIO).
     """
     items_raw = orden.get("items", [])
     items = [_item_a_contexto(item) for item in items_raw]
+    datos_aplicador = datos_aplicador or {}
 
     contexto = {
         "lote_nombre": metadata.get("lote_nombre") or "Lote sin nombre",
@@ -94,6 +99,13 @@ def generar_pdf_orden_trabajo(orden: dict, metadata: dict) -> bytes:
         "productos_con_seguridad": _productos_con_seguridad(items_raw),
         "productos_sin_seguridad_cargada": _productos_sin_seguridad(items_raw),
         "hay_items_sin_dosis": any(i["sin_dosis_referencia"] for i in items),
+        # Perfil del aplicador (HU-R4-10)
+        "nombre_empresa": datos_aplicador.get("nombre_empresa"),
+        "aplicador_nombre": datos_aplicador.get("aplicador_nombre"),
+        "matricula_aplicador": datos_aplicador.get("matricula_aplicador"),
+        "aplicador_cuit": datos_aplicador.get("aplicador_cuit"),
+        "aplicador_contacto": datos_aplicador.get("aplicador_contacto"),
+        "logo_empresa_base64": datos_aplicador.get("logo_empresa_base64"),
     }
 
     template = _env.get_template("orden_trabajo.html")

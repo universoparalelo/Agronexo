@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import Usuario
-from app.auth.schemas import RegisterRequest
+from app.auth.schemas import PerfilUpdateRequest, RegisterRequest
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -66,3 +66,63 @@ async def autenticar_usuario(db: AsyncSession, email: str, password: str) -> Usu
     if not usuario.is_active:
         return None
     return usuario
+
+
+async def actualizar_perfil(db: AsyncSession, usuario: Usuario, data: PerfilUpdateRequest) -> Usuario:
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(usuario, campo, valor)
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario
+
+
+async def cambiar_password(
+    db: AsyncSession, usuario: Usuario, password_actual: str, password_nueva: str,
+) -> None:
+    if not verify_password(password_actual, usuario.hashed_password):
+        raise ValueError("La contraseña actual es incorrecta")
+    usuario.hashed_password = hash_password(password_nueva)
+    await db.commit()
+
+
+async def actualizar_avatar_key(db: AsyncSession, usuario: Usuario, key: str) -> Usuario:
+    usuario.avatar_key = key
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario
+
+
+async def actualizar_logo_empresa_key(db: AsyncSession, usuario: Usuario, key: str) -> Usuario:
+    usuario.logo_empresa_key = key
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario
+
+
+def resolver_datos_aplicador(usuario: Usuario) -> dict:
+    """
+    Arma el dict de perfil que consumen app.reportes.service y
+    app.ordenes_trabajo.service para identificar al aplicador en el PDF
+    (HU-R4-10). Sync y bloqueante porque descarga el logo de MinIO
+    (storage.download_bytes) — se llama desde el router via
+    run_in_threadpool, igual que generar_pdf_reporte/generar_pdf_orden_trabajo.
+    """
+    import base64
+
+    from app.core.storage import download_bytes
+
+    logo_base64 = None
+    if usuario.logo_empresa_key:
+        ext = usuario.logo_empresa_key.rsplit(".", 1)[-1].lower()
+        content_type = "image/png" if ext == "png" else "image/jpeg"
+        logo_bytes = download_bytes(usuario.logo_empresa_key)
+        logo_base64 = f"data:{content_type};base64," + base64.b64encode(logo_bytes).decode("ascii")
+
+    return {
+        "nombre_empresa": usuario.nombre_empresa,
+        "aplicador_nombre": usuario.nombre,
+        "matricula_aplicador": usuario.matricula_aplicador,
+        "aplicador_cuit": usuario.cuit,
+        "aplicador_contacto": usuario.telefono_contacto,
+        "logo_empresa_base64": logo_base64,
+    }
