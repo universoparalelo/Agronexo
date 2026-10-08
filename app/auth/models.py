@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String, text
+from sqlalchemy import Boolean, DateTime, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,5 +21,17 @@ class Usuario(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
+
+    # Perfil (HU-R4-10) — usado para identificar al aplicador en el PDF
+    # ejecutivo y la orden de trabajo. avatar_key/logo_empresa_key guardan
+    # la clave del objeto en MinIO, no una URL (mismo patrón que
+    # lotes.geojson_key) — la URL firmada se resuelve al servir /auth/me.
+    avatar_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cuit: Mapped[str | None] = mapped_column(String(13), nullable=True)
+    telefono_contacto: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    matricula_aplicador: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    nombre_empresa: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    logo_empresa_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     lotes: Mapped[list] = relationship("Lote", back_populates="usuario", lazy="select", foreign_keys="[Lote.usuario_id]")

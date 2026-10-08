@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
+from app.auth.service import resolver_datos_aplicador
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.storage import object_exists, presigned_url, upload_bytes
@@ -83,10 +84,12 @@ async def reporte_pdf_vuelo(
     diagnostico = await _resolver_diagnostico_o_404(db, lote_id, vuelo_id, current_user)
 
     try:
+        # resolver_datos_aplicador descarga el logo de MinIO (sync) y
         # generar_pdf_reporte es CPU-bound y sync (Jinja2 + WeasyPrint) — se
         # delega a threadpool igual que _calcular_diagnostico en
         # app/diagnostico/service.py, para no bloquear el event loop.
-        pdf_bytes = await run_in_threadpool(generar_pdf_reporte, diagnostico)
+        datos_aplicador = await run_in_threadpool(resolver_datos_aplicador, current_user)
+        pdf_bytes = await run_in_threadpool(generar_pdf_reporte, diagnostico, datos_aplicador)
     except Exception:
         logger.exception("Error generando PDF para vuelo %s del lote %s", vuelo_id, lote_id)
         raise HTTPException(

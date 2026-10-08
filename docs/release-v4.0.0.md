@@ -28,6 +28,12 @@
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 | HU-R4-06 — base de despliegue en producción (compose, Nginx/HTTPS, migraciones, credenciales) | Completada — parcial, ver detalle |
+| HU-R4-10 — personalización del perfil del usuario | Completada |
+| Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
+| Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
+| Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
+| Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
+| Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -136,7 +142,10 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
 - ~~Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`react-router-dom`~~ — **resuelto**, ver tarea más abajo.
+- ~~Upgrade coordinado de `rasterio`/`gdal`~~ — **resuelto**, ver tarea más abajo (incluyó un segundo breakage no previsto: `pydantic` sin wheel para el Python 3.14 que trae la imagen nueva).
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
+- **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
+- **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
 - **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
@@ -316,6 +325,8 @@ La tarjeta (8 pts, Sprint 13→14) pide desplegar AgroNexo en un entorno accesib
 `migrations/versions/0006_seed_usuario_default.py` insertaba `admin@agronexo.com` / `password123` hardcodeado. Al automatizar `alembic upgrade head` como parte del deploy (criterio explícito de HU-R4-06), esa migración iba a correr también en producción y sembrar esas mismas credenciales ahí — exactamente lo que otro criterio de la misma tarjeta prohíbe explícitamente.
 Se modificó la migración para leer `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (`os.environ.get`, con el valor de desarrollo como fallback si no están seteadas) en vez de hardcodearlas. No se creó una migración nueva porque es un cambio de comportamiento (lee del entorno), no de esquema — y la 0006 nunca llegó a aplicarse contra una base de producción real todavía.
 
+**Nota del merge con `main` (2026-10-08):** esta misma migración también cambió en `main` (fix de `bcrypt`/`passlib`, ver más abajo) — se resolvió el conflicto conservando ambos cambios: lee `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (este fix) y hashea con `bcrypt` directo en vez de `passlib` (el otro fix, porque `passlib` ya no está instalado).
+
 **Problema abierto — sin servidor real para probar el resto de los criterios**
 Faltan: HTTPS real (necesita dominio + Certbot contra una IP pública real), prueba con GeoTIFF >500MB, y firewall del proveedor (los scripts de backup de Postgres/MinIO ya están escritos, ver arriba — falta instalar el cron en un servidor real). Se intentó Oracle Cloud Free Tier (instancia ARM `VM.Standard.A1.Flex`) en la región `sa-vinhedo-1`, con reintentos automatizados vía script (`oci compute instance launch` en loop) durante casi dos semanas (17/09 → 30/09) sin conseguir capacidad ni con 4 OCPU/24GB ni con 2 OCPU/12GB — la región está saturada de forma sostenida, no es mala suerte puntual. Nota: otro compañero (`cmartinrodich@gmail.com`) agregó entradas de `.gitignore` para un script propio (`scripts/oci_arm_watch.*`) el mismo día — evaluar si conviene unificar esfuerzos en vez de que cada uno reintente por su cuenta. Decisión pendiente: insistir con Oracle vs. migrar a un VPS pago (Hetzner CPX31 evaluado como alternativa, ~USD 12/mes, sin espera de capacidad).
 
@@ -339,3 +350,116 @@ Se reemplazó `$host` por `$server_name` en los `proxy_set_header` y por `DOMINI
 | Vultr | USD 100 | 14 días |
 
 Descartados: infra de la UTN (no existe), DigitalOcean vía GitHub Student Pack (el crédito terminó el 31/07/2026), AWS Educate (no da créditos), Heroku (no corre docker-compose con PostGIS/MinIO/Celery). El dominio gratis de Namecheap (Student Pack) sirve para el HTTPS con Let's Encrypt. Decisión pendiente del equipo.
+
+#### HU-R4-10 · Personalización del perfil
+**Fecha:** 2026-10-08
+**Rama:** `feat/hu-r4-10-personalizacion-perfil`
+
+Los 4 criterios de aceptación: editar datos personales/empresa con validaciones, logo de empresa usado en el PDF ejecutivo y la orden de trabajo, cambio de contraseña, y acceso desde el panel izquierdo.
+
+**Migración `0022_personalizacion_perfil_usuario`:** agrega a `usuarios` — `avatar_key`, `descripcion`, `cuit`, `telefono_contacto`, `matricula_aplicador`, `nombre_empresa`, `logo_empresa_key`. Todos nullable (cuentas existentes no tienen estos datos). `avatar_key`/`logo_empresa_key` guardan la clave del objeto en MinIO (mismo patrón que `lotes.geojson_key`), no una URL — se resuelve a URL firmada recién al servir `/auth/me`.
+
+**Backend:**
+- `PUT /auth/me` (datos de perfil, `PerfilUpdateRequest` con validación de formato de CUIT), `POST /auth/me/password` (requiere la contraseña actual), `POST /auth/me/avatar` y `POST /auth/me/logo-empresa` (multipart, valida extensión + magic bytes JPG/PNG en `app/auth/validator.py`, mismo criterio que `app/ingesta/validator.py` para GeoTIFF).
+- `app.auth.service.resolver_datos_aplicador(usuario)`: arma el dict de perfil (incluye el logo ya descargado de MinIO y codificado en base64) que consumen `app.reportes.service.generar_pdf_reporte` y `app.ordenes_trabajo.service.generar_pdf_orden_trabajo` — ambos módulos declaran explícitamente que no tocan MinIO (transformación pura de datos), así que el logo llega resuelto desde el router, igual que ya hace `mapa_base64`.
+
+**Decisiones tomadas:**
+- Página propia (`/perfil`) en vez de modal — a pedido explícito, por la cantidad de campos.
+- El wiring a los PDFs se incluyó en esta misma tarea (lo pide el criterio de aceptación explícitamente) en vez de dejarlo para cuando se trabaje esa historia específica.
+- El ítem "Configuración" del sidebar (marcado `proximamente: true` desde que se creó) se renombró a "Mi perfil" y se habilitó, en vez de agregar una entrada nueva — es el mismo slot que la nota original de la tarjeta describe.
+
+**Frontend:** `PerfilUsuario.jsx` (dos cards: datos personales/empresa + avatares, y cambio de contraseña), `api/perfil.js`, `useAuth.js` suma `actualizarUsuario()` para sincronizar `localStorage`/estado tras editar (antes solo `login()` los seteaba). El bloque usuario del sidebar (`SidebarNav.jsx`) ahora es clickable, muestra el avatar real si existe, y el nombre de empresa en vez de "Productor Agri" fijo.
+
+**Verificación:**
+- Backend probado contra el stack real (migración aplicada, API reiniciada): `PUT /auth/me` con datos válidos (200) y CUIT inválido (422), cambio de contraseña con clave actual incorrecta (400) y correcta (204, confirmado con login real a la clave nueva y revertido), upload de un PNG real a `/auth/me/logo-empresa` (200, URL firmada de MinIO en la respuesta).
+- `resolver_datos_aplicador` probado directo dentro del contenedor `api`: descarga el logo real de MinIO y lo codifica en base64 correctamente (prefijo `data:image/png;base64,...`).
+- Recorrido manual en el browser pane: login real, navegación a `/perfil`, edición de "Descripción" + guardado (200, mensaje de confirmación), intento de cambio de contraseña con confirmación distinta a la nueva — bloqueado del lado del cliente antes de llamar al backend, con el mensaje correcto. Sidebar muestra "Mi perfil" resaltado y el nombre de empresa cargado. Sin errores de consola.
+- El wiring del logo dentro del PDF renderizado end-to-end (reporte ejecutivo real, lote con vuelo+diagnóstico completo) lo confirmó el usuario manualmente tras el merge — el logo se ve correctamente en el PDF generado.
+
+#### Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41)
+**Fecha:** 2026-10-08
+**Rama:** `fix/vite8-plugin-react-coordinado`
+
+Último fix del triage de Dependabot. Mismo patrón que el upgrade de React/react-leaflet/react-router-dom del Sprint 14: dos PRs de Dependabot que no pueden mergearse por separado porque sus peer dependencies se pisan — `@vitejs/plugin-react@4.7.0` no soporta `vite@8` (su rango es `^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0`), y `@vitejs/plugin-react@6.1.1` exige `vite@^8.0.0`. Cada PR de Dependabot, al bumpear solo su propia dependencia, rompe contra la versión vieja de la otra.
+
+**Fix:** se bumpearon ambas juntas en `frontend/package.json` — `vite` a `^8.3.4` y `@vitejs/plugin-react` a `^6.1.2` (versiones estables más nuevas que las de las PRs originales de Dependabot, 8.3.1/6.1.1, al momento de este fix). `vitest@5.0.3` (ya mergeado del Grupo A) soporta `vite@^8.0.0` sin cambios.
+
+**Verificación:**
+- `npm install` — resuelve limpio, sin `ERESOLVE`.
+- `npm run build` — build de producción limpio (mismo warning preexistente de chunk >500kB, no relacionado).
+- `npm test` (vitest) — 9 tests pasan.
+- `docker compose build frontend` — build limpio, Vite 8.3.4 arranca sin errores.
+- Recorrido manual en el browser pane con el stack completo: login → `/lotes` → detalle de lote → resultados de vuelo, probando los dos modos de color del mapa (zonas NDVI y diagnóstico por severidad, que redibuja la capa `GeoJSON` de `react-leaflet` sin remount manual) — el mismo camino crítico que se probó en el upgrade de React 19 del Sprint 14. Sin errores de consola nuevos (los únicos errores vistos fueron 401/502 de un desajuste local entre contenedor `api` y rama de código al cambiar de rama, no relacionados a este cambio, resueltos reconstruyendo la imagen).
+#### Fix: `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60)
+**Fecha:** 2026-10-08
+**Rama:** `fix/bcrypt-5-sin-passlib`
+
+Tercer fix del triage de Dependabot. `passlib==1.7.4` está sin mantenimiento desde 2020 y es incompatible con bcrypt≥5 — no es un problema de la contraseña del usuario: passlib corre un self-test interno (`detect_wrap_bug`, para detectar un bug viejo de wraparound de bcrypt) que hashea un vector de prueba de más de 72 bytes, y bcrypt 5.0 ahora rechaza eso en vez de tolerarlo. El error (`ValueError: password cannot be longer than 72 bytes`) salta en el primer `hash()`/`verify()`, antes de llegar a la contraseña real.
+
+**Fix:** se sacó `passlib` de `docker/requirements.api.txt` y `app/auth/service.py::hash_password`/`verify_password` llaman a `bcrypt.hashpw`/`bcrypt.checkpw` directo. El formato del hash (`$2b$...`) es el mismo que ya generaba passlib (que internamente llamaba a las mismas funciones de `bcrypt`), así que **no hace falta migrar las contraseñas ya guardadas** — se verificó explícitamente logueando con el hash viejo del usuario admin seed (`migrations/0006`).
+
+**Efecto secundario necesario:** `migrations/versions/0006_seed_usuario_default.py` también usaba `passlib` para hashear la contraseña del usuario seed — se actualizó al mismo patrón de `bcrypt` directo (si no, cualquier `alembic upgrade head` desde una base vacía fallaría al no estar más `passlib` instalado). Es una excepción puntual a "no tocar migraciones viejas": no cambia la lógica de negocio ni el resultado (mismo formato de hash), solo repara una dependencia rota para instalaciones nuevas.
+
+**Extra (no pedido, mismo hallazgo):** se agregó validación de longitud máxima (72 bytes, el límite real de bcrypt) en `RegisterRequest.password` y `CambioPasswordRequest.password_nueva` (`app/auth/schemas.py`) — antes un password muy largo hubiera tirado un `ValueError` sin manejar (500) en vez de un 422 prolijo.
+
+**Verificación:**
+- `docker compose build api` — build limpio.
+- Login real contra el hash existente del usuario admin (generado por la versión vieja con passlib) — sigue funcionando sin cambios.
+- 253 tests de la imagen `api` pasan.
+- Probado a mano: registro con password de 100 bytes → 422 con el mensaje nuevo; registro + login con password normal → 201 / 200 (hash generado 100% con el código nuevo, sin passlib).
+#### Fix: `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64)
+**Fecha:** 2026-10-08
+**Rama:** `fix/gdal-rasterio-upgrade`
+
+Segundo fix del triage de Dependabot (ver Problemas abiertos). Ya estaba identificado desde el Sprint 14 que bumpear solo la imagen base de GDAL rompía el build del worker (`rasterio==1.3.11` no compila contra el Python más nuevo de la imagen — `ModuleNotFoundError: No module named 'pkg_resources'`), y que la solución era bumpear `rasterio` en el mismo movimiento.
+
+**Hallazgo nuevo (no estaba previsto):** `ghcr.io/osgeo/gdal:ubuntu-small-3.13.3` trae **Python 3.14.4** (la imagen vieja traía 3.12.3) — un salto de versión de Python, no solo de GDAL. Esto generó un segundo breakage, distinto del de `rasterio`: `pydantic==2.10.4` (pin compartido con `requirements.api.txt`) no tiene wheel precompilada para `cp314` — `pydantic-core` 2.27.2 (la versión que esa pydantic fija) cae a compilarse desde fuente vía `maturin`/`cargo`, y falla porque `PyO3 0.22.6` (el que trae ese sdist) no soporta Python 3.14 (`error: the configured Python interpreter version (3.14) is newer than PyO3's maximum supported version`).
+
+**Fix:**
+- `docker/Dockerfile.worker`: `FROM ghcr.io/osgeo/gdal:ubuntu-small-3.9.0` → `ubuntu-small-3.13.3`.
+- `docker/requirements.worker.txt`: `rasterio` 1.3.11 → 1.5.1 (ya venía probado verde en su propia PR de Dependabot, sin romper nada). `pydantic` 2.10.4 → 2.13.5 **solo en `requirements.worker.txt`** (no se tocó el pin de `requirements.api.txt`, que sigue en Python 3.12 y no lo necesita) — 2.13.5 resuelve a `pydantic-core==2.46.5`, que sí trae wheel `cp314`.
+
+**Cómo se investigó (sin gastar ciclos de build completos por cada intento):** en vez de iterar con `docker compose build` (lento, ~1-2 min por vuelta), se armó un contenedor de prueba descartable a partir de la imagen base nueva (`docker create`/`docker cp`/`docker exec`) para replicar exactamente los mismos pasos de `apt-get install` + `pip install` del Dockerfile y iterar rápido sobre los requirements hasta encontrar la combinación que resuelve. Confirmado también que `pip install --dry-run` no sirve para detectar este tipo de falla (reporta "Would install" sin intentar compilar el sdist, da un falso verde) — hay que correr el install real.
+
+**Verificación (stack completo reconstruido, no solo el diff):**
+- `docker compose build worker` — build limpio.
+- `docker compose up -d` — Celery conecta a Redis sin errores (solo warnings de deprecación esperados de Celery 5.4 sobre `broker_connection_retry`, no relacionados a este cambio).
+- 151 tests de GIS de la imagen `worker` pasan.
+- `tests/test_celery_integracion.py` (los 3, incluido el ciclo E2E con un GeoTIFF real) pasa.
+
+**Decisión tomada:** no se homologó `pydantic` entre `api` y `worker` a la misma versión — son requirements files independientes por diseño (cada imagen instala solo lo que necesita), y forzar el mismo pin en ambos para "prolijidad" hubiera significado re-probar toda la suite de `api` sin necesidad real (el pin de `api` no está roto, sigue en Python 3.12).
+#### Fix: `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin de `greenlet`
+**Fecha:** 2026-10-08
+**Rama:** `fix/sqlalchemy-greenlet-dependency`
+
+Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayoría tenían CI verde salvo el ruido conocido de pip-audit/npm-audit ya aceptado; un grupo chico rompía de verdad. Esta fue la más simple de las rotas: `ModuleNotFoundError: No module named 'greenlet'` en la PR de Dependabot, porque SQLAlchemy 2.1 dejó de traer `greenlet` como transitiva implícita (antes se auto-instalaba sin que `requirements.*.txt` la pidiera).
+
+**Fix:** se agregó `greenlet==3.5.6` explícito en `docker/requirements.api.txt` y `docker/requirements.worker.txt`, junto al bump de `sqlalchemy` a 2.1.1. La versión de greenlet se tomó de la que ya estaba resuelta transitivamente en el entorno de dev (`pip show greenlet` dentro del contenedor `api` antes del cambio), para no introducir una versión sin probar.
+
+**Verificación (stack completo reconstruido desde cero, no solo el diff):**
+- `docker compose build api worker` — ambas imágenes buildean limpias.
+- `alembic upgrade head` + `GET /api/v1/health` + `GET /api/v1/health/db` — OK.
+- 253 tests de la imagen `api` pasan (sin cambios respecto a antes del bump).
+- 151 tests de GIS de la imagen `worker` pasan.
+- `tests/test_celery_integracion.py` (los 3, incluido el ciclo E2E) pasa.
+- Nuevo warning no bloqueante a futuro: SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()` para generar `DISTINCT ON` (`app/lotes/service.py`, usado por `listar_lotes` de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Queda en Problemas abiertos, no es bloqueante (sigue funcionando, solo deprecation warning).
+
+**Decisión tomada:** no se tocó `app/lotes/service.py` en esta rama — el fix se acotó al breakage real (falta de `greenlet`), la migración de `.distinct()` es un cambio de código aparte sin apuro.
+
+#### Fix: `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya mergeada a `main`)
+**Fecha:** 2026-10-08
+**Rama:** `fix/geoalchemy2-sqlalchemy21-compat`
+
+**Hallazgo (propio, no reportado por nadie todavía):** al validar el fix de `sqlalchemy`/`greenlet` (PR #76, ya mergeada) se corrió `alembic upgrade head` contra una base que YA tenía todas las migraciones aplicadas — un no-op que no probó nada. Nadie lo notó hasta que la PR #79 (vite) mostró "API — migraciones y health" en rojo sin relación aparente con su diff. Se investigó corriendo la migración completa desde una base PostGIS vacía de verdad, y se reprodujo: **cualquier `alembic upgrade head` desde cero falla en la primera tabla que crea** (`alembic_version`, ni siquiera una tabla con geometría) con `TypeError: ColumnCollection is an abstract base class and cannot be instantiated directly`.
+
+**Causa raíz:** `geoalchemy2==0.15.2` registra un listener `before_create` global sobre `Table` (no solo sobre tablas con columnas de geometría) que instancia `sqlalchemy.sql.expression.ColumnCollection()` directo (`admin/dialects/common.py::_update_table_for_dispatch`). SQLAlchemy 2.1 volvió esa clase abstracta — hay que usar `WriteableColumnCollection`/`DedupeColumnCollection`. Como el listener es global, revienta en la creación de CUALQUIER tabla, no solo las de este proyecto.
+
+**Impacto real:** desde que se mergeó la PR #76 (sqlalchemy 2.1.1), `main` quedó roto para cualquiera que clone el repo y corra `alembic upgrade head` desde cero — no se nota en bases ya migradas (como la de desarrollo de cualquiera que ya venía trabajando), pero sí en CI (que siempre arranca de una base vacía) y en cualquier onboarding nuevo.
+
+**Fix:** `geoalchemy2` 0.15.2 → 0.20.0 en `requirements.api.txt` y `requirements.worker.txt` — ya usa la API nueva de SQLAlchemy.
+
+**Verificación (la que faltó la primera vez):**
+- Base PostGIS vacía real (contenedor Postgres aparte, sin ninguna migración aplicada) + `alembic upgrade head` — las 22 migraciones corren limpias de punta a punta.
+- 253 tests de `api` + 151 de `worker` + los 3 de `test_celery_integracion.py` (E2E) — todos pasan.
+
+**Nota para el propio proceso:** a partir de ahora, cualquier bump de `sqlalchemy` (o de algo que dispare DDL, como `geoalchemy2`) se valida corriendo las migraciones contra una base realmente vacía, no reutilizando la base de desarrollo persistente — ese fue el gap que dejó pasar esto.

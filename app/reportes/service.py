@@ -54,13 +54,19 @@ _env = Environment(
 )
 
 
-def generar_pdf_reporte(diagnostico: dict) -> bytes:
+def generar_pdf_reporte(diagnostico: dict, datos_aplicador: dict | None = None) -> bytes:
     """
     Recibe el dict completo de generar_diagnostico() y devuelve los bytes
     del PDF ejecutivo (mapa + estadísticas por zona + diagnóstico narrado).
+
+    datos_aplicador (HU-R4-10): dict ya resuelto por el router con
+    nombre/nombre_empresa/matricula_aplicador/logo_empresa_base64 del
+    usuario — este módulo no toca MinIO (ver docstring de arriba), por eso
+    el logo llega ya descargado y en base64, igual que mapa_base64.
     """
     metadata = diagnostico.get("metadata", {})
     features = diagnostico.get("features", [])
+    datos_aplicador = datos_aplicador or {}
 
     mapa_png = generar_imagen_mapa_zonas(diagnostico, modo="severidad")
     mapa_base64 = "data:image/png;base64," + base64.b64encode(mapa_png).decode("ascii")
@@ -93,6 +99,11 @@ def generar_pdf_reporte(diagnostico: dict) -> bytes:
         "metodo_umbral": metadata.get("metodo_umbral"),
         "mapeo_bandas": _formatear_mapeo_bandas(metadata.get("mapeo_bandas")),
         "motor_version": metadata.get("motor_version"),
+        # Perfil del aplicador (HU-R4-10)
+        "nombre_empresa": datos_aplicador.get("nombre_empresa"),
+        "aplicador_nombre": datos_aplicador.get("aplicador_nombre"),
+        "matricula_aplicador": datos_aplicador.get("matricula_aplicador"),
+        "logo_empresa_base64": datos_aplicador.get("logo_empresa_base64"),
     }
 
     template = _env.get_template("reporte_ejecutivo.html")
