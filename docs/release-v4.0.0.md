@@ -28,6 +28,7 @@
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 | HU-R4-10 — personalización del perfil del usuario | Completada |
+| Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -317,4 +318,19 @@ Los 4 criterios de aceptación: editar datos personales/empresa con validaciones
 - Backend probado contra el stack real (migración aplicada, API reiniciada): `PUT /auth/me` con datos válidos (200) y CUIT inválido (422), cambio de contraseña con clave actual incorrecta (400) y correcta (204, confirmado con login real a la clave nueva y revertido), upload de un PNG real a `/auth/me/logo-empresa` (200, URL firmada de MinIO en la respuesta).
 - `resolver_datos_aplicador` probado directo dentro del contenedor `api`: descarga el logo real de MinIO y lo codifica en base64 correctamente (prefijo `data:image/png;base64,...`).
 - Recorrido manual en el browser pane: login real, navegación a `/perfil`, edición de "Descripción" + guardado (200, mensaje de confirmación), intento de cambio de contraseña con confirmación distinta a la nueva — bloqueado del lado del cliente antes de llamar al backend, con el mensaje correcto. Sidebar muestra "Mi perfil" resaltado y el nombre de empresa cargado. Sin errores de consola.
-- No se probó el wiring del logo dentro del PDF renderizado end-to-end (requiere un lote con vuelo+diagnóstico completo) — sí se verificó que `resolver_datos_aplicador` produce el base64 correcto y que ambos templates (`reporte_ejecutivo.html`, `orden_trabajo.html`) reciben y renderizan los campos nuevos condicionalmente (`{% if %}`, no rompen si el usuario no cargó estos datos).
+- El wiring del logo dentro del PDF renderizado end-to-end (reporte ejecutivo real, lote con vuelo+diagnóstico completo) lo confirmó el usuario manualmente tras el merge — el logo se ve correctamente en el PDF generado.
+
+#### Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41)
+**Fecha:** 2026-10-08
+**Rama:** `fix/vite8-plugin-react-coordinado`
+
+Último fix del triage de Dependabot. Mismo patrón que el upgrade de React/react-leaflet/react-router-dom del Sprint 14: dos PRs de Dependabot que no pueden mergearse por separado porque sus peer dependencies se pisan — `@vitejs/plugin-react@4.7.0` no soporta `vite@8` (su rango es `^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0`), y `@vitejs/plugin-react@6.1.1` exige `vite@^8.0.0`. Cada PR de Dependabot, al bumpear solo su propia dependencia, rompe contra la versión vieja de la otra.
+
+**Fix:** se bumpearon ambas juntas en `frontend/package.json` — `vite` a `^8.3.4` y `@vitejs/plugin-react` a `^6.1.2` (versiones estables más nuevas que las de las PRs originales de Dependabot, 8.3.1/6.1.1, al momento de este fix). `vitest@5.0.3` (ya mergeado del Grupo A) soporta `vite@^8.0.0` sin cambios.
+
+**Verificación:**
+- `npm install` — resuelve limpio, sin `ERESOLVE`.
+- `npm run build` — build de producción limpio (mismo warning preexistente de chunk >500kB, no relacionado).
+- `npm test` (vitest) — 9 tests pasan.
+- `docker compose build frontend` — build limpio, Vite 8.3.4 arranca sin errores.
+- Recorrido manual en el browser pane con el stack completo: login → `/lotes` → detalle de lote → resultados de vuelo, probando los dos modos de color del mapa (zonas NDVI y diagnóstico por severidad, que redibuja la capa `GeoJSON` de `react-leaflet` sin remount manual) — el mismo camino crítico que se probó en el upgrade de React 19 del Sprint 14. Sin errores de consola nuevos (los únicos errores vistos fueron 401/502 de un desajuste local entre contenedor `api` y rama de código al cambiar de rama, no relacionados a este cambio, resueltos reconstruyendo la imagen).
