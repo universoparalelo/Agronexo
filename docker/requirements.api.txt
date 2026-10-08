@@ -22,7 +22,7 @@ alembic==1.20.0
 psycopg2-binary==2.9.13
 
 # Auth
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.5.0
 # passlib==1.7.4 (sin mantenimiento) se sacó — incompatible con bcrypt>=5,
 # ver app/auth/service.py::hash_password. Se llama a bcrypt directo.
 bcrypt==5.0.0
@@ -37,7 +37,7 @@ minio==7.2.20
 # Reportes PDF
 weasyprint==70.0
 jinja2==3.1.6
-pillow==10.4.0
+pillow==12.3.0
 
 # Exportación de zonas (GeoJSON / Shapefile) — pyshp es Python puro, sin
 # GDAL/Fiona (ver app/diagnostico/service.py: FastAPI no lleva GIS pesado)
