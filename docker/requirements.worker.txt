@@ -1,5 +1,5 @@
 # Cola de tareas
-celery==5.4.0
+celery==5.6.3
 redis==8.1.0
 
 # Configuración compartida con app/
