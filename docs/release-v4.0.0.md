@@ -30,6 +30,7 @@
 | HU-R4-10 — personalización del perfil del usuario | Completada |
 | Fix: bump `bcrypt` 4.2.1 → 5.0.0, se saca `passlib` (PR Dependabot #60) | Completada |
 | Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
+| Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
@@ -380,3 +381,21 @@ Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayo
 - Nuevo warning no bloqueante a futuro: SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()` para generar `DISTINCT ON` (`app/lotes/service.py`, usado por `listar_lotes` de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Queda en Problemas abiertos, no es bloqueante (sigue funcionando, solo deprecation warning).
 
 **Decisión tomada:** no se tocó `app/lotes/service.py` en esta rama — el fix se acotó al breakage real (falta de `greenlet`), la migración de `.distinct()` es un cambio de código aparte sin apuro.
+
+#### Fix: `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya mergeada a `main`)
+**Fecha:** 2026-10-08
+**Rama:** `fix/geoalchemy2-sqlalchemy21-compat`
+
+**Hallazgo (propio, no reportado por nadie todavía):** al validar el fix de `sqlalchemy`/`greenlet` (PR #76, ya mergeada) se corrió `alembic upgrade head` contra una base que YA tenía todas las migraciones aplicadas — un no-op que no probó nada. Nadie lo notó hasta que la PR #79 (vite) mostró "API — migraciones y health" en rojo sin relación aparente con su diff. Se investigó corriendo la migración completa desde una base PostGIS vacía de verdad, y se reprodujo: **cualquier `alembic upgrade head` desde cero falla en la primera tabla que crea** (`alembic_version`, ni siquiera una tabla con geometría) con `TypeError: ColumnCollection is an abstract base class and cannot be instantiated directly`.
+
+**Causa raíz:** `geoalchemy2==0.15.2` registra un listener `before_create` global sobre `Table` (no solo sobre tablas con columnas de geometría) que instancia `sqlalchemy.sql.expression.ColumnCollection()` directo (`admin/dialects/common.py::_update_table_for_dispatch`). SQLAlchemy 2.1 volvió esa clase abstracta — hay que usar `WriteableColumnCollection`/`DedupeColumnCollection`. Como el listener es global, revienta en la creación de CUALQUIER tabla, no solo las de este proyecto.
+
+**Impacto real:** desde que se mergeó la PR #76 (sqlalchemy 2.1.1), `main` quedó roto para cualquiera que clone el repo y corra `alembic upgrade head` desde cero — no se nota en bases ya migradas (como la de desarrollo de cualquiera que ya venía trabajando), pero sí en CI (que siempre arranca de una base vacía) y en cualquier onboarding nuevo.
+
+**Fix:** `geoalchemy2` 0.15.2 → 0.20.0 en `requirements.api.txt` y `requirements.worker.txt` — ya usa la API nueva de SQLAlchemy.
+
+**Verificación (la que faltó la primera vez):**
+- Base PostGIS vacía real (contenedor Postgres aparte, sin ninguna migración aplicada) + `alembic upgrade head` — las 22 migraciones corren limpias de punta a punta.
+- 253 tests de `api` + 151 de `worker` + los 3 de `test_celery_integracion.py` (E2E) — todos pasan.
+
+**Nota para el propio proceso:** a partir de ahora, cualquier bump de `sqlalchemy` (o de algo que dispare DDL, como `geoalchemy2`) se valida corriendo las migraciones contra una base realmente vacía, no reutilizando la base de desarrollo persistente — ese fue el gap que dejó pasar esto.

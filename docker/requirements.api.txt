@@ -13,7 +13,10 @@ sqlalchemy==2.1.1
 # "SQLAlchemy asyncio module requires that the Python 'greenlet' library
 # is installed" (ver docs/release-v4.0.0.md).
 greenlet==3.5.6
-geoalchemy2==0.15.2
+# 0.15.2 instancia expression.ColumnCollection() directo en before_create —
+# SQLAlchemy 2.1 lo hizo abstracto (TypeError al crear CUALQUIER tabla,
+# no solo las que tienen columna de geometría). 0.20.0 ya usa la API nueva.
+geoalchemy2==0.20.0
 asyncpg==0.31.0
 alembic==1.20.0
 psycopg2-binary==2.9.13
