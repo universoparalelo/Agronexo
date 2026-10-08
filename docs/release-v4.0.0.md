@@ -28,6 +28,7 @@
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 | HU-R4-10 — personalización del perfil del usuario | Completada |
+| Fix: bump `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64) | Completada |
 | Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
@@ -137,6 +138,7 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Sacar `continue-on-error` de los jobs de `security.yml`** una vez triageado el volumen inicial de hallazgos de Semgrep/Bandit/pip-audit/npm-audit/Trivy (dar 1-2 semanas de rodaje, como se hizo explícito arriba).
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
 - ~~Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`react-router-dom`~~ — **resuelto**, ver tarea más abajo.
+- ~~Upgrade coordinado de `rasterio`/`gdal`~~ — **resuelto**, ver tarea más abajo (incluyó un segundo breakage no previsto: `pydantic` sin wheel para el Python 3.14 que trae la imagen nueva).
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
@@ -322,6 +324,27 @@ Los 4 criterios de aceptación: editar datos personales/empresa con validaciones
 - Recorrido manual en el browser pane: login real, navegación a `/perfil`, edición de "Descripción" + guardado (200, mensaje de confirmación), intento de cambio de contraseña con confirmación distinta a la nueva — bloqueado del lado del cliente antes de llamar al backend, con el mensaje correcto. Sidebar muestra "Mi perfil" resaltado y el nombre de empresa cargado. Sin errores de consola.
 - El wiring del logo dentro del PDF renderizado end-to-end (reporte ejecutivo real, lote con vuelo+diagnóstico completo) lo confirmó el usuario manualmente tras el merge — el logo se ve correctamente en el PDF generado.
 
+#### Fix: `osgeo/gdal` 3.9.0 → 3.13.3 + `rasterio` 1.3.11 → 1.5.1 (PRs Dependabot #21 + #64)
+**Fecha:** 2026-10-08
+**Rama:** `fix/gdal-rasterio-upgrade`
+
+Segundo fix del triage de Dependabot (ver Problemas abiertos). Ya estaba identificado desde el Sprint 14 que bumpear solo la imagen base de GDAL rompía el build del worker (`rasterio==1.3.11` no compila contra el Python más nuevo de la imagen — `ModuleNotFoundError: No module named 'pkg_resources'`), y que la solución era bumpear `rasterio` en el mismo movimiento.
+
+**Hallazgo nuevo (no estaba previsto):** `ghcr.io/osgeo/gdal:ubuntu-small-3.13.3` trae **Python 3.14.4** (la imagen vieja traía 3.12.3) — un salto de versión de Python, no solo de GDAL. Esto generó un segundo breakage, distinto del de `rasterio`: `pydantic==2.10.4` (pin compartido con `requirements.api.txt`) no tiene wheel precompilada para `cp314` — `pydantic-core` 2.27.2 (la versión que esa pydantic fija) cae a compilarse desde fuente vía `maturin`/`cargo`, y falla porque `PyO3 0.22.6` (el que trae ese sdist) no soporta Python 3.14 (`error: the configured Python interpreter version (3.14) is newer than PyO3's maximum supported version`).
+
+**Fix:**
+- `docker/Dockerfile.worker`: `FROM ghcr.io/osgeo/gdal:ubuntu-small-3.9.0` → `ubuntu-small-3.13.3`.
+- `docker/requirements.worker.txt`: `rasterio` 1.3.11 → 1.5.1 (ya venía probado verde en su propia PR de Dependabot, sin romper nada). `pydantic` 2.10.4 → 2.13.5 **solo en `requirements.worker.txt`** (no se tocó el pin de `requirements.api.txt`, que sigue en Python 3.12 y no lo necesita) — 2.13.5 resuelve a `pydantic-core==2.46.5`, que sí trae wheel `cp314`.
+
+**Cómo se investigó (sin gastar ciclos de build completos por cada intento):** en vez de iterar con `docker compose build` (lento, ~1-2 min por vuelta), se armó un contenedor de prueba descartable a partir de la imagen base nueva (`docker create`/`docker cp`/`docker exec`) para replicar exactamente los mismos pasos de `apt-get install` + `pip install` del Dockerfile y iterar rápido sobre los requirements hasta encontrar la combinación que resuelve. Confirmado también que `pip install --dry-run` no sirve para detectar este tipo de falla (reporta "Would install" sin intentar compilar el sdist, da un falso verde) — hay que correr el install real.
+
+**Verificación (stack completo reconstruido, no solo el diff):**
+- `docker compose build worker` — build limpio.
+- `docker compose up -d` — Celery conecta a Redis sin errores (solo warnings de deprecación esperados de Celery 5.4 sobre `broker_connection_retry`, no relacionados a este cambio).
+- 151 tests de GIS de la imagen `worker` pasan.
+- `tests/test_celery_integracion.py` (los 3, incluido el ciclo E2E con un GeoTIFF real) pasa.
+
+**Decisión tomada:** no se homologó `pydantic` entre `api` y `worker` a la misma versión — son requirements files independientes por diseño (cada imagen instala solo lo que necesita), y forzar el mismo pin en ambos para "prolijidad" hubiera significado re-probar toda la suite de `api` sin necesidad real (el pin de `api` no está roto, sigue en Python 3.12).
 #### Fix: `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin de `greenlet`
 **Fecha:** 2026-10-08
 **Rama:** `fix/sqlalchemy-greenlet-dependency`
