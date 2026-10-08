@@ -28,6 +28,7 @@
 | Fix: label engañoso "Procesando imagen" en Vista geoespacial del Dashboard | Completada |
 | HU-R4-03 — listado multi-lote con filtros, paginado y fix de N+1 | Completada |
 | HU-R4-10 — personalización del perfil del usuario | Completada |
+| Fix: bump `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin explícito de `greenlet` | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -137,6 +138,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Evaluar upload de SARIF al tab de Security de GitHub** si la org obtiene licencia de GitHub Advanced Security.
 - ~~Upgrade coordinado de `react`/`react-dom`/`react-leaflet`/`react-router-dom`~~ — **resuelto**, ver tarea más abajo.
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
+- **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
+- **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
 - **`pillow` 10.4.0 tiene múltiples CVEs** (PYSEC-2026-2249 a -3496, parchados en la serie 12.x) — no salió en ninguna de las 25 PR de Dependabot (probablemente el aviso se publicó después del escaneo inicial, o quedó afuera por el tope de 10 PR simultáneas del ecosistema `pip`). Salto de 2 versiones mayores (10.4.0 → 12.3.0). Se usa en `app/reportes/mapa.py` para dibujar el mapa del PDF desde el GeoJSON del diagnóstico (no parsea imágenes de usuarios), así que el riesgo real es bajo, pero falta probarlo antes de bumpear — decisión explícita de dejarlo para después (2026-09-28).
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
@@ -317,4 +320,22 @@ Los 4 criterios de aceptación: editar datos personales/empresa con validaciones
 - Backend probado contra el stack real (migración aplicada, API reiniciada): `PUT /auth/me` con datos válidos (200) y CUIT inválido (422), cambio de contraseña con clave actual incorrecta (400) y correcta (204, confirmado con login real a la clave nueva y revertido), upload de un PNG real a `/auth/me/logo-empresa` (200, URL firmada de MinIO en la respuesta).
 - `resolver_datos_aplicador` probado directo dentro del contenedor `api`: descarga el logo real de MinIO y lo codifica en base64 correctamente (prefijo `data:image/png;base64,...`).
 - Recorrido manual en el browser pane: login real, navegación a `/perfil`, edición de "Descripción" + guardado (200, mensaje de confirmación), intento de cambio de contraseña con confirmación distinta a la nueva — bloqueado del lado del cliente antes de llamar al backend, con el mensaje correcto. Sidebar muestra "Mi perfil" resaltado y el nombre de empresa cargado. Sin errores de consola.
-- No se probó el wiring del logo dentro del PDF renderizado end-to-end (requiere un lote con vuelo+diagnóstico completo) — sí se verificó que `resolver_datos_aplicador` produce el base64 correcto y que ambos templates (`reporte_ejecutivo.html`, `orden_trabajo.html`) reciben y renderizan los campos nuevos condicionalmente (`{% if %}`, no rompen si el usuario no cargó estos datos).
+- El wiring del logo dentro del PDF renderizado end-to-end (reporte ejecutivo real, lote con vuelo+diagnóstico completo) lo confirmó el usuario manualmente tras el merge — el logo se ve correctamente en el PDF generado.
+
+#### Fix: `sqlalchemy` 2.0.54 → 2.1.1 (PR Dependabot #63) + pin de `greenlet`
+**Fecha:** 2026-10-08
+**Rama:** `fix/sqlalchemy-greenlet-dependency`
+
+Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayoría tenían CI verde salvo el ruido conocido de pip-audit/npm-audit ya aceptado; un grupo chico rompía de verdad. Esta fue la más simple de las rotas: `ModuleNotFoundError: No module named 'greenlet'` en la PR de Dependabot, porque SQLAlchemy 2.1 dejó de traer `greenlet` como transitiva implícita (antes se auto-instalaba sin que `requirements.*.txt` la pidiera).
+
+**Fix:** se agregó `greenlet==3.5.6` explícito en `docker/requirements.api.txt` y `docker/requirements.worker.txt`, junto al bump de `sqlalchemy` a 2.1.1. La versión de greenlet se tomó de la que ya estaba resuelta transitivamente en el entorno de dev (`pip show greenlet` dentro del contenedor `api` antes del cambio), para no introducir una versión sin probar.
+
+**Verificación (stack completo reconstruido desde cero, no solo el diff):**
+- `docker compose build api worker` — ambas imágenes buildean limpias.
+- `alembic upgrade head` + `GET /api/v1/health` + `GET /api/v1/health/db` — OK.
+- 253 tests de la imagen `api` pasan (sin cambios respecto a antes del bump).
+- 151 tests de GIS de la imagen `worker` pasan.
+- `tests/test_celery_integracion.py` (los 3, incluido el ciclo E2E) pasa.
+- Nuevo warning no bloqueante a futuro: SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()` para generar `DISTINCT ON` (`app/lotes/service.py`, usado por `listar_lotes` de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Queda en Problemas abiertos, no es bloqueante (sigue funcionando, solo deprecation warning).
+
+**Decisión tomada:** no se tocó `app/lotes/service.py` en esta rama — el fix se acotó al breakage real (falta de `greenlet`), la migración de `.distinct()` es un cambio de código aparte sin apuro.
