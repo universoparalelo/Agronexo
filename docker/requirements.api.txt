@@ -15,8 +15,9 @@ psycopg2-binary==2.9.13
 
 # Auth
 python-jose[cryptography]==3.3.0
-bcrypt==4.2.1
-passlib[bcrypt]==1.7.4
+# passlib==1.7.4 (sin mantenimiento) se sacó — incompatible con bcrypt>=5,
+# ver app/auth/service.py::hash_password. Se llama a bcrypt directo.
+bcrypt==5.0.0
 
 # Celery + Redis
 celery==5.4.0
