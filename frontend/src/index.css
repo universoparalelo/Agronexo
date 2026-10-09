@@ -3073,6 +3073,26 @@ body {
 
 .detalle-main--calendario { max-width: 1120px; }
 
+.grafico-evolucion {
+  padding: 1rem 1.1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.grafico-evolucion--cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.grafico-evolucion-svg { width: 100%; height: auto; display: block; margin-top: 0.4rem; }
+
+.grafico-evolucion-punto { cursor: pointer; }
+.grafico-evolucion-punto:hover { r: 6; }
+
 .vuelos-header-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 
 .vuelos-vista-toggle { display: flex; gap: 0.2rem; background: #f0f4f0; border-radius: 6px; padding: 2px; }

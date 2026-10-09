@@ -7,6 +7,7 @@ import { listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
 import CalendarioMensual from '../components/CalendarioMensual'
+import GraficoEvolucionNdvi from '../components/GraficoEvolucionNdvi'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 
 const ESTADO_LABELS = {
@@ -143,6 +144,8 @@ export default function DetalleLote() {
 
   const contenido = (
     <>
+      {vuelos.length > 0 && <GraficoEvolucionNdvi loteId={loteId} vuelos={vuelos} />}
+
       <div className="vuelos-header-row">
         <h2 className="vuelos-title">Vuelos registrados</h2>
         <div className="vuelos-vista-toggle">
