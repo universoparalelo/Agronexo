@@ -35,6 +35,7 @@
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 | Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA) | Completada |
+| HU-R4-07 — resumen por vuelo en el historial (índice + severidad + enlaces) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -149,6 +150,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
 - ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
 - ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código).
+- **`docker/certs/avast-root.crt` no es portable entre instalaciones de Avast de distintas máquinas** — Avast genera una raíz TLS-scanning self-signed distinta por cada instalación aunque el Subject/Issuer sea el mismo texto literal. El cert commiteado solo sirve en la máquina donde se exportó originalmente; cualquier otro dev con Avast activo necesita exportar su propia raíz (`Cert:\LocalMachine\Root` en Windows) y reemplazar el archivo localmente (sin commitear) para poder buildear la imagen `api`. Sin solución de equipo todavía — ver tarea HU-R4-07 más abajo donde se detectó.
+- **El volumen `minio_data` de desarrollo creado con la imagen vieja `minio/minio` no es compatible con el usuario no-root de `cgr.dev/chainguard/minio`** — falla con `FATAL Unable to initialize backend: Unable to write to the backend`. Cualquier entorno local que todavía tenga el volumen viejo necesita recrearlo (`docker volume rm`) para migrar a la imagen nueva; se pierden los archivos ya subidos a MinIO (Postgres no se ve afectado). Ver tarea HU-R4-07 más abajo.
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
@@ -482,3 +485,33 @@ Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayo
 - Login real (JWT con `python-jose` 3.5.0) — `POST /auth/login` + `GET /auth/me` → 200.
 - Generación de imagen con Pillow 12.3.0 probada directo en el contenedor (`Image`/`ImageDraw`/`ImageFont`) — OK.
 - `pip-audit` local contra el `requirements.api.txt` nuevo: de 3 paquetes con hallazgos (`python-jose`, `pillow`, `ecdsa`) queda solo `ecdsa` (sin fix) y el CVE nuevo de `python-jose` (sin fix, no explotable acá) — `pillow` sale limpio.
+
+#### HU-R4-07 — Resumen por vuelo en el historial
+**Fecha:** 2026-10-08
+**Rama:** `feat/hu-r4-07-resumen-vuelo-historial`
+
+En el historial de vuelos del lote (`VuelosCalendario.jsx`, HU-R4-04), cada vuelo completado ahora tiene un botón "Resumen" que expande un panel inline (nuevo `ResumenVuelo.jsx` + `useResumenVuelo.js`) con tres criterios de aceptación de la HU:
+
+- **Índice con valor medio/mínimo/máximo en gráfico**: barra de rango NDVI (mín—prom—máx) más una nota de qué índice correspondería según el estadio fenológico del vuelo (estadios tempranos V1-V3 → SAVI, NDVI>0.75 → GNDVI, resto → NDVI). Es solo una recomendación informativa — el motor de diagnóstico sigue calculando únicamente sobre NDVI.
+- **Porcentaje de superficie por nivel de severidad**: barra apilada + leyenda (crítica/moderada/leve/normal/vigorosa), agregando el `area_ha` de cada zona del diagnóstico por su `severidad`.
+- **Enlaces a prescripción, orden de trabajo e informe PDF**: 3 botones de descarga, cada uno deshabilitado cuando no corresponde (ej. "Orden de trabajo" sin unidades de manejo).
+
+**Decisiones tomadas:**
+- No se agregó ningún endpoint backend nuevo — todo el resumen se arma reutilizando `GET /lotes/{id}/vuelos/{id}/diagnostico` (ya trae `ndvi_promedio_lote`, `ndvi_promedio` y `severidad` por zona, y `unidades_manejo`) más los endpoints de export ya existentes (`reporte/pdf`, `orden-trabajo/pdf`, `zonas/export?formato=shapefile`).
+- "Prescripción" se mapeó al export Shapefile (RFSA-02) y "orden de trabajo" al PDF de orden de trabajo (RFSA-04) — son dos artefactos distintos según el ERS, no sinónimos, pese a que el código interno comenta la orden de trabajo como "orden de trabajo / prescripción" (`app/ordenes_trabajo/service.py`).
+- El diagnóstico se carga on-demand solo al expandir el resumen de ESE vuelo puntual (no para todos los vuelos del historial a la vez) — `generar_diagnostico()` no es gratis.
+- Sin librería de gráficos nueva — el rango NDVI y la barra de severidad son CSS plano (consistente con la convención del proyecto de no sumar dependencias de UI todavía).
+
+**Verificación:** stack completo levantado con Docker Compose (login real con `admin@agronexo.com`), lote "Release 2.2" con 2 vuelos completados — resumen expandido mostró NDVI mín/prom/máx reales, severidad "Normal · 100%" (zona uniforme, esperado), y descarga de Informe PDF + Prescripción SHP devolvieron `200`. "Orden de trabajo" quedó correctamente deshabilitado (sin unidades de manejo en ese vuelo). `npm test` (2 archivos, 9 tests) y `vite build` corridos dentro del contenedor `frontend` (Node correcto) sin errores.
+
+**Error encontrado — build de `api` falla con `SSLCertVerificationError` contra pypi.org**
+```
+ERROR: Could not find a version that satisfies the requirement fastapi==0.141.1 (from versions: none)
+```
+`docker/certs/avast-root.crt` (usado por `Dockerfile.api` para confiar en el TLS-scanning de Avast) resultó ser el certificado raíz de **otra** instalación de Avast — Avast genera una raíz self-signed distinta por cada instalación aunque el Subject/Issuer sea el mismo texto literal (verificado con `openssl verify`: el cert del repo no valida la cadena real que presenta `pypi.org` en esta máquina). Se resolvió localmente, sin commitear, exportando la raíz real de Avast de esta máquina desde `Cert:\LocalMachine\Root` (PowerShell) y reemplazando el archivo solo para el build; se revirtió a la versión del repo después. Ver "Problemas abiertos".
+
+**Error encontrado — MinIO no arranca tras el rebuild (`FATAL Unable to initialize backend`)**
+```
+Error: unable to rename (/data/.minio.sys/tmp -> /data/.minio.sys/tmp-old/...) file access denied
+```
+El volumen `minio_data` local fue creado por la imagen vieja `minio/minio` (corría como root); `cgr.dev/chainguard/minio` corre como usuario no-root y no puede escribir ahí. Se resolvió recreando el volumen (confirmado con el usuario primero, porque implica perder los archivos de prueba subidos a MinIO en este entorno — Postgres no se tocó). Ver "Problemas abiertos".

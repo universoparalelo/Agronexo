@@ -2815,7 +2815,9 @@ body {
 
 .vuelos-calendario-lista ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 
-.vuelos-calendario-item-fila { display: flex; align-items: center; gap: 0.3rem; }
+.vuelos-calendario-item-fila { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.vuelos-calendario-item-row { display: flex; align-items: center; gap: 0.3rem; }
 
 .vuelos-calendario-item {
   flex: 1;
@@ -2881,6 +2883,135 @@ body {
 }
 
 .vuelos-calendario-item-menu-lista button:hover { background: #f0f5ec; color: #27500a; }
+
+.vuelos-calendario-item-resumen-boton {
+  flex-shrink: 0;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #27500a;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.vuelos-calendario-item-resumen-boton:hover { background: #f0f5ec; }
+
+/* Resumen por vuelo en el historial (HU-R4-07) */
+.resumen-vuelo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbf8;
+}
+
+.resumen-vuelo--cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.resumen-vuelo-error { margin: 0; }
+
+.resumen-vuelo-indice-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a3a2a;
+  margin-bottom: 0.4rem;
+}
+
+.resumen-vuelo-indice-recomendado {
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: #6b7280;
+  cursor: help;
+}
+
+.resumen-vuelo-rango-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #ef4444, #eab308, #4ade80, #16a34a);
+  opacity: 0.35;
+}
+
+.resumen-vuelo-rango-relleno {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  background: rgba(26, 58, 42, 0.25);
+}
+
+.resumen-vuelo-rango-marca {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: #1a3a2a;
+  transform: translateX(-1px);
+}
+
+.resumen-vuelo-rango-numeros {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  color: #4b5563;
+}
+
+.resumen-vuelo-severidad-titulo { display: block; font-size: 0.78rem; font-weight: 700; color: #1a3a2a; margin-bottom: 0.4rem; }
+
+.resumen-vuelo-severidad-barra {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.resumen-vuelo-severidad-tramo { height: 100%; }
+
+.resumen-vuelo-severidad-leyenda {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.7rem;
+  color: #374151;
+}
+
+.resumen-vuelo-severidad-leyenda li { display: flex; align-items: center; gap: 0.3rem; }
+
+.resumen-vuelo-severidad-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.resumen-vuelo-acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.resumen-vuelo-acciones button {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #1a3a2a;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+
+.resumen-vuelo-acciones button:hover:not(:disabled) { background: #f0f5ec; border-color: #27500a; }
+.resumen-vuelo-acciones button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .mapa-dibujo-wrapper {
   position: relative;
