@@ -217,7 +217,13 @@ function AnalisisMap({ loteId, vueloId, indice, limite, loteAreaHa, onCompletado
     if (completado) onCompletado?.()
   }, [completado]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!estado) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
+  // errorMsg puede llegar sin que `estado` se haya resuelto nunca (falla la
+  // primera consulta de estado, ej. 404) — antes `!estado` cortaba acá y se
+  // quedaba en "Cargando análisis..." para siempre, tapando el error.
+  if (!estado && !errorMsg) return <p className="estado-msg" style={{ padding: '1rem' }}>Cargando análisis...</p>
+  if (!estado) {
+    return <p className="estado-msg" style={{ padding: '1rem', color: '#b91c1c' }}>{errorMsg}</p>
+  }
 
   const estadoActual = estado.estado
   if (estadoActual === 'completado' && geojson) {

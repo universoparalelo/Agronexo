@@ -63,7 +63,6 @@ def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
     causa = props.get("causa_indice", "sin_problema_detectado")
     confianza = props.get("confianza", "media")
     regla_id = props.get("regla_id", "")
-    accion = props.get("accion_recomendada", "")
     productos = props.get("productos_sugeridos", [])
 
     if regla_id == "R99":
@@ -99,9 +98,6 @@ def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
         parts.append(f"Zona de {area:.1f} ha con {patron_label}.")
 
     parts.append(f"Diagnóstico: {causa_label} ({confianza_label}).")
-
-    if accion:
-        parts.append(accion)
 
     if productos:
         nombres = [p["nombre"] for p in productos[:3]]

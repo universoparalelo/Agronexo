@@ -68,7 +68,7 @@ def generar_pdf_reporte(diagnostico: dict, datos_aplicador: dict | None = None) 
     features = diagnostico.get("features", [])
     datos_aplicador = datos_aplicador or {}
 
-    mapa_png = generar_imagen_mapa_zonas(diagnostico, modo="severidad")
+    mapa_png = generar_imagen_mapa_zonas(diagnostico, modo="clase")
     mapa_base64 = "data:image/png;base64," + base64.b64encode(mapa_png).decode("ascii")
 
     zonas = [_zona_a_contexto(f.get("properties", {})) for f in features]
@@ -129,6 +129,7 @@ def _zona_a_contexto(props: dict) -> dict:
         "excluida": bool(props.get("excluida", False)),
         "sin_problema": props.get("regla_id") == "R99",
         "texto_explicativo": props.get("texto_explicativo", ""),
+        "accion_recomendada": props.get("accion_recomendada", ""),
         "productos_texto": ", ".join(p["nombre"] for p in productos[:3]) if productos else "",
     }
 

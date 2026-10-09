@@ -206,6 +206,11 @@ export default function TablaDiagnostico({
 
                 {!sinProblema && (
                   <>
+                    {p.accion_recomendada && (
+                      <p className="diagnostico-accion">
+                        <strong>Acción recomendada:</strong> {p.accion_recomendada}
+                      </p>
+                    )}
                     <details className="diagnostico-confirmar">
                       <summary>Cómo confirmar en campo</summary>
                       <p>{p.como_confirmar_campo}</p>
