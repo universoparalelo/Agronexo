@@ -259,7 +259,7 @@ const PASOS = [
   { key: 'analisis', label: 'Análisis', icon: <IconSearch /> },
 ]
 
-export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onClose, onLoteCreado }) {
+export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = false, onSuccess, onClose, onLoteCreado }) {
   const [step, setStep] = useState('carga') // 'carga' | 'cultivo' | 'analisis'
   const [loteId, setLoteId] = useState(loteIdInicial ?? '')
   const [fuente, setFuente] = useState('dron') // 'dron' | 'satelite'
@@ -754,24 +754,31 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
           <div className={`modal-form${loteId ? '' : ' modal-form--sin-lote'}`}>
             <div className="form-group">
               <label htmlFor="lote">Lote</label>
-              <div className="lote-selector-fila">
-                <select
-                  id="lote"
-                  value={loteId}
-                  onChange={(e) => setLoteId(e.target.value)}
-                  disabled={loading}
-                >
-                  <option value="" disabled>Seleccioná un lote…</option>
-                  {lotesTodos.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.nombre}{cultivoMasReciente(l) ? ` — ${etiquetaTipoCultivo(cultivoMasReciente(l).tipo_cultivo)}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" className="btn-nuevo-lote" onClick={abrirNuevoLote} disabled={loading}>
-                  ＋ Nuevo lote
-                </button>
-              </div>
+              {loteFijo ? (
+                <p className="lote-fijo-nombre">
+                  {loteSeleccionado?.nombre}
+                  {cultivoMasReciente(loteSeleccionado ?? {}) ? ` — ${etiquetaTipoCultivo(cultivoMasReciente(loteSeleccionado).tipo_cultivo)}` : ''}
+                </p>
+              ) : (
+                <div className="lote-selector-fila">
+                  <select
+                    id="lote"
+                    value={loteId}
+                    onChange={(e) => setLoteId(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="" disabled>Seleccioná un lote…</option>
+                    {lotesTodos.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.nombre}{cultivoMasReciente(l) ? ` — ${etiquetaTipoCultivo(cultivoMasReciente(l).tipo_cultivo)}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn-nuevo-lote" onClick={abrirNuevoLote} disabled={loading}>
+                    ＋ Nuevo lote
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="modo-limite-toggle">
@@ -1006,8 +1013,8 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, onSuccess, onC
                   type="date"
                   value={fechaVuelo}
                   onChange={(e) => setFechaVuelo(e.target.value)}
-                  disabled={loading || fuente === 'satelite'}
-                  title={fuente === 'satelite' ? 'Es la fecha real de captura de la escena elegida — no se puede editar.' : undefined}
+                  disabled={loading}
+                  title={fuente === 'satelite' ? 'Se completó con la fecha real de captura de la escena elegida — la podés corregir si hace falta.' : undefined}
                 />
               </div>
               <div className="form-group">

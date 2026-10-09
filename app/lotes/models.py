@@ -4,7 +4,7 @@ from datetime import datetime, time
 
 from geoalchemy2 import Geometry
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Time, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -60,8 +60,12 @@ class Lote(Base):
     )
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    usuario_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    # as_uuid=False a propósito, igual que Vuelo.subido_por_id — tiene que
+    # matchear el tipo Python de Usuario.id para que un eager load futuro de
+    # la relación `usuario` no quede en None en silencio (mismo bug real que
+    # ese, encontrado y documentado en HU-R4-02).
+    usuario_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -130,11 +134,27 @@ class Vuelo(Base):
     task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_detalle: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     geojson_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Trazabilidad (HU-R4-02): quién lo subió, y qué mapeo de bandas/umbral se
+    # usó en el NDVI primario — metodo_umbral y mapeo_bandas los completa el
+    # worker al terminar (workers/gis/tasks.py::_actualizar_vuelo), no la API.
+    # as_uuid=False a propósito: tiene que matchear el tipo Python de
+    # Usuario.id (también as_uuid=False) para que el selectin loader de
+    # `subido_por` pueda emparejar las filas — con as_uuid=True acá,
+    # uuid.UUID(...) != str(...) y la relación queda en None (bug real,
+    # detectado con un test de trazabilidad).
+    subido_por_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("usuarios.id", ondelete="SET NULL"), nullable=True
+    )
+    metodo_umbral: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    mapeo_bandas: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     lote: Mapped["Lote"] = relationship("Lote", back_populates="vuelos")
     cultivo: Mapped["Cultivo | None"] = relationship("Cultivo", lazy="selectin")
+    subido_por: Mapped["Usuario | None"] = relationship(
+        "Usuario", lazy="selectin", foreign_keys=[subido_por_id]
+    )
     analisis_indices: Mapped[list["AnalisisIndice"]] = relationship(
         "AnalisisIndice", back_populates="vuelo"
     )

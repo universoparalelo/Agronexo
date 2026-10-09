@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from shapely.geometry import mapping, shape
 from shapely.geometry.polygon import Polygon
 
-from app.lotes.models import CultivoEnum, TipoSueloEnum
+from app.lotes.models import CultivoEnum, EstadoVueloEnum, TipoSueloEnum
 
 # Rango de área razonable para un lote agrícola — mismo rango que valida el
 # frontend en frontend/src/components/MapaDibujoLote.jsx (AREA_MIN_HA/AREA_MAX_HA).
@@ -129,6 +129,11 @@ class LoteResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     cultivos: list["CultivoResponse"] = []
+    # Último vuelo del lote (HU-R4-03) — se resuelven en una sola consulta en
+    # el backend (DISTINCT ON), nunca pidas /lotes/{id}/vuelos por cada lote
+    # del listado para armar esto.
+    ultimo_vuelo_fecha: datetime | None = None
+    ultimo_vuelo_estado: EstadoVueloEnum | None = None
 
     model_config = {"from_attributes": True}
 
@@ -147,6 +152,8 @@ class LoteResponse(BaseModel):
 
 class LoteListResponse(BaseModel):
     total: int
+    page: int
+    page_size: int
     items: list[LoteResponse]
 
     model_config = {"from_attributes": True}

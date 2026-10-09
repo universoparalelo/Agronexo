@@ -8,9 +8,12 @@ Correr en CI o local (con DB levantada):
     PYTHONPATH=$(pwd) python3 -m pytest tests/test_lotes.py -v
 """
 import uuid
+from datetime import datetime, timezone
 
+from sqlalchemy import create_engine, text
 from starlette.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 
 _EMAIL = f"lotes_{uuid.uuid4().hex[:8]}@agronexo-test.com"
@@ -96,6 +99,33 @@ def _crear_lote(nombre: str = "Lote Test") -> dict:
     }, headers=_auth())
     assert r.status_code == 201, f"No se pudo crear lote auxiliar: {r.text}"
     return r.json()
+
+
+def _crear_cultivo(lote_id: str, tipo: str = "soja", fecha_siembra: str | None = None) -> dict:
+    r = _tc.post(f"/api/v1/lotes/{lote_id}/cultivos", json={
+        "tipo_cultivo": tipo, "fecha_siembra": fecha_siembra,
+    }, headers=_auth())
+    assert r.status_code == 201, f"No se pudo crear cultivo auxiliar: {r.text}"
+    return r.json()
+
+
+def _insertar_vuelo(lote_id: str, estado: str = "completado", fecha_vuelo: datetime | None = None) -> str:
+    """Inserta un vuelo directo en la BD (sin MinIO ni Celery) — mismo
+    criterio que test_diagnostico_api.py / test_exportacion_api.py."""
+    vuelo_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    engine = create_engine(settings.database_url_sync)
+    with engine.connect() as conn:
+        conn.execute(text(
+            "INSERT INTO vuelos (id, lote_id, sensor, fecha_vuelo, estado, created_at) "
+            "VALUES (CAST(:id AS uuid), CAST(:lote_id AS uuid), :sensor, :fecha, :estado, :created_at)"
+        ), {
+            "id": vuelo_id, "lote_id": lote_id, "sensor": "dji_mavic3",
+            "fecha": fecha_vuelo or now, "estado": estado, "created_at": now,
+        })
+        conn.commit()
+    engine.dispose()
+    return vuelo_id
 
 
 # ── Crear ─────────────────────────────────────────────────────────────
@@ -324,6 +354,109 @@ def test_lote_de_otro_usuario_no_aparece_en_lista():
     print("✓ Lote de otro usuario no aparece en GET /lotes del usuario actual")
 
 
+# ── Regresión: tipos de Lote.usuario_id vs Usuario.id ───────────────────
+
+def test_lote_usuario_carga_via_selectinload():
+    """Usuario.id es str (as_uuid=False) — Lote.usuario_id tiene que matchear
+    ese tipo Python o un eager load de la relación `usuario` queda en None en
+    silencio (mismo bug real que tenía Vuelo.subido_por, ver HU-R4-02 en
+    docs/release-v4.0.0.md). No se ejerce en ningún endpoint hoy, así que sin
+    este test quedaría dormido de nuevo si alguien vuelve a romper el tipo."""
+    import uuid as _uuid
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session, selectinload
+
+    from app.core.config import settings
+    from app.lotes.models import Lote
+
+    lote = _crear_lote("Lote Para Test de Relación")
+
+    engine = create_engine(settings.database_url_sync)
+    with Session(engine) as session:
+        stmt = select(Lote).options(selectinload(Lote.usuario)).where(Lote.id == _uuid.UUID(lote["id"]))
+        cargado = session.execute(stmt).scalar_one()
+        assert cargado.usuario is not None
+        assert cargado.usuario.email == _EMAIL
+    engine.dispose()
+    print("✓ Lote.usuario carga correctamente vía selectinload (no None)")
+
+
+# ── Listado: último vuelo, filtros y paginado (HU-R4-03) ────────────────
+
+def test_listar_lotes_incluye_ultimo_vuelo_sin_consulta_extra():
+    lote = _crear_lote("Lote Con Vuelos")
+    _insertar_vuelo(lote["id"], "error", fecha_vuelo=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    vuelo_reciente = _insertar_vuelo(lote["id"], "completado", fecha_vuelo=datetime(2026, 6, 1, tzinfo=timezone.utc))
+
+    r = _tc.get("/api/v1/lotes", headers=_auth())
+    assert r.status_code == 200
+    item = next(it for it in r.json()["items"] if it["id"] == lote["id"])
+    assert item["ultimo_vuelo_estado"] == "completado"
+    assert item["ultimo_vuelo_fecha"].startswith("2026-06-01")
+    print("✓ GET /lotes trae el último vuelo (por fecha_vuelo) sin pedirlo aparte")
+
+
+def test_listar_lotes_sin_vuelos_devuelve_null():
+    lote = _crear_lote("Lote Sin Vuelos Para Listado")
+    r = _tc.get("/api/v1/lotes", headers=_auth())
+    item = next(it for it in r.json()["items"] if it["id"] == lote["id"])
+    assert item["ultimo_vuelo_fecha"] is None
+    assert item["ultimo_vuelo_estado"] is None
+    print("✓ GET /lotes con lote sin vuelos → ultimo_vuelo_* en null")
+
+
+def test_listar_lotes_filtro_busqueda_por_nombre():
+    _crear_lote("Campo La Esperanza")
+    _crear_lote("Campo El Progreso")
+    r = _tc.get("/api/v1/lotes", params={"q": "Esperanza"}, headers=_auth())
+    nombres = [it["nombre"] for it in r.json()["items"]]
+    assert "Campo La Esperanza" in nombres
+    assert "Campo El Progreso" not in nombres
+    print("✓ GET /lotes?q= filtra por nombre")
+
+
+def test_listar_lotes_filtro_estado():
+    completado = _crear_lote("Lote Filtro Completado")
+    _insertar_vuelo(completado["id"], "completado")
+    pendiente = _crear_lote("Lote Filtro Pendiente")
+    _insertar_vuelo(pendiente["id"], "pendiente")
+
+    r = _tc.get("/api/v1/lotes", params={"estado": "completado"}, headers=_auth())
+    ids = [it["id"] for it in r.json()["items"]]
+    assert completado["id"] in ids
+    assert pendiente["id"] not in ids
+    print("✓ GET /lotes?estado= filtra por el estado del último análisis")
+
+
+def test_listar_lotes_filtro_cultivo_y_campana():
+    lote = _crear_lote("Lote Filtro Cultivo")
+    _crear_cultivo(lote["id"], "maiz", fecha_siembra="2026-09-01T00:00:00Z")
+
+    r = _tc.get("/api/v1/lotes", params={"cultivo": "maiz"}, headers=_auth())
+    assert lote["id"] in [it["id"] for it in r.json()["items"]]
+    r = _tc.get("/api/v1/lotes", params={"cultivo": "soja"}, headers=_auth())
+    assert lote["id"] not in [it["id"] for it in r.json()["items"]]
+
+    r = _tc.get("/api/v1/lotes", params={"campana": 2026}, headers=_auth())
+    assert lote["id"] in [it["id"] for it in r.json()["items"]]
+    r = _tc.get("/api/v1/lotes", params={"campana": 2020}, headers=_auth())
+    assert lote["id"] not in [it["id"] for it in r.json()["items"]]
+    print("✓ GET /lotes?cultivo=&campana= filtran por el cultivo actual del lote")
+
+
+def test_listar_lotes_paginado():
+    for i in range(3):
+        _crear_lote(f"Lote Paginado {i}")
+    r = _tc.get("/api/v1/lotes", params={"page_size": 1, "page": 1}, headers=_auth())
+    body = r.json()
+    assert body["page"] == 1
+    assert body["page_size"] == 1
+    assert len(body["items"]) == 1
+    assert body["total"] >= 3
+    print("✓ GET /lotes?page=&page_size= pagina del lado del backend")
+
+
 if __name__ == "__main__":
     setup_module(None)
     try:
@@ -349,6 +482,13 @@ if __name__ == "__main__":
         test_delete_lote_inexistente()
         test_lote_de_otro_usuario_no_accesible()
         test_lote_de_otro_usuario_no_aparece_en_lista()
+        test_lote_usuario_carga_via_selectinload()
+        test_listar_lotes_incluye_ultimo_vuelo_sin_consulta_extra()
+        test_listar_lotes_sin_vuelos_devuelve_null()
+        test_listar_lotes_filtro_busqueda_por_nombre()
+        test_listar_lotes_filtro_estado()
+        test_listar_lotes_filtro_cultivo_y_campana()
+        test_listar_lotes_paginado()
         print("\nTodos los tests de lotes pasaron.\n")
     finally:
         teardown_module(None)

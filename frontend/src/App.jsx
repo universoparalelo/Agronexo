@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Lotes from './pages/Lotes'
 import DetalleLote from './pages/DetalleLote'
 import ResultadosVuelo from './pages/ResultadosVuelo'
+import PerfilUsuario from './pages/PerfilUsuario'
 import PrivateRoute from './components/PrivateRoute'
 
 export default function App() {
@@ -42,6 +43,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ResultadosVuelo />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/perfil"
+          element={
+            <PrivateRoute>
+              <PerfilUsuario />
             </PrivateRoute>
           }
         />

@@ -1,6 +1,6 @@
 # Release v3.0.0 — Seguimiento
 
-**Estado:** En desarrollo
+**Estado:** Cerrada
 **Rama principal:** `main`
 **Inicio:** Sprint 11
 

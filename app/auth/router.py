@@ -1,12 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.auth import schemas, service
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
+from app.auth.validator import validar_archivo_imagen
 from app.core.database import get_db
+from app.core.storage import presigned_url, upload_bytes
 
 router = APIRouter()
+
+_CONTENT_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+
+
+async def _construir_respuesta_perfil(usuario: Usuario) -> schemas.UsuarioResponse:
+    """Resuelve avatar_key/logo_empresa_key a URLs firmadas para la response.
+
+    Son calculadas, no columnas — se resuelven acá en vez de en el schema
+    porque presigned_url() pega contra MinIO y Pydantic no puede ser async.
+    """
+    avatar_url = await run_in_threadpool(presigned_url, usuario.avatar_key) if usuario.avatar_key else None
+    logo_url = await run_in_threadpool(presigned_url, usuario.logo_empresa_key) if usuario.logo_empresa_key else None
+    data = schemas.UsuarioResponse.model_validate(usuario).model_dump()
+    data["avatar_url"] = avatar_url
+    data["logo_empresa_url"] = logo_url
+    return schemas.UsuarioResponse(**data)
 
 
 @router.post("/register", response_model=schemas.UsuarioResponse, status_code=status.HTTP_201_CREATED)
@@ -71,4 +92,56 @@ async def logout():
 
 @router.get("/me", response_model=schemas.UsuarioResponse)
 async def me(current_user: Usuario = Depends(get_current_user)):
-    return current_user
+    return await _construir_respuesta_perfil(current_user)
+
+
+@router.put("/me", response_model=schemas.UsuarioResponse)
+async def actualizar_perfil(
+    data: schemas.PerfilUpdateRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    usuario = await service.actualizar_perfil(db, current_user, data)
+    return await _construir_respuesta_perfil(usuario)
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def cambiar_password(
+    data: schemas.CambioPasswordRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await service.cambiar_password(db, current_user, data.password_actual, data.password_nueva)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.post("/me/avatar", response_model=schemas.UsuarioResponse)
+async def subir_avatar(
+    archivo: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    contenido = await archivo.read()
+    validar_archivo_imagen(archivo, contenido)
+    ext = Path(archivo.filename or "").suffix.lower()
+    key = f"{current_user.id}/perfil/avatar{ext}"
+    await run_in_threadpool(upload_bytes, key, contenido, _CONTENT_TYPES[ext])
+    usuario = await service.actualizar_avatar_key(db, current_user, key)
+    return await _construir_respuesta_perfil(usuario)
+
+
+@router.post("/me/logo-empresa", response_model=schemas.UsuarioResponse)
+async def subir_logo_empresa(
+    archivo: UploadFile = File(...),
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    contenido = await archivo.read()
+    validar_archivo_imagen(archivo, contenido)
+    ext = Path(archivo.filename or "").suffix.lower()
+    key = f"{current_user.id}/perfil/logo_empresa{ext}"
+    await run_in_threadpool(upload_bytes, key, contenido, _CONTENT_TYPES[ext])
+    usuario = await service.actualizar_logo_empresa_key(db, current_user, key)
+    return await _construir_respuesta_perfil(usuario)

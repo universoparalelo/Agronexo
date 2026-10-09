@@ -31,7 +31,11 @@ services:
       retries: 5
 
   minio:
-    image: minio/minio:latest
+    # minio/minio se dio de baja de Docker Hub (2026-09-11) y quay.io/minio/minio
+    # exige login incluso en tags viejos desde el 2026-09-24 — MinIO empuja a todos
+    # hacia su producto pago. Este es el mismo binario/API de MinIO, publicado
+    # gratis y sin login por Chainguard. Ver docs/release-v4.0.0.md (Sprint 15).
+    image: cgr.dev/chainguard/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

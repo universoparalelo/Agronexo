@@ -38,6 +38,7 @@
   .header .marca { font-size: 9pt; letter-spacing: 1pt; text-transform: uppercase; color: #16a34a; font-weight: bold; }
   .header .meta { text-align: right; font-size: 9pt; color: #4b5563; }
   .header .meta div { margin-bottom: 1mm; }
+  .header .logo-empresa { max-height: 14mm; max-width: 40mm; margin-bottom: 2mm; display: block; }
 
   .mapa { text-align: center; margin: 4mm 0; }
   .mapa img { max-width: 100%; border: 1pt solid #d1d5db; }
@@ -117,6 +118,7 @@
 
   <div class="header">
     <div>
+      {% if logo_empresa_base64 %}<img class="logo-empresa" src="{{ logo_empresa_base64 }}" alt="Logo empresa">{% endif %}
       <div class="marca">AgroNexo · Reporte ejecutivo</div>
       <h1>{{ lote_nombre }}</h1>
     </div>
@@ -125,6 +127,8 @@
       <div><strong>Fecha de vuelo:</strong> {{ fecha_vuelo }}</div>
       <div><strong>Estadio fenológico:</strong> {{ estadio_fenologico or '—' }}</div>
       <div><strong>Generado:</strong> {{ generado_en }}</div>
+      {% if nombre_empresa %}<div><strong>Empresa:</strong> {{ nombre_empresa }}</div>{% endif %}
+      {% if aplicador_nombre %}<div><strong>Aplicador:</strong> {{ aplicador_nombre }}{% if matricula_aplicador %} (Mat. {{ matricula_aplicador }}){% endif %}</div>{% endif %}
     </div>
   </div>
 
@@ -202,6 +206,17 @@
   {% if zonas | selectattr("sin_problema") | list | length == zonas | length %}
   <p class="footer-legal">Todas las zonas del lote están dentro de rangos normales — sin causas para reportar.</p>
   {% endif %}
+
+  <h2>Trazabilidad del análisis</h2>
+  <table class="zonas">
+    <tbody>
+      <tr><td style="width: 40%;"><strong>Archivo de origen</strong></td><td>{{ archivo_original or '—' }}</td></tr>
+      <tr><td><strong>Subido por</strong></td><td>{{ subido_por or '—' }}</td></tr>
+      <tr><td><strong>Mapeo de bandas</strong></td><td>{{ mapeo_bandas or 'Sin calcular' }}</td></tr>
+      <tr><td><strong>Método de umbral</strong></td><td>{{ metodo_umbral or 'Sin calcular' }}</td></tr>
+      <tr><td><strong>Versión del motor de reglas</strong></td><td>{{ motor_version or '—' }}</td></tr>
+    </tbody>
+  </table>
 
   <div class="footer-legal">
     Reporte generado automáticamente por AgroNexo a partir de imágenes multiespectrales.

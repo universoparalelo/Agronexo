@@ -38,6 +38,7 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
 
   const activeId = pathname.startsWith('/lotes') ? 'lotes'
     : pathname.startsWith('/dashboard') ? 'dashboard'
+    : pathname.startsWith('/perfil') ? 'perfil'
     : null
 
   const sections = [
@@ -58,7 +59,7 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
     {
       label: 'SISTEMA',
       items: [
-        { id: 'config', icon: <IconConfig />, label: 'Configuración', proximamente: true },
+        { id: 'perfil', icon: <IconConfig />, label: 'Mi perfil', onClick: () => navigate('/perfil') },
       ],
     },
   ]
@@ -95,13 +96,15 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
         ))}
       </nav>
 
-      <div className="sidebar-user">
-        <div className="sidebar-user-avatar">{initials}</div>
+      <button type="button" className="sidebar-user sidebar-user--clickable" onClick={() => navigate('/perfil')}>
+        {user?.avatar_url
+          ? <img src={user.avatar_url} alt="" className="sidebar-user-avatar sidebar-user-avatar--img" />
+          : <div className="sidebar-user-avatar">{initials}</div>}
         <div className="sidebar-user-info">
           <span className="sidebar-user-name">{user?.nombre ?? 'Usuario'}</span>
-          <span className="sidebar-user-role">Productor Agri</span>
+          <span className="sidebar-user-role">{user?.nombre_empresa || 'Productor Agri'}</span>
         </div>
-      </div>
+      </button>
     </aside>
   )
 }

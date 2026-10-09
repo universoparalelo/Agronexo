@@ -10,19 +10,19 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@geoman-io/leaflet-geoman-free": "^2.20.0",
-    "axios": "^1.7.9",
-    "geotiff": "^2.1.3",
+    "@geoman-io/leaflet-geoman-free": "^2.20.2",
+    "axios": "^1.20.0",
+    "geotiff": "^3.0.5",
     "leaflet": "^1.9.4",
     "proj4": "^2.12.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-leaflet": "^4.2.1",
-    "react-router-dom": "^6.28.0"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.5",
-    "vitest": "^2.1.8"
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
   }
 }

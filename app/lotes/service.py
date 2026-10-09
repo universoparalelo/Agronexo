@@ -6,8 +6,9 @@ from fastapi import HTTPException, status
 from geoalchemy2.functions import ST_Area, ST_AsGeoJSON, ST_GeomFromGeoJSON, ST_Transform
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
-from app.lotes.models import Cultivo, Lote
+from app.lotes.models import Cultivo, CultivoEnum, EstadoVueloEnum, Lote, Vuelo
 from app.lotes.schemas import AREA_MAX_HA, AREA_MIN_HA, CultivoCreate, CultivoUpdate, LoteCreate, LoteUpdate
 
 
@@ -51,12 +52,73 @@ async def crear_lote(db: AsyncSession, data: LoteCreate, usuario_id: uuid.UUID |
     return lote
 
 
-async def listar_lotes(db: AsyncSession, usuario_id: uuid.UUID | None = None) -> list[Lote]:
-    stmt = select(Lote).where(Lote.deleted_at.is_(None))
+async def listar_lotes(
+    db: AsyncSession,
+    usuario_id: uuid.UUID | None = None,
+    *,
+    q: str | None = None,
+    cultivo: CultivoEnum | None = None,
+    campana: int | None = None,
+    estado: EstadoVueloEnum | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[Lote], int]:
+    """
+    Trae en UNA sola consulta (sin N+1) el último vuelo de cada lote, vía
+    DISTINCT ON (mismo patrón que ya usa la migración 0020 para "el cultivo
+    más reciente"). El cultivo actual para filtrar por `cultivo`/`campana`
+    se resuelve con el mismo truco — Lote.cultivos (selectin) no sirve acá
+    porque hace falta en el WHERE, no solo para mostrar.
+
+    No pedir /lotes/{id}/vuelos por cada lote del listado para armar esto
+    del lado del frontend — es exactamente el problema que esto reemplaza.
+    """
+    ultimo_vuelo_sq = (
+        select(Vuelo)
+        .where(Vuelo.deleted_at.is_(None))
+        .distinct(Vuelo.lote_id)
+        .order_by(Vuelo.lote_id, Vuelo.fecha_vuelo.desc())
+        .subquery()
+    )
+    UltimoVuelo = aliased(Vuelo, ultimo_vuelo_sq)
+
+    cultivo_actual_sq = (
+        select(Cultivo)
+        .where(Cultivo.deleted_at.is_(None))
+        .distinct(Cultivo.lote_id)
+        .order_by(Cultivo.lote_id, Cultivo.created_at.desc())
+        .subquery()
+    )
+    CultivoActual = aliased(Cultivo, cultivo_actual_sq)
+
+    stmt = (
+        select(Lote, UltimoVuelo)
+        .outerjoin(UltimoVuelo, UltimoVuelo.lote_id == Lote.id)
+        .outerjoin(CultivoActual, CultivoActual.lote_id == Lote.id)
+        .where(Lote.deleted_at.is_(None))
+    )
     if usuario_id is not None:
         stmt = stmt.where(Lote.usuario_id == usuario_id)
+    if q:
+        stmt = stmt.where(Lote.nombre.ilike(f"%{q}%"))
+    if cultivo is not None:
+        stmt = stmt.where(CultivoActual.tipo_cultivo == cultivo)
+    if campana is not None:
+        stmt = stmt.where(func.extract("year", CultivoActual.fecha_siembra) == campana)
+    if estado is not None:
+        stmt = stmt.where(UltimoVuelo.estado == estado)
+
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+
+    stmt = stmt.order_by(Lote.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+
+    lotes = []
+    for lote, ultimo_vuelo in result.all():
+        lote.ultimo_vuelo_fecha = ultimo_vuelo.fecha_vuelo if ultimo_vuelo else None
+        lote.ultimo_vuelo_estado = ultimo_vuelo.estado if ultimo_vuelo else None
+        lotes.append(lote)
+    return lotes, total
 
 
 async def obtener_lote(db: AsyncSession, lote_id: uuid.UUID, usuario_id: uuid.UUID | None = None) -> Lote | None:

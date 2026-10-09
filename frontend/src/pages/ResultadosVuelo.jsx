@@ -1,88 +1,58 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
-import { etiquetaTipoCultivo } from '../utils/cultivos'
-import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
-import { descargarOrdenTrabajoPdf } from '../api/reportes'
-import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
-import MapaZonas from '../components/MapaZonas'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
-import ModalPreviewPdf from '../components/ModalPreviewPdf'
-import TablaDiagnostico from '../components/TablaDiagnostico'
-import TablaZonas from '../components/TablaZonas'
+import PanelResultadoVuelo from '../components/PanelResultadoVuelo'
+import VuelosCalendario from '../components/VuelosCalendario'
+import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 
-const SENSOR_LABELS = {
-  sentinel2:  'Sentinel-2',
-  dji_mavic3: 'DJI Mavic 3',
+function idDe(vuelo) {
+  return vuelo.vuelo_id ?? vuelo.id
 }
 
 export default function ResultadosVuelo() {
   const { loteId, vueloId } = useParams()
   const navigate = useNavigate()
 
-  const [lote, setLote]   = useState(null)
-  const [vuelo, setVuelo] = useState(null)
-  const [zonas, setZonas] = useState(null)
+  const [lote, setLote]     = useState(null)
+  const [vuelos, setVuelos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
-  const [tab, setTab] = useState('zonas')
-  const [diagnostico, setDiagnostico] = useState(null)
-  const [diagnosticoLoading, setDiagnosticoLoading] = useState(false)
-  const [diagnosticoError, setDiagnosticoError] = useState('')
-  const [recalculando, setRecalculando] = useState(false)
-  const [generandoOrden, setGenerandoOrden] = useState(false)
-  const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
+  const [vueloComparacionId, setVueloComparacionId] = useState(null)
+  const [calendarioAbierto, setCalendarioAbierto] = useState(false)
+  const [nuevoAnalisisAbierto, setNuevoAnalisisAbierto] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
+  function cargarLoteYVuelos() {
+    setLoading(true)
+    setError('')
+    return Promise.all([
       client.get(`/lotes/${loteId}`).then(r => r.data),
       client.get(`/lotes/${loteId}/vuelos`).then(r => r.data),
-      obtenerZonas(loteId, vueloId),
     ])
-      .then(([loteData, vuelosData, zonasData]) => {
+      .then(([loteData, vuelosData]) => {
         setLote(loteData)
-        setVuelo(vuelosData.find(v => (v.vuelo_id ?? v.id) === vueloId) || null)
-        setZonas(zonasData)
+        setVuelos(vuelosData)
       })
       .catch(() => setError('No se pudieron cargar los resultados del análisis.'))
       .finally(() => setLoading(false))
-  }, [loteId, vueloId])
+  }
 
+  // lote + lista de vuelos no dependen del vuelo que se está viendo — se
+  // piden una sola vez por lote, no cada vez que cambia vueloId.
   useEffect(() => {
-    if (tab !== 'diagnostico' || diagnostico || diagnosticoLoading) return
-    setDiagnosticoLoading(true)
-    setDiagnosticoError('')
-    obtenerDiagnostico(loteId, vueloId)
-      .then(setDiagnostico)
-      .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
-      .finally(() => setDiagnosticoLoading(false))
-  }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
+    cargarLoteYVuelos()
+  }, [loteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleRecalcular() {
-    setRecalculando(true)
-    setDiagnosticoError('')
-    recalcularDiagnostico(loteId, vueloId)
-      .then(setDiagnostico)
-      .catch(() => setDiagnosticoError('No se pudo recalcular el diagnóstico.'))
-      .finally(() => setRecalculando(false))
-  }
+  // No tiene sentido comparar un vuelo contra sí mismo — si el usuario navega
+  // el panel principal hasta llegar al que ya estaba eligió para comparar,
+  // se cierra solo.
+  useEffect(() => {
+    if (vueloComparacionId === vueloId) setVueloComparacionId(null)
+  }, [vueloId, vueloComparacionId])
 
-  function handleGenerarOrdenTrabajo() {
-    setGenerandoOrden(true)
-    setDiagnosticoError('')
-    descargarOrdenTrabajoPdf(loteId, vueloId)
-      .then((blob) => setPreviewPdf({
-        titulo: `Orden de trabajo — ${lote?.nombre ?? ''}`,
-        blob,
-        filename: `orden_trabajo_${vueloId}.pdf`,
-      }))
-      .catch(async (err) => setDiagnosticoError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
-      .finally(() => setGenerandoOrden(false))
-  }
-
-  if (loading) return <div className="page-loading">Cargando resultados...</div>
+  if (loading && !lote) return <div className="page-loading">Cargando resultados...</div>
 
   if (error) return (
     <div className="page-error">
@@ -91,73 +61,8 @@ export default function ResultadosVuelo() {
     </div>
   )
 
-  const features = zonas?.features || []
-
-  const modalPdf = previewPdf && (
-    <ModalPreviewPdf
-      titulo={previewPdf.titulo}
-      blob={previewPdf.blob}
-      filename={previewPdf.filename}
-      onClose={() => setPreviewPdf(null)}
-    />
-  )
-
-  const principal = (
-    <main className="resultados-main">
-      <div className="resultados-mapa">
-        <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} sinDatos={zonas?.sin_datos} />
-      </div>
-
-      <div className="resultados-sidebar">
-        <div className="resultados-tabs">
-          <button
-            className={`resultados-tab ${tab === 'zonas' ? 'resultados-tab--activo' : ''}`}
-            onClick={() => setTab('zonas')}
-          >
-            Zonas
-          </button>
-          <button
-            className={`resultados-tab ${tab === 'diagnostico' ? 'resultados-tab--activo' : ''}`}
-            onClick={() => setTab('diagnostico')}
-          >
-            Diagnóstico
-          </button>
-        </div>
-
-        {tab === 'zonas' && (
-          features.length > 0
-            ? <>
-                <TablaZonas features={features} />
-                <button className="link-diagnostico" onClick={() => setTab('diagnostico')}>
-                  Ver diagnóstico agronómico →
-                </button>
-              </>
-            : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
-        )}
-
-        {tab === 'diagnostico' && (
-          <>
-            {diagnosticoLoading && (
-              <div className="diagnostico-loading">
-                <span className="diagnostico-spinner" />
-                <p>Analizando zonas y generando diagnóstico agronómico...</p>
-              </div>
-            )}
-            {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
-            {diagnostico && (
-              <TablaDiagnostico
-                diagnostico={diagnostico}
-                onRecalcular={handleRecalcular}
-                recalculando={recalculando}
-                onGenerarOrdenTrabajo={handleGenerarOrdenTrabajo}
-                generandoOrden={generandoOrden}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </main>
-  )
+  const vueloPrincipal = vuelos.find(v => idDe(v) === vueloId) || null
+  const vueloComparacion = vueloComparacionId ? vuelos.find(v => idDe(v) === vueloComparacionId) || null : null
 
   return (
     <PanelLayout
@@ -170,27 +75,65 @@ export default function ResultadosVuelo() {
       ]}
       onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
-      {modalPdf}
       <div className="resultados-shell">
         <div className="pagina-encabezado">
           <h1>{lote?.nombre}</h1>
-          {vuelo?.cultivo && (
-            <span className={`cultivo-badge cultivo-${vuelo.cultivo.tipo_cultivo}`}>
-              {etiquetaTipoCultivo(vuelo.cultivo.tipo_cultivo)}
-              {vuelo.cultivo.variedad ? ` · ${vuelo.cultivo.variedad}` : ''}
-            </span>
-          )}
-          {vuelo && (
-            <span className="pagina-encabezado-meta">
-              {SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}
-              {' · '}
-              {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
-              {lote?.area_ha ? ` · ${lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha` : ''}
-            </span>
+          <button
+            type="button"
+            className="resultados-vuelos-boton"
+            onClick={() => setCalendarioAbierto(true)}
+            title="Ver vuelos del lote en un calendario"
+          >
+            📅 Vuelos
+          </button>
+        </div>
+
+        <div className={`resultados-comparacion ${vueloComparacionId ? 'resultados-comparacion--activa' : ''}`}>
+          <PanelResultadoVuelo
+            loteId={loteId}
+            vueloId={vueloId}
+            vuelo={vueloPrincipal}
+            lote={lote}
+          />
+
+          {vueloComparacionId && (
+            <PanelResultadoVuelo
+              key={vueloComparacionId}
+              loteId={loteId}
+              vueloId={vueloComparacionId}
+              vuelo={vueloComparacion}
+              lote={lote}
+              esComparacion
+              onCerrarComparacion={() => setVueloComparacionId(null)}
+            />
           )}
         </div>
-        {principal}
       </div>
+
+      {calendarioAbierto && (
+        <div className="resultados-calendario-overlay" onClick={() => setCalendarioAbierto(false)}>
+          <div className="resultados-calendario-panel" onClick={(e) => e.stopPropagation()}>
+            <VuelosCalendario
+              loteId={loteId}
+              vuelos={vuelos}
+              vueloActualId={vueloId}
+              onCerrar={() => setCalendarioAbierto(false)}
+              onComparar={(v) => { setVueloComparacionId(idDe(v)); setCalendarioAbierto(false) }}
+              onNuevoAnalisis={() => { setCalendarioAbierto(false); setNuevoAnalisisAbierto(true) }}
+            />
+          </div>
+        </div>
+      )}
+
+      {nuevoAnalisisAbierto && (
+        <ModalCargaGeoTIFF
+          lotes={lote ? [lote] : []}
+          loteIdInicial={loteId}
+          loteFijo
+          onSuccess={() => { setNuevoAnalisisAbierto(false); cargarLoteYVuelos() }}
+          onClose={() => setNuevoAnalisisAbierto(false)}
+        />
+      )}
     </PanelLayout>
   )
 }

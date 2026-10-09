@@ -81,3 +81,4 @@ class Diagnostico(Base):
     )
     resultado: Mapped[dict] = mapped_column(JSONB, nullable=False)
     calculado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    motor_version: Mapped[str | None] = mapped_column(String(20), nullable=True)

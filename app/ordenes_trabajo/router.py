@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
+from app.auth.service import resolver_datos_aplicador
 from app.core.database import get_db
 from app.diagnostico.orden_trabajo import generar_orden_trabajo
 from app.diagnostico.service import generar_diagnostico
@@ -72,9 +73,13 @@ async def orden_trabajo_pdf(
     orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis)
 
     try:
+        # resolver_datos_aplicador descarga el logo de MinIO (sync) y
         # Jinja2 + WeasyPrint son CPU-bound y sync — mismo criterio de
         # threadpool que app/reportes/router.py.
-        pdf_bytes = await run_in_threadpool(generar_pdf_orden_trabajo, orden, diagnostico.get("metadata", {}))
+        datos_aplicador = await run_in_threadpool(resolver_datos_aplicador, current_user)
+        pdf_bytes = await run_in_threadpool(
+            generar_pdf_orden_trabajo, orden, diagnostico.get("metadata", {}), datos_aplicador,
+        )
     except Exception:
         logger.exception(
             "Error generando PDF de orden de trabajo para vuelo %s del lote %s", vuelo_id, lote_id,

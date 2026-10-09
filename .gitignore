@@ -1,5 +1,6 @@
 # Entorno
 .env
+.env.prod
 *.env.local
 
 # Python
@@ -18,6 +19,9 @@ frontend/.vite/
 
 # Docker volúmenes locales (si se mapean)
 .docker/
+
+# Backups generados por scripts/backup_postgres.sh y scripts/backup_minio.sh
+backups/
 
 # Alembic (no los archivos de migración, sí los temporales)
 migrations/versions/*.pyc
@@ -40,7 +44,9 @@ tests/fixtures/*.tif
 
 # Agents
 .agents/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 # Salida local de scripts/poc_reporte_pdf.py
 reporte_poc.pdf
@@ -51,3 +57,9 @@ docs/ind_veg_asoc_causas.md
 docs/investigacion_fitosanitaria.md
 docs/pantallas/
 docs/valid_indices.md
+
+# Watcher local de capacidad ARM (OCI) + aviso Telegram — no se trackea
+scripts/oci_arm_watch.sh
+scripts/oci_arm_watch.env.example
+scripts/oci_arm_watch.env
+scripts/oci_arm_watch.log
