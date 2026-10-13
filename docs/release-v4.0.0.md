@@ -15,6 +15,7 @@
 | Tarea | Estado |
 |---|---|
 | HU-R4-05 — Investigación de costos de fitosanitarios | Completada |
+| HU-R4-08 — Comparación de capas por fecha en mapa | Completada |
 | Workflow `security.yml`: SAST (Semgrep + Bandit) | Completada |
 | Workflow `security.yml`: SCA (pip-audit + npm audit) | Completada |
 | Workflow `security.yml`: escaneo de secretos (Gitleaks) | Completada |

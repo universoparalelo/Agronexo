@@ -3901,3 +3901,188 @@ body {
   justify-content: center;
   font-size: 0.78rem;
 }
+
+/* ── MapaCapas (HU-R4-08) ─────────────────────────────────────────────────── */
+
+.mapa-capas-root {
+  display: flex;
+  height: 100%;
+  min-height: 420px;
+  gap: 0;
+}
+
+.mapa-capas-panel {
+  width: 220px;
+  flex-shrink: 0;
+  padding: 0.75rem;
+  border-right: 1px solid #e5e7eb;
+  background: #fafafa;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.mapa-capas-map {
+  flex: 1;
+  min-width: 0;
+}
+
+.capas-panel-titulo {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #374151;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.capas-cargando {
+  font-weight: 400;
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+.capa-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.capa-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.capa-color-swatch {
+  display: inline-block;
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: #e5e7eb;
+}
+
+.capa-fecha {
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+.capa-badge {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-left: auto;
+}
+
+.capa-badge--error {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.capa-opacidad {
+  width: 100%;
+  margin-top: 0.1rem;
+  accent-color: #1f7a4b;
+}
+
+.capas-leyenda {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* Delta panel */
+.mapa-capas-delta {
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.78rem;
+  color: #374151;
+}
+
+.delta-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-bottom: 0.4rem;
+}
+
+.delta-titulo {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.delta-fechas {
+  color: #6b7280;
+  font-size: 0.73rem;
+}
+
+.delta-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.delta-label {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.delta-valores {
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.delta-clase-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.12rem 0;
+}
+
+.delta-clase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.delta-clase-nombre {
+  flex: 1;
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.delta-clase-pct {
+  font-size: 0.75rem;
+  min-width: 28px;
+  text-align: right;
+}
+
+.delta-flecha {
+  color: #9ca3af;
+  font-size: 0.7rem;
+}
+
+.delta-conclusion {
+  margin-top: 0.5rem;
+  font-size: 0.73rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* Botón "Comparar capas" activo */
+.card-link--active {
+  color: #1f7a4b;
+  font-weight: 600;
+}

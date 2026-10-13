@@ -8,6 +8,7 @@ import { descargarReportePdf, exportarZonas } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 import BarraProgreso from '../components/BarraProgreso'
 import MapaIndice from '../components/MapaIndice'
+import MapaCapas from '../components/MapaCapas'
 import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
@@ -306,6 +307,7 @@ export default function Dashboard() {
   const [selectedVuelo, setSelectedVuelo] = useState(null)
   const [indicesDisponibles, setIndicesDisponibles] = useState([])
   const [mapaExpandido, setMapaExpandido] = useState(false)
+  const [modoComparacion, setModoComparacion] = useState(false)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 4
 
@@ -387,7 +389,7 @@ export default function Dashboard() {
     const { loteId, vueloId } = analisisParaEliminar
     await eliminarVuelo(loteId, vueloId)
     setAnalisisParaEliminar(null)
-    if (selectedVuelo?.vueloId === vueloId) setSelectedVuelo(null)
+    if (selectedVuelo?.vueloId === vueloId) { setSelectedVuelo(null); setModoComparacion(false) }
     cargarDatos()
   }
 
@@ -443,6 +445,12 @@ export default function Dashboard() {
   const totalPages = Math.max(1, Math.ceil(vueloRows.length / PAGE_SIZE))
   const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
+
+  // Vuelos completados del mismo lote que el vuelo seleccionado actualmente
+  const vuelosLoteActivo = selectedVuelo
+    ? vueloRows.filter(v => v.lote.id === selectedVuelo.loteId && v.estado === 'completado')
+    : []
+  const puedeComparar = vuelosLoteActivo.length >= 2
 
   // La tabla "Análisis Recientes" solo se refrescaba cuando el usuario hacía una
   // acción (subir vuelo, eliminar, etc.) — sin este polling se quedaba mostrando
@@ -782,7 +790,16 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                    {selectedVuelo && (
+                    {puedeComparar && (
+                      <button
+                        className={`card-link${modoComparacion ? ' card-link--active' : ''}`}
+                        onClick={() => setModoComparacion(v => !v)}
+                        title="Superponer capas de distintas fechas para comparar evolución"
+                      >
+                        {modoComparacion ? 'Un vuelo' : 'Comparar capas'}
+                      </button>
+                    )}
+                    {selectedVuelo && !modoComparacion && (
                       <button
                         className="card-link"
                         onClick={() => setMapaExpandido((v) => !v)}
@@ -793,7 +810,7 @@ export default function Dashboard() {
                       </button>
                     )}
                     {selectedVuelo && (
-                      <button className="card-link" onClick={() => { setSelectedVuelo(null); setMapaExpandido(false) }}>
+                      <button className="card-link" onClick={() => { setSelectedVuelo(null); setMapaExpandido(false); setModoComparacion(false) }}>
                         Cerrar ×
                       </button>
                     )}
@@ -815,7 +832,20 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="card-mapa-body">
-                  {selectedVuelo
+                  {selectedVuelo && modoComparacion
+                    ? (
+                      <MapaCapas
+                        key={`comparacion-${selectedVuelo.loteId}-${selectedVuelo.indice}`}
+                        vuelos={vuelosLoteActivo.map(v => ({
+                          vueloId: v.vueloId,
+                          loteId: v.lote.id,
+                          fecha: v.fecha_vuelo,
+                        }))}
+                        indice={selectedVuelo.indice}
+                        limite={loteRows.find(l => l.id === selectedVuelo.loteId)?.geometry}
+                      />
+                    )
+                    : selectedVuelo
                     ? (
                       <AnalisisMap
                         key={`${selectedVuelo.vueloId}-${selectedVuelo.indice}`}
