@@ -14,6 +14,7 @@
 
 | Tarea | Estado |
 |---|---|
+| HU-R4-05 — Investigación de costos de fitosanitarios | Completada |
 | Workflow `security.yml`: SAST (Semgrep + Bandit) | Completada |
 | Workflow `security.yml`: SCA (pip-audit + npm audit) | Completada |
 | Workflow `security.yml`: escaneo de secretos (Gitleaks) | Completada |
@@ -482,3 +483,24 @@ Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayo
 - Login real (JWT con `python-jose` 3.5.0) — `POST /auth/login` + `GET /auth/me` → 200.
 - Generación de imagen con Pillow 12.3.0 probada directo en el contenedor (`Image`/`ImageDraw`/`ImageFont`) — OK.
 - `pip-audit` local contra el `requirements.api.txt` nuevo: de 3 paquetes con hallazgos (`python-jose`, `pillow`, `ecdsa`) queda solo `ecdsa` (sin fix) y el CVE nuevo de `python-jose` (sin fix, no explotable acá) — `pillow` sale limpio.
+
+---
+
+#### HU-R4-05 · Investigación de costos de fitosanitarios
+**Fecha:** 2026-10-13
+**Rama:** `main`
+
+Relevamiento de precios de referencia para los 21 productos del catálogo (`migrations/versions/0015`), orientado a desbloquear HU-R4-11 (cálculo de ahorro económico por aplicación variable).
+
+**Entregables:**
+- `docs/precios_fitosanitarios_referencia.md` — tabla completa de 21 productos con principio activo, presentación, precio en USD, fuente y nivel de confianza. Incluye metodología, URLs de fuentes y decisión de diseño del modelo de datos.
+- `docs/catalogo_productos_fitosanitarios.xlsx` — nueva hoja "Precios de referencia" con los mismos datos en formato tabular para revisión por el equipo.
+
+**Decisiones tomadas:**
+- **Precio cargado por el usuario + valor de referencia como respaldo:** los precios de agroquímicos en Argentina cambian mensualmente (inflación + tipo de cambio). Los valores de esta tabla son punto de partida para HU-R4-11; el sistema usará el precio ingresado por el usuario (con fecha) cuando exista y tenga menos de 90 días.
+- **Precio expresado en USD/L o USD/kg** (no por envase) para normalizar comparación entre productos con distintos formatos de presentación. El cálculo de costo por ha será: `precio_ref × dosis_l_ha × hectáreas`.
+- **Fuentes principales:** CASAFE Lista 2026-S1 (herbicidas e insecticidas de alto volumen), CIAFA 2026-T3 (fertilizantes), INTA EEA Sáenz Peña / Reconquista / NEA (productos con menor cobertura en CASAFE).
+- **3 productos marcados 🔴** (boro foliar, thiamethoxam EPP, clorpirifos EPP) sin fuente específica confirmada — precio estimado por principio activo equivalente; requieren validación antes de usar en producción.
+
+**Modelo de datos pendiente (migración 0021):**
+Tabla `precios_productos` con campos `producto_id`, `precio_usd`, `unidad`, `fuente`, `fecha`, `tipo` (`"referencia"` | `"usuario"`). Pendiente implementar como parte de HU-R4-11.
