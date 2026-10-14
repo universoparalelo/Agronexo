@@ -818,6 +818,43 @@
 
 .resultados-panel-cerrar-comparacion:hover { border-color: #b91c1c; color: #b91c1c; }
 
+.resumen-diferencia {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(15, 40, 25, 0.1);
+  padding: 0.9rem 1.2rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.resumen-diferencia-encabezado {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.resumen-diferencia-encabezado h3 { font-size: 0.95rem; font-weight: 700; color: #1a3a2a; margin: 0; }
+.resumen-diferencia-fechas { font-size: 0.82rem; color: #6b7280; }
+
+.resumen-diferencia-general {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+.resumen-diferencia-general span:first-child { color: #6b7280; margin-right: 0.3rem; }
+
+.resumen-diferencia-tabla { font-size: 0.8rem; }
+
+.delta { font-weight: 700; }
+.delta--positivo { color: #16a34a; }
+.delta--negativo { color: #ef4444; }
+.delta--neutro   { color: #9ca3af; }
+
 .resultados-shell .resultados-main {
   flex: 1;
   min-height: 0;

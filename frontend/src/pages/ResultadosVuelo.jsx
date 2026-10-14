@@ -4,6 +4,7 @@ import client from '../api/client'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
 import PanelResultadoVuelo from '../components/PanelResultadoVuelo'
+import ResumenDiferenciaVuelos from '../components/ResumenDiferenciaVuelos'
 import VuelosCalendario from '../components/VuelosCalendario'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 
@@ -23,6 +24,11 @@ export default function ResultadosVuelo() {
   const [vueloComparacionId, setVueloComparacionId] = useState(null)
   const [calendarioAbierto, setCalendarioAbierto] = useState(false)
   const [nuevoAnalisisAbierto, setNuevoAnalisisAbierto] = useState(false)
+
+  // Zonas de cada panel, reportadas por PanelResultadoVuelo vía onZonasCargadas
+  // — cuando las dos están listas se puede calcular el resumen de diferencias.
+  const [zonasPrincipal, setZonasPrincipal] = useState(null)
+  const [zonasComparacion, setZonasComparacion] = useState(null)
 
   function cargarLoteYVuelos() {
     setLoading(true)
@@ -51,6 +57,14 @@ export default function ResultadosVuelo() {
   useEffect(() => {
     if (vueloComparacionId === vueloId) setVueloComparacionId(null)
   }, [vueloId, vueloComparacionId])
+
+  // El panel de comparación se remonta (key={vueloComparacionId}) cada vez
+  // que cambia el vuelo elegido — las zonas viejas se descartan acá para no
+  // mostrar un resumen de diferencias con datos del vuelo anterior mientras
+  // carga el nuevo.
+  useEffect(() => {
+    setZonasComparacion(null)
+  }, [vueloComparacionId])
 
   if (loading && !lote) return <div className="page-loading">Cargando resultados...</div>
 
@@ -88,12 +102,22 @@ export default function ResultadosVuelo() {
           </button>
         </div>
 
+        {vueloComparacionId && vueloPrincipal && vueloComparacion && zonasPrincipal && zonasComparacion && (
+          <ResumenDiferenciaVuelos
+            vueloA={vueloPrincipal}
+            vueloB={vueloComparacion}
+            featuresA={zonasPrincipal.features || []}
+            featuresB={zonasComparacion.features || []}
+          />
+        )}
+
         <div className={`resultados-comparacion ${vueloComparacionId ? 'resultados-comparacion--activa' : ''}`}>
           <PanelResultadoVuelo
             loteId={loteId}
             vueloId={vueloId}
             vuelo={vueloPrincipal}
             lote={lote}
+            onZonasCargadas={setZonasPrincipal}
           />
 
           {vueloComparacionId && (
@@ -105,6 +129,7 @@ export default function ResultadosVuelo() {
               lote={lote}
               esComparacion
               onCerrarComparacion={() => setVueloComparacionId(null)}
+              onZonasCargadas={setZonasComparacion}
             />
           )}
         </div>

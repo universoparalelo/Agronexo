@@ -37,6 +37,8 @@
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 | Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA) | Completada |
+| HU-R4-09 — comparar dos vuelos del mismo lote (estadísticas) | Completada — parcial, ver detalle |
+| Fix: sidebar no marcaba "Diagnósticos" como activo en la vista de resultados | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -149,6 +151,7 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
+- **HU-R4-09 — falta el mapa de diferencia (criterio opcional, vale la diferencia entre 5 y 8 pts de la tarjeta):** reproyectar/remuestrear a una grilla común con rasterio los rasters de los dos vuelos comparados, restar (vuelo B − vuelo A) y vectorizar el resultado en zonas "mejoró/empeoró/igual", más el slider en el frontend. Requiere tarea de Celery nueva — no se encaró en esta pasada, que cubrió solo el criterio de estadísticas (diferencia de índice promedio y de superficie por severidad).
 - ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
 - ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código).
 
@@ -505,3 +508,27 @@ Relevamiento de precios de referencia para los 21 productos del catálogo (`migr
 
 **Modelo de datos pendiente (migración 0021):**
 Tabla `precios_productos` con campos `producto_id`, `precio_usd`, `unidad`, `fuente`, `fecha`, `tipo` (`"referencia"` | `"usuario"`). Pendiente implementar como parte de HU-R4-11.
+
+---
+
+#### HU-R4-09 · Comparar dos vuelos del mismo lote (estadísticas)
+**Fecha:** 2026-10-14
+**Rama:** `feat/hu-r4-09-comparar-vuelos` (sin commitear todavía)
+
+La vista lado a lado para comparar dos vuelos (`ResultadosVuelo.jsx`, "Seleccionar para comparar" en `VuelosCalendario.jsx`) ya existía de una tarea anterior — faltaban los dos criterios de aceptación centrales: la diferencia de valor medio del índice y la diferencia de superficie por severidad entre ambos vuelos. El mapa de diferencia (vuelo B − vuelo A), marcado como opcional en la tarjeta, queda fuera de esta pasada — ver "Problemas abiertos".
+
+Se agregó `ResumenDiferenciaVuelos.jsx`, que se muestra arriba de los dos paneles cuando ambos vuelos terminaron de cargar sus zonas: diferencia del índice promedio del lote (ponderado por área) y diferencia de área por clase de severidad (Alto/Medio/Bajo/Muy bajo), con color según el signo.
+
+**Decisiones tomadas:**
+- **Cálculo 100% en el frontend, sin endpoint nuevo:** cada panel (`PanelResultadoVuelo`) ya pedía el GeoJSON de zonas de su propio vuelo vía `useResultadoVuelo`; alcanzaba con que cada uno reportara sus zonas al padre (`onZonasCargadas`) para poder diferenciarlas ahí, sin duplicar esa carga en un endpoint de backend.
+- **Lógica de agregación por clase extraída a `utils/statsZonas.js`**, compartida entre `TablaZonas.jsx` (ya existente) y `ResumenDiferenciaVuelos.jsx` — antes vivía duplicada inline en `TablaZonas`.
+- **Promedio general ponderado por área**, no el promedio simple de los 4 promedios por clase — una clase con mucha superficie no debe pesar lo mismo que una con un solo polígono chico.
+- **Delta siempre "B − A"** donde A es el vuelo que ya estaba abierto (el de la URL) y B el elegido para comparar — sin asumir cuál de los dos es más reciente en el tiempo.
+
+#### Fix: sidebar no marcaba "Diagnósticos" como activo en la vista de resultados
+**Fecha:** 2026-10-14
+**Rama:** `feat/hu-r4-09-comparar-vuelos` (sin commitear todavía)
+
+`SidebarNav.jsx` calculaba el ítem activo solo con `pathname.startsWith('/lotes')`, pero las tres rutas de lotes (`/lotes`, `/lotes/:id`, `/lotes/:id/vuelos/:id`) empiezan todas así — la última es la que en realidad muestra la pestaña Diagnóstico (`ResultadosVuelo.jsx`), así que el sidebar siempre marcaba "Lotes", nunca "Diagnósticos".
+
+Se agregó una excepción: si el pathname matchea `/lotes/{id}/vuelos/`, el activo es `diagnostico` en vez de `lotes`.
