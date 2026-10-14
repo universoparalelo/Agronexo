@@ -37,6 +37,7 @@
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 | Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA) | Completada |
+| HU-R4-12 — preferencias de uso (índice preferido, unidad de área, producto habitual) | Completada |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -505,3 +506,26 @@ Relevamiento de precios de referencia para los 21 productos del catálogo (`migr
 
 **Modelo de datos pendiente (migración 0021):**
 Tabla `precios_productos` con campos `producto_id`, `precio_usd`, `unidad`, `fuente`, `fecha`, `tipo` (`"referencia"` | `"usuario"`). Pendiente implementar como parte de HU-R4-11.
+
+---
+
+#### HU-R4-12 · Preferencias de uso
+**Fecha:** 2026-10-14
+**Rama:** `feat/hu-r4-12-preferencias-uso` (worktree aparte — la rama `feat/hu-r4-09-comparar-vuelos` tenía cambios sin commitear)
+
+Tabla de configuración por usuario para no elegir índice, unidad de área y producto fitosanitario en cada análisis. Migración `0024`: tres columnas nullable en `usuarios` (`indice_preferido` reutiliza el enum Postgres `indiceenum` ya creado en `0011`; `unidad_area_preferida` es un enum nuevo `unidadareaenum` con `ha`/`acre`; `producto_habitual_id` es FK nullable `ON DELETE SET NULL` a `productos_fitosanitarios.id`, mismo patrón que `precios_productos.producto_id` de `0023`). Expuestas en `UsuarioResponse`/`PerfilUpdateRequest` y guardadas desde una tercera card "Preferencias de uso" en `PerfilUsuario.jsx`, reusando el mismo `PUT /auth/me` del perfil (HU-R4-10) en vez de un endpoint nuevo.
+
+**Decisiones tomadas:**
+- **Sin tabla ni endpoint separado:** se siguió el patrón que ya dejó HU-R4-10 (columnas directas en `usuarios`, `PUT /auth/me` genérico con `exclude_unset`) en vez de una tabla `preferencias_usuario` 1-a-1 — son 3 valores escalares sin ciclo de vida propio, no justifica el join extra.
+- **"Unidad" se interpretó como unidad de área (ha/acre):** el proyecto no tiene hoy ningún otro concepto de "unidad" configurable por el usuario (las unidades de dosis — L, kg — son una propiedad fija de cada producto en `productos_fitosanitarios.unidad`, no algo que el usuario elija). Se creó el enum `unidadareaenum` desde cero; no había ningún catálogo existente para reusar.
+- **Precarga real solo donde hay un punto de conexión:** el índice preferido precarga en `ModalCargaGeoTIFF.jsx` (qué pastilla de índice queda enfocada al abrir el paso de análisis — no cambia qué índices se calculan, todos los que el sensor permite siguen calculándose) y en `Dashboard.jsx` (cambia automáticamente a la pastilla del índice preferido una vez que se sabe qué índices están disponibles para ese vuelo puntual, solo si ya está `completado`). "Unidad de área" y "producto habitual" se guardan y se pueden editar desde el perfil, pero no tienen todavía un formulario de análisis/prescripción que los consuma — no existe una pantalla de prescripción en el proyecto hoy (los productos sugeridos por diagnóstico son automáticos, server-side). Quedan listos para conectarse cuando esa UI exista.
+- **`producto_habitual_id` sin relationship en el modelo:** el frontend ya resuelve el nombre contra el catálogo que trae de `GET /productos-fitosanitarios`, así que no hace falta que el backend lo resuelva ni lo exponga anidado.
+- **No hay solapamiento con HU-R4-11 (Ahorro comparativo, sin arrancar todavía):** se revisó su alcance antes de dar por cerrada esta tarea — es un reporte de ahorro (dosis variable vs. uniforme × precio) sobre datos que ya existen (orden de trabajo + `precios_productos`), no describe ningún selector de producto o unidad. Cuando se implemente, sería el primer lugar natural donde "producto habitual" podría usarse (ej. resaltar por default el ahorro de ese producto) — queda anotado para retomar en ese momento, no es parte del alcance de HU-R4-11 hoy.
+
+**Verificación (stack completo levantado desde cero, no solo el diff):**
+- Se bajó el stack del checkout principal (`docker compose down`, sin tocar volúmenes) y se levantó el stack completo desde este worktree — base Postgres nueva, sin reusar la de desarrollo.
+- `alembic upgrade head` — las 24 migraciones corren limpias de punta a punta, incluida `0024`.
+- `POST /auth/login` + `GET /auth/me` con el usuario seed — los 3 campos nuevos viajan en `null`.
+- `PUT /auth/me` con `indice_preferido="ndre"`, `unidad_area_preferida="acre"` y `producto_habitual_id` real del catálogo (`GET /productos-fitosanitarios`) — persiste correcto. Un valor de enum inválido devuelve `422`. Volver a `null` también funciona.
+- Navegador real: login, `/perfil` muestra la card "Preferencias de uso" con los 3 selects (el de producto carga los 21 productos del catálogo); guardar + recargar la página mantiene la selección (confirmado en el árbol de accesibilidad, los 3 `option` quedan `selected`).
+- **No se verificó visualmente** la precarga del índice preferido como pastilla enfocada en `ModalCargaGeoTIFF.jsx` (requiere un lote + cultivo + GeoTIFF real, base nueva sin datos) — queda validado solo por lectura de código, que usa el mismo `user.indice_preferido` ya confirmado persistente.

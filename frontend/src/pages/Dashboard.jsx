@@ -361,6 +361,17 @@ export default function Dashboard() {
     return () => { cancelado = true }
   }, [selectedVuelo?.loteId, selectedVuelo?.vueloId])
 
+  // Precarga el índice preferido del usuario (HU-R4-12) una vez que se sabe
+  // qué índices están disponibles para este vuelo en particular — evita
+  // mostrar una pastilla activa para un índice que no se calculó.
+  useEffect(() => {
+    if (!user?.indice_preferido) return
+    const disponible = indicesDisponibles.find(
+      (i) => i.indice === user.indice_preferido && i.estado === 'completado'
+    )
+    if (disponible) cambiarIndice(user.indice_preferido)
+  }, [indicesDisponibles]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function cambiarIndice(indice) {
     setSelectedVuelo((prev) => prev && { ...prev, indice })
   }
