@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import PanelLayout from '../components/PanelLayout'
 import {
@@ -7,6 +7,7 @@ import {
   subirAvatar,
   subirLogoEmpresa,
 } from '../api/perfil'
+import { listarProductosFitosanitarios } from '../api/productos'
 
 function datosFormDesdeUsuario(u) {
   return {
@@ -16,6 +17,29 @@ function datosFormDesdeUsuario(u) {
     telefono_contacto: u?.telefono_contacto ?? '',
     matricula_aplicador: u?.matricula_aplicador ?? '',
     nombre_empresa: u?.nombre_empresa ?? '',
+  }
+}
+
+// Mismo catálogo que ModalCargaGeoTIFF.jsx/Dashboard.jsx — los 5 índices
+// que el worker GIS calcula (workers/gis/band_mapping.py).
+const INDICES_PREFERIDOS = [
+  { value: 'ndvi', label: 'NDVI' },
+  { value: 'ndre', label: 'NDRE' },
+  { value: 'savi', label: 'SAVI' },
+  { value: 'gndvi', label: 'GNDVI' },
+  { value: 'exg', label: 'ExG' },
+]
+
+const UNIDADES_AREA = [
+  { value: 'ha', label: 'Hectáreas (ha)' },
+  { value: 'acre', label: 'Acres' },
+]
+
+function preferenciasDesdeUsuario(u) {
+  return {
+    indice_preferido: u?.indice_preferido ?? '',
+    unidad_area_preferida: u?.unidad_area_preferida ?? '',
+    producto_habitual_id: u?.producto_habitual_id ?? '',
   }
 }
 
@@ -45,8 +69,44 @@ export default function PerfilUsuario() {
   const [errorPass, setErrorPass] = useState('')
   const [okPass, setOkPass] = useState('')
 
+  const [preferencias, setPreferencias] = useState(() => preferenciasDesdeUsuario(user))
+  const [guardandoPreferencias, setGuardandoPreferencias] = useState(false)
+  const [errorPreferencias, setErrorPreferencias] = useState('')
+  const [okPreferencias, setOkPreferencias] = useState('')
+  const [productos, setProductos] = useState([])
+
+  useEffect(() => {
+    listarProductosFitosanitarios()
+      .then((data) => setProductos(data.items ?? []))
+      .catch(() => setProductos([]))
+  }, [])
+
   function setCampo(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }))
+  }
+
+  function setCampoPreferencia(campo, valor) {
+    setPreferencias((p) => ({ ...p, [campo]: valor }))
+  }
+
+  async function handleGuardarPreferencias(e) {
+    e.preventDefault()
+    setGuardandoPreferencias(true)
+    setErrorPreferencias('')
+    setOkPreferencias('')
+    try {
+      const usuario = await actualizarPerfil({
+        indice_preferido: preferencias.indice_preferido || null,
+        unidad_area_preferida: preferencias.unidad_area_preferida || null,
+        producto_habitual_id: preferencias.producto_habitual_id || null,
+      })
+      actualizarUsuario(usuario)
+      setOkPreferencias('Preferencias actualizadas correctamente.')
+    } catch (err) {
+      setErrorPreferencias(mensajeError(err, 'No se pudieron guardar las preferencias. Intentá de nuevo.'))
+    } finally {
+      setGuardandoPreferencias(false)
+    }
   }
 
   async function handleGuardar(e) {
@@ -265,55 +325,121 @@ export default function PerfilUsuario() {
             </div>
           </form>
 
-          <form className="card perfil-card" onSubmit={handleCambiarPassword}>
-            <div className="card-header">
-              <div>
-                <div className="card-title">Cambiar contraseña</div>
-                <div className="card-sub">Vas a necesitar tu contraseña actual para confirmarlo.</div>
+          <div className="perfil-columna-lateral">
+            <form className="card perfil-card" onSubmit={handleCambiarPassword}>
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Cambiar contraseña</div>
+                  <div className="card-sub">Vas a necesitar tu contraseña actual para confirmarlo.</div>
+                </div>
               </div>
-            </div>
-            <div className="card-body perfil-card-body">
-              <div className="form-group">
-                <label htmlFor="pass_actual">Contraseña actual</label>
-                <input
-                  id="pass_actual"
-                  type="password"
-                  value={passActual}
-                  onChange={(e) => setPassActual(e.target.value)}
-                  disabled={cambiandoPass}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="pass_nueva">Contraseña nueva</label>
-                <input
-                  id="pass_nueva"
-                  type="password"
-                  value={passNueva}
-                  onChange={(e) => setPassNueva(e.target.value)}
-                  disabled={cambiandoPass}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="pass_confirmar">Confirmar contraseña nueva</label>
-                <input
-                  id="pass_confirmar"
-                  type="password"
-                  value={passConfirmar}
-                  onChange={(e) => setPassConfirmar(e.target.value)}
-                  disabled={cambiandoPass}
-                />
-              </div>
+              <div className="card-body perfil-card-body">
+                <div className="form-group">
+                  <label htmlFor="pass_actual">Contraseña actual</label>
+                  <input
+                    id="pass_actual"
+                    type="password"
+                    value={passActual}
+                    onChange={(e) => setPassActual(e.target.value)}
+                    disabled={cambiandoPass}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="pass_nueva">Contraseña nueva</label>
+                  <input
+                    id="pass_nueva"
+                    type="password"
+                    value={passNueva}
+                    onChange={(e) => setPassNueva(e.target.value)}
+                    disabled={cambiandoPass}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="pass_confirmar">Confirmar contraseña nueva</label>
+                  <input
+                    id="pass_confirmar"
+                    type="password"
+                    value={passConfirmar}
+                    onChange={(e) => setPassConfirmar(e.target.value)}
+                    disabled={cambiandoPass}
+                  />
+                </div>
 
-              {errorPass && <p className="error-message">{errorPass}</p>}
-              {okPass && <p className="success-message">{okPass}</p>}
+                {errorPass && <p className="error-message">{errorPass}</p>}
+                {okPass && <p className="success-message">{okPass}</p>}
 
-              <div className="modal-actions">
-                <button type="submit" className="btn-primary" disabled={cambiandoPass}>
-                  {cambiandoPass ? 'Cambiando...' : 'Cambiar contraseña'}
-                </button>
+                <div className="modal-actions">
+                  <button type="submit" className="btn-primary" disabled={cambiandoPass}>
+                    {cambiandoPass ? 'Cambiando...' : 'Cambiar contraseña'}
+                  </button>
+                </div>
               </div>
-            </div>
-          </form>
+            </form>
+
+            <form className="card perfil-card" onSubmit={handleGuardarPreferencias}>
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Preferencias de uso</div>
+                  <div className="card-sub">Valores por defecto para no elegirlos en cada análisis.</div>
+                </div>
+              </div>
+              <div className="card-body perfil-card-body">
+                <div className="form-group">
+                  <label htmlFor="indice_preferido">Índice preferido <span className="label-opcional">(opcional)</span></label>
+                  <select
+                    id="indice_preferido"
+                    value={preferencias.indice_preferido}
+                    onChange={(e) => setCampoPreferencia('indice_preferido', e.target.value)}
+                    disabled={guardandoPreferencias}
+                  >
+                    <option value="">Sin preferencia</option>
+                    {INDICES_PREFERIDOS.map((i) => (
+                      <option key={i.value} value={i.value}>{i.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="unidad_area_preferida">Unidad de área <span className="label-opcional">(opcional)</span></label>
+                  <select
+                    id="unidad_area_preferida"
+                    value={preferencias.unidad_area_preferida}
+                    onChange={(e) => setCampoPreferencia('unidad_area_preferida', e.target.value)}
+                    disabled={guardandoPreferencias}
+                  >
+                    <option value="">Sin preferencia</option>
+                    {UNIDADES_AREA.map((u) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="producto_habitual">Producto habitual <span className="label-opcional">(opcional)</span></label>
+                  <select
+                    id="producto_habitual"
+                    value={preferencias.producto_habitual_id}
+                    onChange={(e) => setCampoPreferencia('producto_habitual_id', e.target.value)}
+                    disabled={guardandoPreferencias}
+                  >
+                    <option value="">Sin preferencia</option>
+                    {productos.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {errorPreferencias && <p className="error-message">{errorPreferencias}</p>}
+                {okPreferencias && <p className="success-message">{okPreferencias}</p>}
+
+                <div className="modal-actions">
+                  <button type="submit" className="btn-primary" disabled={guardandoPreferencias}>
+                    {guardandoPreferencias ? 'Guardando...' : 'Guardar preferencias'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       </main>
     </PanelLayout>

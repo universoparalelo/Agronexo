@@ -3853,6 +3853,13 @@ body {
   .perfil-grid { grid-template-columns: 1fr; }
 }
 
+/* Columna angosta del perfil: contraseña + preferencias de uso (HU-R4-12) */
+.perfil-columna-lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
 .perfil-card-body {
   display: flex;
   flex-direction: column;
