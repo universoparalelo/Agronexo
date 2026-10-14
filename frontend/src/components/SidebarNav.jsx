@@ -36,7 +36,8 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
-  const activeId = pathname.startsWith('/lotes') ? 'lotes'
+  const activeId = /^\/lotes\/[^/]+\/vuelos\//.test(pathname) ? 'diagnostico'
+    : pathname.startsWith('/lotes') ? 'lotes'
     : pathname.startsWith('/dashboard') ? 'dashboard'
     : pathname.startsWith('/perfil') ? 'perfil'
     : null

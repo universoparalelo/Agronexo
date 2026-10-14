@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import useResultadoVuelo from '../hooks/useResultadoVuelo'
 import { etiquetaTipoCultivo } from '../utils/cultivos'
 import MapaZonas from './MapaZonas'
@@ -46,7 +46,7 @@ function PanelTrazabilidad({ vuelo }) {
 // instancia carga y maneja sus propios datos de forma independiente.
 export default function PanelResultadoVuelo({
   loteId, vueloId, vuelo, lote,
-  esComparacion = false, onCerrarComparacion,
+  esComparacion = false, onCerrarComparacion, onZonasCargadas,
 }) {
   const {
     zonas, loading, error,
@@ -58,6 +58,13 @@ export default function PanelResultadoVuelo({
   } = useResultadoVuelo(loteId, vueloId, lote?.nombre)
 
   const [panelAbierto, setPanelAbierto] = useState(true)
+
+  // Avisa al padre (ResultadosVuelo) cada vez que cambian las zonas de este
+  // panel — en modo comparación, cuando ambos paneles reportaron sus zonas
+  // se puede calcular el resumen de diferencias entre los dos vuelos.
+  useEffect(() => {
+    onZonasCargadas?.(zonas)
+  }, [zonas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const features = zonas?.features || []
 
