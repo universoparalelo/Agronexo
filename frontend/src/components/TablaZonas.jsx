@@ -1,6 +1,5 @@
 import { ETIQUETA_CLASE } from '../utils/clasesIndice'
-
-const ORDEN = ['vigorosa', 'normal', 'deficiente', 'critica']
+import { ORDEN_CLASES, calcularStatsZonas } from '../utils/statsZonas'
 
 const ETIQUETAS = ETIQUETA_CLASE
 
@@ -12,17 +11,7 @@ const COLORES = {
 }
 
 export default function TablaZonas({ features }) {
-  const stats = ORDEN.reduce((acc, clase) => {
-    const zonas = features.filter(f => f.properties?.clase === clase)
-    const area = zonas.reduce((s, f) => s + (f.properties?.area_ha || 0), 0)
-    const ndviProm = zonas.length > 0
-      ? zonas.reduce((s, f) => s + (f.properties?.ndvi_promedio || 0), 0) / zonas.length
-      : null
-    acc[clase] = { area, ndvi: ndviProm, poligonos: zonas.length }
-    return acc
-  }, {})
-
-  const totalArea = Object.values(stats).reduce((s, c) => s + c.area, 0)
+  const { porClase: stats, totalArea } = calcularStatsZonas(features)
 
   return (
     <div className="tabla-zonas-wrapper">
@@ -38,7 +27,7 @@ export default function TablaZonas({ features }) {
           </tr>
         </thead>
         <tbody>
-          {ORDEN.map(clase => {
+          {ORDEN_CLASES.map(clase => {
             const { area, ndvi, poligonos } = stats[clase]
             const pct = totalArea > 0 ? (area / totalArea * 100).toFixed(1) : '0.0'
             return (
