@@ -66,6 +66,11 @@ async def listar_productos(
     return list(result.scalars().all())
 
 
+async def obtener_producto(db: AsyncSession, producto_id: uuid.UUID) -> ProductoFitosanitario | None:
+    result = await db.execute(select(ProductoFitosanitario).where(ProductoFitosanitario.id == producto_id))
+    return result.scalar_one_or_none()
+
+
 async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[str, str]]]:
     result = await db.execute(
         select(ProductoFitosanitario).order_by(ProductoFitosanitario.causa_indice)

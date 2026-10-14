@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { obtenerZonas, obtenerResultadoIndice } from '../api/analisis'
@@ -73,7 +73,14 @@ function fmtFecha(iso) {
 
 function FitBounds({ capas }) {
   const map = useMap()
+  // Las capas llegan async (fetchGeojson) — al montar, `capas` todavía no
+  // tiene geojson (todo null), así que el ajuste tiene que esperar a que
+  // los datos lleguen. yaAjustado evita repetir el fitBounds en cada
+  // cambio posterior (toggle de visibilidad, etc.) y pelear con el pan/zoom
+  // que el usuario haya hecho a mano.
+  const yaAjustado = useRef(false)
   useEffect(() => {
+    if (yaAjustado.current) return
     const geojsons = Object.values(capas)
       .filter(c => c.visible && c.geojson)
       .map(c => c.geojson)
@@ -85,9 +92,12 @@ function FitBounds({ capas }) {
         const b = layer.getBounds()
         if (b.isValid()) bounds.extend(b)
       }
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] })
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [20, 20] })
+        yaAjustado.current = true
+      }
     } catch (_) {}
-  }, []) // solo al montar
+  }, [capas, map])
   return null
 }
 
@@ -257,6 +267,9 @@ export default function MapaCapas({ vuelos, indice = 'ndvi', limite }) {
           Capas — {indiceLabel}
           {cargando && <span className="capas-cargando">cargando…</span>}
         </div>
+        <p className="capas-panel-ayuda">
+          Cada fecha es una capa superpuesta en el mapa. Activá o desactivá cada una y ajustá su opacidad para comparar la evolución.
+        </p>
         {capasOrdenadas.map((capa, idx) => (
           <div key={capa.vueloId} className="capa-fila">
             <label className="capa-toggle">
@@ -274,20 +287,24 @@ export default function MapaCapas({ vuelos, indice = 'ndvi', limite }) {
               {capa.error   && <span className="capa-badge capa-badge--error">!</span>}
             </label>
             {capa.visible && !capa.cargando && !capa.error && (
-              <input
-                type="range"
-                className="capa-opacidad"
-                min={0.1} max={1} step={0.05}
-                value={capa.opacidad}
-                onChange={e => setOpacidad(capa.vueloId, parseFloat(e.target.value))}
-                title="Opacidad de la capa"
-              />
+              <div className="capa-opacidad-fila">
+                <span className="capa-opacidad-label">Opacidad</span>
+                <input
+                  type="range"
+                  className="capa-opacidad"
+                  min={0.1} max={1} step={0.05}
+                  value={capa.opacidad}
+                  onChange={e => setOpacidad(capa.vueloId, parseFloat(e.target.value))}
+                  title="Opacidad de la capa"
+                />
+              </div>
             )}
           </div>
         ))}
 
         {/* Leyenda fija por índice */}
         <div className="capas-leyenda">
+          <div className="capas-leyenda-titulo">Leyenda — {indiceLabel}</div>
           {Object.entries(ETIQUETA_CLASE).map(([clase, label]) => (
             <div key={clase} className="leyenda-item">
               <span className="leyenda-color" style={{ background: COLORES_CLASE[clase] }} />

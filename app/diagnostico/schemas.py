@@ -3,8 +3,9 @@ Schemas del motor de diagnóstico y catálogo de productos fitosanitarios.
 """
 
 import uuid
+from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.diagnostico.models import CausaIndiceEnum, ConfianzaEnum, TipoProductoEnum
 
@@ -30,6 +31,36 @@ class ProductoFitosanitarioResponse(BaseModel):
 class ProductoFitosanitarioListResponse(BaseModel):
     total: int
     items: list[ProductoFitosanitarioResponse]
+
+
+# ── Precios (HU-R4-11) ──────────────────────────────────────────────
+
+class PrecioProductoResponse(BaseModel):
+    id: uuid.UUID
+    producto_id: uuid.UUID
+    precio_usd: float
+    unidad: str
+    fuente: str | None
+    fecha: date
+    tipo: str
+
+    model_config = {"from_attributes": True}
+
+
+class PrecioProductoCreateRequest(BaseModel):
+    """Siempre crea un precio tipo 'usuario' — los de tipo 'referencia' solo
+    se cargan por migración/seed, no desde la API."""
+
+    precio_usd: float = Field(..., gt=0)
+    unidad: str = Field(..., min_length=1, max_length=10)
+    fecha: date
+
+    @field_validator("fecha")
+    @classmethod
+    def fecha_no_futura(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("La fecha del precio no puede ser futura")
+        return v
 
 
 class OrdenTrabajoItem(BaseModel):

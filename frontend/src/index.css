@@ -3860,6 +3860,22 @@ body {
   gap: 1.1rem;
 }
 
+/* Botón de acción al final de la fila de pagina-encabezado (ej. "Ahorro comparativo" en DetalleLote) */
+.pagina-encabezado-accion {
+  margin-left: auto;
+}
+
+/* Ahorro comparativo (HU-R4-11): aviso de total parcial por falta de precio */
+.ahorro-aviso-parcial {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  margin: 0 0 0.75rem;
+}
+
 .perfil-card-body {
   display: flex;
   flex-direction: column;
@@ -3914,7 +3930,12 @@ body {
 .mapa-capas-root {
   display: flex;
   height: 100%;
-  min-height: 420px;
+  /* Sin min-height: el contenedor real (.card-mapa-body) tiene altura fija
+     de 280px con overflow:hidden salvo en modo expandido — forzar un
+     mínimo más alto acá hacía que el panel se desbordara sin ninguna
+     forma de scroll que llegara a la parte cortada (ni la página ni el
+     propio overflow-y:auto del panel, que nunca llegaba a activarse). */
+  min-height: 0;
   gap: 0;
 }
 
@@ -3929,6 +3950,10 @@ body {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.82rem;
+  /* min-height:0 es necesario para que overflow-y:auto respete la altura
+     del contenedor flex padre en vez de crecer para mostrar todo el
+     contenido (comportamiento por defecto de los flex items). */
+  min-height: 0;
 }
 
 .mapa-capas-map {
@@ -3950,6 +3975,13 @@ body {
   font-weight: 400;
   color: #9ca3af;
   font-size: 0.75rem;
+}
+
+.capas-panel-ayuda {
+  font-size: 0.72rem;
+  color: #6b7280;
+  line-height: 1.3;
+  margin: 0 0 0.5rem;
 }
 
 .capa-fila {
@@ -3992,9 +4024,21 @@ body {
   font-weight: 700;
 }
 
+.capa-opacidad-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+}
+
+.capa-opacidad-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
 .capa-opacidad {
   width: 100%;
-  margin-top: 0.1rem;
   accent-color: #1f7a4b;
 }
 
@@ -4005,6 +4049,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.capas-leyenda-titulo {
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #374151;
+  margin-bottom: 0.1rem;
 }
 
 /* Delta panel */

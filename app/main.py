@@ -35,6 +35,7 @@ async def health_db():
     return {"status": "ok", "postgis": postgis_version}
 
 
+from app.ahorro.router import router as ahorro_router
 from app.auth.router import router as auth_router
 from app.diagnostico.router import estadios_router, productos_router, router as diagnostico_router
 from app.ingesta.router import router as ingesta_router
@@ -50,3 +51,4 @@ app.include_router(productos_router, prefix="/api/v1/productos-fitosanitarios", 
 app.include_router(estadios_router, prefix="/api/v1/estadios-fenologicos", tags=["diagnostico"])
 app.include_router(reportes_router, prefix="/api/v1/lotes", tags=["reportes"])
 app.include_router(ordenes_trabajo_router, prefix="/api/v1/lotes", tags=["ordenes-trabajo"])
+app.include_router(ahorro_router, prefix="/api/v1/lotes", tags=["ahorro"])
