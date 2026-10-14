@@ -244,6 +244,15 @@ export default function DetalleLote() {
               {lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha
             </span>
           )}
+          {lote.cultivos?.length > 0 && (
+            <button
+              type="button"
+              className="btn-secondary pagina-encabezado-accion"
+              onClick={() => navigate(`/lotes/${loteId}/ahorro`)}
+            >
+              Ahorro comparativo
+            </button>
+          )}
         </div>
         {contenido}
       </main>

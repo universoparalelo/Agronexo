@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,6 +61,30 @@ class ProductoFitosanitario(Base):
     unidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
     restricciones_ambientales: Mapped[str | None] = mapped_column(Text, nullable=True)
     instrucciones_seguridad: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PrecioProducto(Base):
+    """
+    Tabla creada en la migración 0023 (HU-R4-05), sin modelo ORM hasta
+    ahora — HU-R4-11 es quien la consume. `tipo` distingue "referencia"
+    (relevamiento inicial) de "usuario" (precio real cargado, con fecha);
+    el service de ahorro (app/diagnostico/precios.py) prioriza "usuario"
+    con fecha < 90 días y cae a "referencia" si no hay uno vigente.
+    """
+
+    __tablename__ = "precios_productos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    producto_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("productos_fitosanitarios.id", ondelete="CASCADE"), nullable=False
+    )
+    precio_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    unidad: Mapped[str] = mapped_column(String(10), nullable=False)
+    fuente: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fecha: Mapped[date] = mapped_column(Date, nullable=False)
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
 class Diagnostico(Base):
