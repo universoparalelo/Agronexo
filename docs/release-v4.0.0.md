@@ -154,7 +154,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
 - **Ningún producto del catálogo (`productos_fitosanitarios`) tiene `dosis_referencia` cargada** — las 21 filas sembradas en la migración 0015 (HU-R4-05 solo cargó precios y, en 0018, restricciones/seguridad) dejaron ese campo en `NULL`. Efecto real, verificado en vivo (ver tarea HU-R4-11 más abajo): con un lote y una zona de problema reales, la orden de trabajo calcula bien la cantidad "variable" tratada, pero **"Uniforme" y "Ahorro" en `/lotes/{id}/ahorro` quedan en `—`** porque no hay dosis con la que calcular cuánto se gastaría tratando todo el lote parejo — y lo mismo le pasa de antes al PDF de Orden de Trabajo (`volumen_total` sale siempre vacío en producción). No es un bug de HU-R4-11 ni de la Orden de Trabajo: es un hueco de datos del catálogo. Pendiente: cargar `dosis_referencia`/`unidad` real por producto (consultar al equipo agronómico o fuentes CASAFE/INTA, mismo criterio que usó HU-R4-05 para precios) en una migración de datos.
-- **HU-R4-09 — falta el mapa de diferencia (criterio opcional, vale la diferencia entre 5 y 8 pts de la tarjeta):** reproyectar/remuestrear a una grilla común con rasterio los rasters de los dos vuelos comparados, restar (vuelo B − vuelo A) y vectorizar el resultado en zonas "mejoró/empeoró/igual", más el slider en el frontend. Requiere tarea de Celery nueva — no se encaró en esta pasada, que cubrió solo el criterio de estadísticas (diferencia de índice promedio y de superficie por severidad).
+- **HU-R4-09 — falta el mapa de diferencia (criterio opcional, vale la diferencia entre 5 y 8 pts de la tarjeta):** reproyectar/remuestrear a una grilla común con rasterio los rasters de los dos vuelos comparados, restar (vuelo B − vuelo A) y vectorizar el resultado en zonas "mejoró/empeoró/igual", más el slider en el frontend. Requiere tarea de Celery nueva — no se encaró en esta pasada, que cubrió solo el criterio de estadísticas (diferencia de índice promedio y de superficie por severidad). **Actualización 2026-10-15:** se agregó "Cambio por zona" (mini-mapas por zona con Empeoró/No empeoró), que cubre una necesidad parecida con zonas vectorizadas existentes — no reemplaza este criterio, que pide el raster de diferencia real pixel a pixel.
+- **La curva de NDVI esperado por estadio (migración 0025, 2026-10-15) es un placeholder genérico, no agronómicamente validada** — reemplazar con valores reales o recalcular estadísticamente cuando haya suficientes vuelos cargados por cultivo/estadio. Ver tarea "Tendencia del índice" del 2026-10-15.
 - ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
 - ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código).
 
@@ -589,3 +590,112 @@ El test unitario `test_acumular_ahorro_vuelo_sin_precio_marca_campana_parcial` (
 - Navegador real contra datos de desarrollo reales: `/lotes/{id}/ahorro` en "campo abuelo" (Maíz, 2 vuelos) y "Lote Cele" (Soja, 1 vuelo) — ambos con diagnóstico ya calculado pero sin zonas con problema, así que el camino "sin unidades de manejo → ahorro $0" quedó confirmado en vivo; el selector de campañas funciona bien incluso con una sola campaña disponible (no ofrece "comparar").
 - **Verificación visual con filas reales (números de ahorro > 0):** como ningún lote de desarrollo tenía todavía una zona de problema detectada, se armó un lote temporal (`DEMO ahorro (borrar)`, 439 ha) con un vuelo + diagnóstico insertados directo en BD (una unidad de manejo de 30 ha, Glifosato) y `dosis_referencia`/`unidad` seteados momentáneamente en ese producto — confirmó en el navegador real la tabla completa: Variable 90,00 L / Uniforme 1.318,27 L / Ahorro 1.228,27 L (93%) / US$ 5.158,72, resolviendo correctamente el precio "usuario" por sobre el de "referencia". Se revirtió todo después (lote, cultivo, vuelo, diagnóstico y el `dosis_referencia` del producto) — no quedó nada de la demo en la base de desarrollo.
 - **Hallazgo de la demo — ningún producto del catálogo tiene `dosis_referencia` cargada en datos reales:** por eso en los lotes reales de desarrollo la columna "Uniforme"/"Ahorro" siempre da `—`, incluso si hubiera una zona de problema real. Documentado como problema abierto (ver "Problemas abiertos" arriba) — no es un bug de esta tarjeta, es un hueco de datos del catálogo que también afecta al PDF de Orden de Trabajo desde antes.
+
+---
+
+#### Fix: layout de la comparación de vuelos — mapas achicados y trazabilidad oculta
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+Al agregar el bloque de diferencia (HU-R4-09), el layout de `.resultados-shell`/`.resultados-main` seguía con `min-height: 0` encadenado por toda la jerarquía flex para que todo entrara en una pantalla de altura fija (`100vh`, `overflow: hidden`, pensado para el caso de un solo vuelo). Con dos paneles + tabla de diferencia + trazabilidad, el resultado era que el mapa se achicaba para que todo cupiera, y la trazabilidad (que no se achica, tiene contenido fijo) quedaba recortada fuera de la pantalla sin aviso — no es que faltara en el DOM, estaba ahí pero invisible.
+
+**Fix:** `.resultados-shell` pasa a `overflow-y: auto` (hace scroll interno en vez de comprimir contenido), `.resultados-main` fija `min-height: 560px` (el mapa nunca se achica por debajo de eso) y `.resultados-comparacion`/`.resultados-panel` dejan de forzar `min-height: 0`/`flex:1` para el achicado. También se reordenó el JSX: la trazabilidad ahora va debajo del mapa+sidebar de cada panel (antes iba arriba), y la tabla "Diferencia entre vuelos" va debajo de los dos paneles en vez de arriba — deja el mapa como lo primero que se ve.
+
+**Error encontrado — el primer intento de reordenar no se veía en el navegador**
+Después de mover la trazabilidad en el JSX, una captura del usuario seguía mostrando mapas chicos sin trazabilidad. Se verificó con un navegador real (Playwright headless, sin `chromium-cli` disponible en este entorno — se instaló Playwright + Chromium standalone para la sesión) contra el stack de Docker ya corriendo: con datos reales de un lote con 2 vuelos, el fix sí funcionaba (mapas a `560px`, trazabilidad visible, tabla con scroll). La demora era de aplicación del cambio en el navegador del usuario (HMR de Vite), no un bug del código.
+
+---
+
+#### Cambio por zona — mini-mapas + Empeoró/No empeoró en la comparación de vuelos
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+A pedido del usuario (mostró una referencia visual de otra herramienta), se agregó una grilla de tarjetas por zona dentro de "Diferencia entre vuelos": mini-mapa SVG del lote con la zona resaltada, badge "▼ Empeoró"/"No empeoró"/"Sin comparar", y el cambio de NDVI en texto plano (sin la transición de clase a clase que mostraba la referencia). A la derecha de cada tarjeta queda un espacio reservado para "razones" — vacío por ahora, sin funcionalidad, a pedido explícito del usuario (ver decisión abajo).
+
+**Decisiones tomadas:**
+- **Emparejamiento de zonas entre vuelos por centroide, sin turf:** cada vuelo vectoriza sus zonas de forma independiente (no hay id compartido entre análisis), así que para saber "esta zona del vuelo A es la misma zona en el vuelo B" se calcula el centroide de la zona en A y se verifica en qué polígono de B cae (ray casting / even-odd, `frontend/src/utils/cambioZonas.js`) — mismo criterio que ya usa `utils/geometria.js` (no sumar una dependencia como turf para esto).
+- **Mini-mapas con SVG plano, no Leaflet:** se evaluó reusar `MiniMapaLote.jsx` (Leaflet + tiles), pero se descartó — levantar un `MapContainer` por zona (pueden ser varias decenas) es pesado y trae tiles de fondo que no aportan nada a una silueta de comparación. Se proyectan las coordenadas lon/lat a un `viewBox` con una función de proyección lineal propia.
+- **Razones: solo el espacio reservado, sin guardar nada todavía** — se le preguntó explícitamente al usuario entre persistir en BD, un campo editable sin guardar, o solo dejar el hueco visual; eligió la tercera (menor alcance), a definir más adelante.
+
+**Tests nuevos:** `frontend/src/utils/cambioZonas.test.js` (8 casos: punto-en-polígono, centroide, bbox, emparejamiento con/sin match, orden por área, proyección). Suite completa del frontend: 17 → corren bien junto con los 2 archivos de test ya existentes.
+
+---
+
+#### Tendencia del índice — NDVI esperado por estadio vs. real, en la comparación de vuelos
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+A pedido del usuario (otra referencia visual), se agregó un gráfico que compara el NDVI real del lote entre los dos vuelos comparados contra una curva de "NDVI esperado" por estadio fenológico del cultivo — banda de rango normal, línea esperada punteada, y el tramo real (sólido, rojo si el desvío es negativo, verde si no), con 3 tarjetas de resumen (cambio esperado / cambio real / desvío). Solo se muestra si ambos vuelos son del mismo cultivo y tienen un estadio fenológico cargado que matchea el catálogo — si falta algo, el componente no renderiza nada (no hay información confiable que mostrar).
+
+**Backend — migración `0025_crear_tabla_ndvi_esperado`:** tabla `ndvi_esperado_estadio` (cultivo + estadio normalizado + orden + ndvi esperado/min/max), sembrada con una **curva genérica placeholder** (sube en vegetativo con una función seno, mesetea y declina hacia madurez) para los 4 cultivos — **no es una curva agronómica validada**, el usuario fue explícito en que esto se va a ajustar más adelante con estadística real de vuelos cargados. Nuevo endpoint `GET /estadios-fenologicos/ndvi-esperado?cultivo=` (`app/diagnostico/router.py`, mismo router que ya expone `/estadios-fenologicos`).
+
+**Decisiones tomadas:**
+- **Estadios y su orden duplicados en la migración, no importados de `app/diagnostico/estadios.py`** — mismo criterio que la migración 0015 (productos fitosanitarios): una migración no depende de código de la app, que puede cambiar después y romper la reproducibilidad histórica de un `alembic upgrade head` viejo.
+- **Granularidad = picklist completo de `ESTADIOS_POR_CULTIVO`** (no solo el subconjunto que usan las reglas de diagnóstico), para que la curva de fondo sea continua en todo el ciclo, no solo en los estadios que algún día filtran una regla.
+- **Sin endpoint de "matching" en el backend:** el frontend normaliza `vuelo.estadio_fenologico` con una función JS espejo de `normalizar_estadio()` (`frontend/src/utils/estadios.js`) y busca el punto de la curva localmente — evita un roundtrip extra, la curva completa de un cultivo son ~20-26 filas.
+- **Colores de "Empeoró"/"No empeoró" no probados contra CVD por separado** (se corrió el validador de la skill de dataviz sobre el par rojo/verde ya existente en la app — falla separación para daltonismo deuteranopia) — se mitiga con que nunca aparecen los dos colores a la vez en un mismo gráfico (un render usa uno u otro según el signo del desvío) y con etiquetas de texto siempre presentes, nunca color solo.
+- **Se evitó inventar un ID de historia de usuario:** el código no referencia ningún "HU-R4-13" ni similar — no hay un backlog accesible desde este repo que confirme que ese número corresponde a esta funcionalidad; se documentó solo acá, en el seguimiento de release.
+
+**Verificación:** 275 tests de `api` siguen pasando (incluye `test_diagnostico_api.py`, `test_estadios.py`). Probado end-to-end con un navegador real contra datos de desarrollo (lote "Nueva Prueba", maíz, vuelos con estadios V18→VT reales) — banda, línea esperada y tramo real se dibujan correctamente, con el signo del desvío calculado bien (+0.10 en el caso probado). Tests nuevos: `frontend/src/utils/estadios.test.js` (4 casos).
+
+**Problema abierto nuevo:**
+- **La curva de NDVI esperado por estadio es un placeholder genérico, no agronómicamente validada** (migración 0025) — hay que reemplazarla con valores reales (fuente agronómica tipo INTA/CASAFE, igual que hizo HU-R4-05 con precios) o, como prefirió el usuario, recalcularla estadísticamente una vez que haya suficientes vuelos reales cargados por cultivo/estadio. No bloquea el uso del gráfico (el texto "* Curva de referencia genérica..." ya lo aclara en la UI), pero no hay que tomar sus números como verdad agronómica todavía.
+
+---
+
+#### Mapa del lote — vista "Lado a lado" y "Cortina" en la comparación de vuelos
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+El usuario mostró una referencia visual con 3 pestañas ("Lado a lado", "Cortina", "Mapa de cambio") para ver el mapa del lote durante la comparación. Tras aclarar el alcance con el usuario: se agregó una tarjeta nueva "Mapa del lote" (`MapaComparacionLote.jsx`) con 2 pestañas — "Lado a lado" y "Cortina" — sin tocar la vista de dos paneles completos que ya existía (zonas + diagnóstico de cada vuelo, intacta como primera forma de verlo). "Mapa de cambio" (el raster de diferencia real, vuelo B − vuelo A pixel a pixel) queda fuera de alcance — es la misma tarea grande que ya figuraba como problema abierto de HU-R4-09, no se dio por resuelta acá.
+
+- **"Lado a lado"**: dos mapas Leaflet reales (reusa `MapaZonas.jsx` tal cual, cada uno con su propio fit-bounds y leyenda), cada uno con un pill de fecha ("Actual"/"Base") en la esquina superior derecha.
+- **"Cortina"**: un único mapa con las zonas del vuelo base y las del vuelo actual superpuestas en dos capas `GeoJSON`; un slider controla la opacidad de la capa "actual" en vivo via `ref` + `setStyle()` imperativo (no remount), para no perder el pan/zoom mientras se arrastra.
+
+**Decisiones tomadas:**
+- **Base/Actual se determina por fecha real de cada vuelo**, no por cuál estaba abierto antes de elegir comparar — mismo criterio que ya usa `TendenciaIndice.jsx`.
+- **Sin capa "sin datos"** en estas dos vistas (a diferencia de `MapaZonas` en el panel completo) — simplificación a propósito, ya se puede ver esa capa en la vista de dos paneles de arriba.
+
+**Error encontrado — el pill de fecha se veía pegado al control de zoom de Leaflet**
+Primera versión posicionaba el pill con `left: 0.5rem`, mismo lado que el control +/− de Leaflet (que también es top-left por defecto). Se cambió a `right: 0.5rem`. Al revisar con captura de pantalla parecía que el fix no aplicaba (el pill seguía viéndose a la izquierda) — se verificó con `getBoundingClientRect()` real del navegador en vez de confiar en la lectura visual de la captura, y el posicionamiento era correcto; el error estaba en la lectura de la imagen comprimida, no en el código.
+
+**Verificación:** navegador real contra datos de desarrollo (lote "Nueva Prueba", vuelos V18/VT) — las dos pestañas renderizan sin errores de consola, el slider de "Cortina" cambia la mezcla visible de zonas en vivo (confirmado en 3 valores: 5%, 50%, 95%).
+
+**Ajuste a pedido (mismo día) — ubicación y estilo de "Lado a lado":**
+- **"Mapa del lote" se movió** de adentro de `ResumenDiferenciaVuelos.jsx` a `ResultadosVuelo.jsx`, renderizado justo debajo de los dos paneles completos (`.resultados-comparacion`) y antes de "Diferencia entre vuelos" — pegado al mapa de comparación original, no enterrado más abajo en la página.
+- **"Lado a lado" restyleado para parecerse más a la referencia del usuario:** columnas asimétricas (`3fr 2fr`, el mapa "Actual" más grande que "Base", igual que el mockup) y el pill de fecha vuelve a estar arriba a la izquierda.
+- **Se agregó `interactivo` (prop nueva, default `true`) a `MapaZonas.jsx`** — en `false` desactiva zoom/drag/scroll-zoom de Leaflet. Se usa en estos mini-mapas de "Lado a lado" para que el pill de fecha no choque con el control de zoom (que ya no se muestra) — son mapas de referencia rápida, el mapa interactivo completo sigue arriba en el panel principal.
+- **"Diferencia entre vuelos" y "Tendencia del índice" pasaron a mostrarse lado a lado** (grid de 2 columnas con separador vertical en `ResumenDiferenciaVuelos.jsx`, con fallback a una sola columna en pantallas angostas vía media query) en vez de uno debajo del otro — a pedido, para aprovechar mejor el ancho de la tarjeta. "Cambio por zona" sigue de ancho completo debajo de ambos.
+
+---
+
+#### Unificar las 3 formas de ver el mapa en un solo selector
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+A pedido explícito ("quiero que todo esto esté unificado"): hasta acá, al comparar dos vuelos se veían **a la vez** los dos paneles completos (mapa + sidebar de Zonas/Diagnóstico) arriba Y la tarjeta "Mapa del lote" (Lado a lado/Cortina) más abajo — información duplicada, ocupando el doble de alto de página.
+
+**Fix:** un solo selector de 3 pestañas ("Vista completa" | "Lado a lado" | "Cortina") en `ResultadosVuelo.jsx`, visible solo cuando hay una comparación activa, muestra una sola vista por vez:
+- **"Vista completa"** (default): los dos paneles enteros de siempre — quedan siempre montados (`display: none` en vez de desmontarlos) para no volver a pedir las zonas de cada vuelo al cambiar de pestaña, ya que "Lado a lado"/"Cortina" dependen de esos mismos datos.
+- **"Lado a lado" / "Cortina"**: `MapaComparacionLote.jsx` — se le sacó el título "Mapa del lote" y sus pestañas propias (ya no hacen falta, las controla el selector único de arriba) y ahora recibe `tab` como prop controlada por el padre en lugar de manejar su propio estado.
+
+**Decisión tomada:** la pestaña activa se resetea a "Vista completa" cada vez que cambia el vuelo elegido para comparar (mismo efecto que ya reseteaba `zonasComparacion`) — evita quedar en "Cortina" mirando datos de una comparación distinta a la que se acaba de elegir.
+
+**Verificación:** confirmado con el navegador que al cambiar de pestaña solo un bloque queda visible por vez (`getComputedStyle(...).display` de `.resultados-comparacion` en `flex` con "Vista completa" y en `none` con las otras dos; `.mapa-comparacion-lote` con 0 instancias en el DOM en "Vista completa" y 1 en las otras) — sin errores de consola en ningún cambio de pestaña.
+
+---
+
+#### Diagnóstico real por zona dentro de "Cambio por zona"
+**Fecha:** 2026-10-15
+**Rama:** `Comparaciones-entre-lotes` (sin commitear todavía)
+
+Cada tarjeta de "Cambio por zona" solo tenía un espacio reservado vacío ("Sin razones todavía", a pedido explícito de una conversación anterior). Ahora muestra el diagnóstico real de esa zona puntual — causa + severidad + el texto explicativo que ya genera el motor de reglas (`app/diagnostico/texto.py::generar_texto_zona`), y cada zona puede mostrar una causa distinta (ej. 3 zonas "Sin problema" y una "Moderada / Insecto" con sus productos sugeridos).
+
+**Decisiones tomadas:**
+- **El diagnóstico mostrado es el del vuelo A** (el que se estaba viendo antes de comparar, cuyas zonas arman la grilla de tarjetas) — no existe un "diagnóstico de la diferencia", cada zona tiene la causa que el motor detectó en ESE vuelo puntual.
+- **Nuevo fetch independiente en `ResultadosVuelo.jsx`** (`obtenerDiagnostico`) en vez de reusar el `diagnostico` que ya carga cada `PanelResultadoVuelo` — ese es perezoso (recién se pide si el usuario abre el tab "Diagnóstico" de ESE panel), y acá hace falta apenas arranca la comparación, sin depender de que el usuario haya clickeado ese tab.
+- **Match por posición (índice), no por `zona_id`:** las features "crudas" de NDVI (`featuresA`) no traen `zona_id` — esa propiedad la agrega recién el motor de diagnóstico. Como ambos GeoJSON salen del mismo origen y mismo orden (`app/diagnostico/service.py::_calcular_diagnostico`, `zip(zonas, features_ndvi)`), alcanza con mapear por índice de array.
+- **`CAUSA_LABELS`/`SEVERIDAD_LABELS`/`SEVERIDAD_COLORS` duplicados en `CambioPorZona.jsx`** con los mismos valores exactos que ya tienen `TablaDiagnostico.jsx`/`MapaZonas.jsx` — no hay un util compartido todavía para esto en el frontend (se investigó antes de duplicar); se deja como mejora futura si aparece una 4ª necesidad de los mismos labels.
+- **Tarjetas más grandes** (pedido explícito): `cambio-zona-grid` pasó de 420px a 540px de ancho mínimo (2 por fila en vez de 3) y la columna de diagnóstico pasó a ser más ancha que la de NDVI/área (`0.8fr`/`1.2fr`) para que el texto explicativo entre sin cortarse.
+
+**Verificación:** navegador real contra datos de desarrollo (lote "Nueva Prueba", vuelos V18→VT) — 3 zonas con "Sin problema" y una con "Moderada / Insecto" (con el texto completo + productos sugeridos) renderizan correctamente, sin errores de consola.

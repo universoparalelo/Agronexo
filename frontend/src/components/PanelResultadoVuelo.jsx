@@ -101,8 +101,6 @@ export default function PanelResultadoVuelo({
         )}
       </div>
 
-      {vuelo && <PanelTrazabilidad vuelo={vuelo} />}
-
       {error ? (
         <p className="empty-hint">{error}</p>
       ) : (
@@ -187,6 +185,8 @@ export default function PanelResultadoVuelo({
           )}
         </main>
       )}
+
+      {vuelo && <PanelTrazabilidad vuelo={vuelo} />}
 
       {previewPdf && (
         <ModalPreviewPdf

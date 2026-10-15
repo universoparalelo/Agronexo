@@ -38,6 +38,11 @@ export const crearVueloDesdeSatelite = (loteId, escenaId, fechaVuelo, estadioFen
 export const listarEstadiosFenologicos = () =>
   client.get('/estadios-fenologicos').then(r => r.data.estadios)
 
+// Curva placeholder (migración 0025) de NDVI esperado por estadio
+// para un cultivo — { cultivo, puntos: [{ estadio, orden, ndvi_esperado, ndvi_min, ndvi_max }] }
+export const obtenerNdviEsperado = (cultivo) =>
+  client.get('/estadios-fenologicos/ndvi-esperado', { params: { cultivo } }).then(r => r.data)
+
 export const inspeccionarGeotiff = (archivo, sensor) => {
   const fd = new FormData()
   fd.append('archivo', archivo)
