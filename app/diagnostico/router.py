@@ -12,10 +12,13 @@ from app.diagnostico.models import CausaIndiceEnum, TipoProductoEnum
 from app.diagnostico.estadios import ESTADIOS_POR_CULTIVO
 from app.diagnostico.schemas import (
     EstadiosFenologicosResponse,
+    NdviEsperadoListResponse,
+    NdviEsperadoPuntoResponse,
     PrecioProductoCreateRequest,
     PrecioProductoResponse,
     ProductoFitosanitarioListResponse,
 )
+from app.lotes.models import CultivoEnum
 from app.lotes.service import obtener_lote
 
 logger = logging.getLogger(__name__)
@@ -33,6 +36,29 @@ estadios_router = APIRouter()
 async def listar_estadios_fenologicos(current_user: Usuario = Depends(get_current_user)):
     return EstadiosFenologicosResponse(
         estadios={cultivo.value: estadios for cultivo, estadios in ESTADIOS_POR_CULTIVO.items()},
+    )
+
+
+@estadios_router.get(
+    "/ndvi-esperado",
+    response_model=NdviEsperadoListResponse,
+    summary="Curva placeholder de NDVI esperado por estadio para un cultivo",
+)
+async def listar_ndvi_esperado_cultivo(
+    cultivo: CultivoEnum = Query(..., description="Cultivo para el que se pide la curva esperada"),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    puntos = await service.listar_ndvi_esperado(db, cultivo)
+    return NdviEsperadoListResponse(
+        cultivo=cultivo.value,
+        puntos=[
+            NdviEsperadoPuntoResponse(
+                estadio=p.etiqueta, orden=p.orden,
+                ndvi_esperado=p.ndvi_esperado, ndvi_min=p.ndvi_min, ndvi_max=p.ndvi_max,
+            )
+            for p in puntos
+        ],
     )
 
 

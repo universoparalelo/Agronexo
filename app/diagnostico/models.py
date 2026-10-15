@@ -2,11 +2,12 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.lotes.models import CultivoEnum
 
 
 class PatronEspacialEnum(str, enum.Enum):
@@ -85,6 +86,29 @@ class PrecioProducto(Base):
     fuente: Mapped[str | None] = mapped_column(String(200), nullable=True)
     fecha: Mapped[date] = mapped_column(Date, nullable=False)
     tipo: Mapped[str] = mapped_column(String(20), nullable=False)
+
+
+class NdviEsperadoEstadio(Base):
+    """
+    Migración 0025 — curva placeholder de NDVI esperado por
+    cultivo/estadio para el gráfico "Tendencia del índice". Valores
+    genéricos, no agronómicamente validados — ver docstring de la
+    migración. `estadio_normalizado` se compara contra
+    normalizar_estadio(vuelo.estadio_fenologico), no contra `etiqueta`.
+    """
+
+    __tablename__ = "ndvi_esperado_estadio"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    tipo_cultivo: Mapped[CultivoEnum] = mapped_column(Enum(CultivoEnum), nullable=False)
+    estadio_normalizado: Mapped[str] = mapped_column(String(30), nullable=False)
+    etiqueta: Mapped[str] = mapped_column(String(30), nullable=False)
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+    ndvi_esperado: Mapped[float] = mapped_column(Float, nullable=False)
+    ndvi_min: Mapped[float] = mapped_column(Float, nullable=False)
+    ndvi_max: Mapped[float] = mapped_column(Float, nullable=False)
 
 
 class Diagnostico(Base):

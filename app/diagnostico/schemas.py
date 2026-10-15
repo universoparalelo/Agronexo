@@ -117,6 +117,22 @@ class EstadiosFenologicosResponse(BaseModel):
     estadios: dict[str, list[str]]
 
 
+class NdviEsperadoPuntoResponse(BaseModel):
+    estadio: str
+    orden: int
+    ndvi_esperado: float
+    ndvi_min: float
+    ndvi_max: float
+
+    model_config = {"from_attributes": True}
+
+
+class NdviEsperadoListResponse(BaseModel):
+    """Curva placeholder — ver migración 0025. No agronómicamente validada."""
+    cultivo: str
+    puntos: list[NdviEsperadoPuntoResponse]
+
+
 class DiagnosticoMetadata(BaseModel):
     cultivo: str
     cultivo_id: str | None = None
