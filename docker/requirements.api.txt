@@ -47,7 +47,7 @@ pyshp==3.1.6
 python-multipart==0.0.32
 
 # GIS (validación de geometrías en schemas Pydantic)
-shapely==2.1.2
+shapely==2.2.0
 
 # Utils
 httpx==0.28.1

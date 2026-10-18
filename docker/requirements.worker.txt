@@ -27,7 +27,7 @@ rasterio==1.5.1
 
 # GIS vectorial
 geopandas==1.1.4
-shapely==2.1.2
+shapely==2.2.0
 
 # Procesamiento de imágenes
 scikit-image==0.26.0
