@@ -1,6 +1,10 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, field_validator
+
+from app.auth.models import UnidadAreaEnum
+from app.lotes.models import IndiceEnum
 
 
 class RegisterRequest(BaseModel):
@@ -53,6 +57,9 @@ class UsuarioResponse(BaseModel):
     # — no son columnas del modelo, por eso no viajan con from_attributes.
     avatar_url: str | None = None
     logo_empresa_url: str | None = None
+    indice_preferido: IndiceEnum | None = None
+    unidad_area_preferida: UnidadAreaEnum | None = None
+    producto_habitual_id: uuid.UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -67,6 +74,9 @@ class PerfilUpdateRequest(BaseModel):
     telefono_contacto: str | None = None
     matricula_aplicador: str | None = None
     nombre_empresa: str | None = None
+    indice_preferido: IndiceEnum | None = None
+    unidad_area_preferida: UnidadAreaEnum | None = None
+    producto_habitual_id: uuid.UUID | None = None
 
     @field_validator("nombre")
     @classmethod

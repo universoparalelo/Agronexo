@@ -116,7 +116,7 @@ function FitBounds({ geojson }) {
   return null
 }
 
-export default function MapaZonas({ geojson, diagnostico, sinDatos = null }) {
+export default function MapaZonas({ geojson, diagnostico, sinDatos = null, interactivo = true }) {
   // El relleno siempre se colorea por clase (valor real del NDVI) — a
   // pedido: colorear por severidad (relativa al promedio del lote) dejaba
   // casi todo el mapa en "normal"/verde en lotes con variación moderada,
@@ -142,6 +142,11 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null }) {
         center={[-27.47, -60.67]}
         zoom={13}
         className="mapa-zonas"
+        zoomControl={interactivo}
+        dragging={interactivo}
+        scrollWheelZoom={interactivo}
+        doubleClickZoom={interactivo}
+        touchZoom={interactivo}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

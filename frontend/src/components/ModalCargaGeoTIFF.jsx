@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { useAuth } from '../hooks/useAuth'
 import client from '../api/client'
 import CalendarioSatelital from './CalendarioSatelital'
 import MapaDibujoLote from './MapaDibujoLote'
@@ -260,12 +261,20 @@ const PASOS = [
 ]
 
 export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = false, onSuccess, onClose, onLoteCreado }) {
+  const { user } = useAuth()
+  // Precarga el índice preferido del usuario (HU-R4-12) si el sensor por
+  // defecto puede calcularlo — no afecta qué índices se calculan (siguen
+  // siendo todos los que el sensor permite), solo cuál queda enfocado.
+  const indicePreferidoInicial = (() => {
+    const automaticos = indicesAutomaticos(SENSOR_POR_DEFECTO)
+    return automaticos.includes(user?.indice_preferido) ? user.indice_preferido : 'ndvi'
+  })()
   const [step, setStep] = useState('carga') // 'carga' | 'cultivo' | 'analisis'
   const [loteId, setLoteId] = useState(loteIdInicial ?? '')
   const [fuente, setFuente] = useState('dron') // 'dron' | 'satelite'
   const [sensor, setSensor] = useState(SENSOR_POR_DEFECTO)
   const [indices, setIndices] = useState(() => indicesAutomaticos(SENSOR_POR_DEFECTO))
-  const [indiceMostrado, setIndiceMostrado] = useState('ndvi')
+  const [indiceMostrado, setIndiceMostrado] = useState(indicePreferidoInicial)
   const [archivo, setArchivo] = useState(null)
   const [estadioFenologico, setEstadioFenologico] = useState('')
   const [fechaVuelo, setFechaVuelo] = useState('')

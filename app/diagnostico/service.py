@@ -38,12 +38,14 @@ from sqlalchemy import select
 from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
-from app.diagnostico.models import CausaIndiceEnum, Diagnostico, ProductoFitosanitario, TipoProductoEnum
+from app.diagnostico.models import (
+    CausaIndiceEnum, Diagnostico, NdviEsperadoEstadio, ProductoFitosanitario, TipoProductoEnum,
+)
 from app.diagnostico.reglas import MOTOR_VERSION
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
 from app.diagnostico.zonificacion import generar_unidades_manejo
 from app.ingesta.service import obtener_analisis_indice, obtener_resultado_geojson, obtener_resultado_geojson_indice, obtener_vuelo
-from app.lotes.models import EstadoVueloEnum, IndiceEnum, Lote, Vuelo
+from app.lotes.models import CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, Vuelo
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,23 @@ async def listar_productos(
     if tipo is not None:
         stmt = stmt.where(ProductoFitosanitario.tipo == tipo)
     stmt = stmt.order_by(ProductoFitosanitario.causa_indice, ProductoFitosanitario.nombre)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def obtener_producto(db: AsyncSession, producto_id: uuid.UUID) -> ProductoFitosanitario | None:
+    result = await db.execute(select(ProductoFitosanitario).where(ProductoFitosanitario.id == producto_id))
+    return result.scalar_one_or_none()
+
+
+async def listar_ndvi_esperado(db: AsyncSession, cultivo: CultivoEnum) -> list[NdviEsperadoEstadio]:
+    """Curva placeholder (migración 0025) para el gráfico "Tendencia
+    del índice" — ordenada por `orden` (secuencia fenológica), no alfabética."""
+    stmt = (
+        select(NdviEsperadoEstadio)
+        .where(NdviEsperadoEstadio.tipo_cultivo == cultivo)
+        .order_by(NdviEsperadoEstadio.orden)
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

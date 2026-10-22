@@ -7,10 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
-from app.diagnostico import service
+from app.diagnostico import precios, service
 from app.diagnostico.models import CausaIndiceEnum, TipoProductoEnum
 from app.diagnostico.estadios import ESTADIOS_POR_CULTIVO
-from app.diagnostico.schemas import EstadiosFenologicosResponse, ProductoFitosanitarioListResponse
+from app.diagnostico.schemas import (
+    EstadiosFenologicosResponse,
+    NdviEsperadoListResponse,
+    NdviEsperadoPuntoResponse,
+    PrecioProductoCreateRequest,
+    PrecioProductoResponse,
+    ProductoFitosanitarioListResponse,
+)
+from app.lotes.models import CultivoEnum
 from app.lotes.service import obtener_lote
 
 logger = logging.getLogger(__name__)
@@ -31,6 +39,29 @@ async def listar_estadios_fenologicos(current_user: Usuario = Depends(get_curren
     )
 
 
+@estadios_router.get(
+    "/ndvi-esperado",
+    response_model=NdviEsperadoListResponse,
+    summary="Curva placeholder de NDVI esperado por estadio para un cultivo",
+)
+async def listar_ndvi_esperado_cultivo(
+    cultivo: CultivoEnum = Query(..., description="Cultivo para el que se pide la curva esperada"),
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    puntos = await service.listar_ndvi_esperado(db, cultivo)
+    return NdviEsperadoListResponse(
+        cultivo=cultivo.value,
+        puntos=[
+            NdviEsperadoPuntoResponse(
+                estadio=p.etiqueta, orden=p.orden,
+                ndvi_esperado=p.ndvi_esperado, ndvi_min=p.ndvi_min, ndvi_max=p.ndvi_max,
+            )
+            for p in puntos
+        ],
+    )
+
+
 @productos_router.get(
     "",
     response_model=ProductoFitosanitarioListResponse,
@@ -44,6 +75,39 @@ async def listar_productos(
 ):
     productos = await service.listar_productos(db, causa=causa, tipo=tipo)
     return ProductoFitosanitarioListResponse(total=len(productos), items=productos)
+
+
+@productos_router.get(
+    "/{producto_id}/precios",
+    response_model=list[PrecioProductoResponse],
+    summary="Historial de precios cargados de un producto (HU-R4-11)",
+)
+async def listar_precios_producto(
+    producto_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    return await precios.listar_precios(db, producto_id)
+
+
+@productos_router.post(
+    "/{producto_id}/precios",
+    response_model=PrecioProductoResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Cargar el precio real pagado por un producto (HU-R4-11)",
+)
+async def crear_precio_producto(
+    producto_id: uuid.UUID,
+    data: PrecioProductoCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    producto = await service.obtener_producto(db, producto_id)
+    if producto is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado.")
+    return await precios.crear_precio_usuario(
+        db, producto_id, data.precio_usd, data.unidad, data.fecha,
+    )
 
 
 @router.get(
