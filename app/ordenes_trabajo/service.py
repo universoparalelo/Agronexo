@@ -42,6 +42,8 @@ CAUSA_CORTO = {
     "estres_hidrico": "Estrés hídrico",
     "madurez_temprana_diferencial": "Madurez dif.",
     "vigor_excesivo": "Vigor excesivo",
+    "compactacion_falla_siembra": "Compactación / falla de siembra",
+    "bajo_vigor_estadio": "Vigor bajo para el estadio",
 }
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"

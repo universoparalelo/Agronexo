@@ -12,3 +12,12 @@ export function fechaDDMMAAAA(iso) {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
+
+// vuelos.fecha_vuelo se carga como fecha sin hora y se guarda a medianoche
+// UTC: con new Date() directo, en Argentina (UTC-3) el vuelo aparecía el día
+// anterior. Devuelve un Date LOCAL con el día calendario del vuelo, apto para
+// toLocaleDateString y para fechaISOLocal.
+export function fechaVuelo(iso) {
+  const d = new Date(iso)
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}

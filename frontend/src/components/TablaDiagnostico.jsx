@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import BayesZona from './BayesZona'
+import ComoConfirmarCampo from './ComoConfirmarCampo'
+import RevisionZona from './RevisionZona'
+import { fechaVuelo } from '../utils/fechas'
 
 const CONFIANZA_LABELS = {
   alta:  'Confianza alta',
@@ -28,6 +32,22 @@ const SEVERIDAD_LABELS = {
   vigorosa: 'Vigorosa',
 }
 
+const REVISION_ICONO = { aceptado: '✓', modificado: '✎', rechazado: '✕' }
+
+// Causa de la regla en las clases del motor probabilístico — espejo de
+// app/diagnostico/bayes.py::causa_efectiva.
+function causaEfectiva(p) {
+  if (p.regla_id === 'R01') return 'suelo_desnudo'
+  if (p.causa_indice === 'bajo_vigor_estadio') return null
+  return p.causa_indice
+}
+
+function revisionesIniciales(features) {
+  return Object.fromEntries(
+    features.map(f => [f.properties?.zona_id, f.properties?.revision ?? null]),
+  )
+}
+
 const CAUSA_LABELS = {
   sin_problema_detectado: 'Sin problema',
   interferencia_vegetacion: 'Malezas',
@@ -39,6 +59,8 @@ const CAUSA_LABELS = {
   estres_hidrico: 'Estrés hídrico',
   madurez_temprana_diferencial: 'Madurez dif.',
   vigor_excesivo: 'Vigor excesivo',
+  compactacion_falla_siembra: 'Compactación / siembra',
+  bajo_vigor_estadio: 'Vigor bajo p/ estadio',
 }
 
 export default function TablaDiagnostico({
@@ -46,7 +68,25 @@ export default function TablaDiagnostico({
 }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
-  const [vista, setVista] = useState('tabla')
+  // Detalle por defecto: es la única vista con la guía de campo, el motor
+  // probabilístico y el criterio técnico — la tabla es un resumen.
+  const [vista, setVista] = useState('cards')
+  const [zonaDestacada, setZonaDestacada] = useState(null)
+
+  function irAZona(zonaId) {
+    setVista('cards')
+    setZonaDestacada(zonaId)
+    requestAnimationFrame(() => {
+      document.getElementById(`diag-zona-${zonaId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+  const [revisiones, setRevisiones] = useState(() => revisionesIniciales(features))
+
+  // Recalcular trae un diagnóstico nuevo (con sus revisiones adjuntas).
+  useEffect(() => { setRevisiones(revisionesIniciales(diagnostico?.features || [])) }, [diagnostico])
+
+  const actualizarRevision = (zonaId, revision) => setRevisiones(r => ({ ...r, [zonaId]: revision }))
+  const nRevisadas = Object.values(revisiones).filter(Boolean).length
 
   if (features.length === 0) {
     return <p className="empty-hint">Sin zonas para diagnosticar.</p>
@@ -108,7 +148,7 @@ export default function TablaDiagnostico({
             {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
             {metadata.lote_nombre && ' · '}
             {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
-            {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
+            {metadata.fecha_vuelo && ` · vuelo del ${fechaVuelo(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
             {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
             {metadata.calculado_en && (
               <span className="diagnostico-calculado-en">
@@ -122,6 +162,10 @@ export default function TablaDiagnostico({
           {metadata.resumen_general && (
             <p className="diagnostico-resumen">{metadata.resumen_general}</p>
           )}
+          <p className="diagnostico-revisadas">
+            {nRevisadas} de {features.length} zonas con criterio técnico cargado
+            {vista === 'tabla' ? ' — tocá una zona para ver cómo confirmarla en campo y validarla.' : '.'}
+          </p>
         </div>
       )}
 
@@ -137,6 +181,7 @@ export default function TablaDiagnostico({
                 <th>Causa</th>
                 <th>Conf.</th>
                 <th>Producto</th>
+                <th title="Criterio técnico del agrónomo">Rev.</th>
               </tr>
             </thead>
             <tbody>
@@ -146,7 +191,12 @@ export default function TablaDiagnostico({
                 const severidad = p.severidad || 'normal'
                 const producto = p.productos_sugeridos?.[0]?.nombre || '—'
                 return (
-                  <tr key={i} className={sinProblema ? 'stats-row--ok' : ''}>
+                  <tr
+                    key={i}
+                    className={`stats-row--clickable ${sinProblema ? 'stats-row--ok' : ''}`}
+                    onClick={() => irAZona(p.zona_id)}
+                    title="Ver detalle, cómo confirmar en campo y validar esta zona"
+                  >
                     <td className="stats-zona-id">Z{p.zona_id ?? i}</td>
                     <td>{p.area_ha?.toFixed(2) ?? '—'}</td>
                     <td className="stats-ndvi">{p.ndvi_promedio?.toFixed(3) ?? '—'}</td>
@@ -162,6 +212,18 @@ export default function TablaDiagnostico({
                       </span>
                     </td>
                     <td className="stats-producto">{sinProblema ? '—' : producto}</td>
+                    <td>
+                      {revisiones[p.zona_id]
+                        ? (
+                          <span
+                            className={`revision-badge revision-badge--${revisiones[p.zona_id].decision}`}
+                            title={revisiones[p.zona_id].decision}
+                          >
+                            {REVISION_ICONO[revisiones[p.zona_id].decision]}
+                          </span>
+                        )
+                        : <span className="td-vacio">—</span>}
+                    </td>
                   </tr>
                 )
               })}
@@ -177,9 +239,13 @@ export default function TablaDiagnostico({
             const sinProblema = p.regla_id === 'R99'
             const severidad = p.severidad || 'normal'
             return (
-              <div key={i} className={`diagnostico-card confianza-${p.confianza || 'media'} ${sinProblema ? 'diagnostico-card--ok' : ''}`}>
+              <div
+                key={i}
+                id={`diag-zona-${p.zona_id}`}
+                className={`diagnostico-card confianza-${p.confianza || 'media'} ${sinProblema ? 'diagnostico-card--ok' : ''} ${zonaDestacada === p.zona_id ? 'diagnostico-card--destacada' : ''}`}
+              >
                 <div className="diagnostico-card-header">
-                  <span className="diagnostico-regla-nombre">{p.regla_nombre || 'Sin diagnóstico'}</span>
+                  <span className="diagnostico-regla-nombre">Z{p.zona_id} · {p.regla_nombre || 'Sin diagnóstico'}</span>
                   <div className="diagnostico-badges">
                     {!sinProblema && (
                       <span className={`diagnostico-badge ${SEVERIDAD_COLORS[severidad] || 'severidad-normal'}`}>
@@ -211,10 +277,6 @@ export default function TablaDiagnostico({
                         <strong>Acción recomendada:</strong> {p.accion_recomendada}
                       </p>
                     )}
-                    <details className="diagnostico-confirmar">
-                      <summary>Cómo confirmar en campo</summary>
-                      <p>{p.como_confirmar_campo}</p>
-                    </details>
                     {p.productos_sugeridos?.length > 0 && (
                       <div className="diagnostico-productos">
                         {p.productos_sugeridos.map((prod, j) => (
@@ -223,6 +285,22 @@ export default function TablaDiagnostico({
                       </div>
                     )}
                   </>
+                )}
+
+                {!p.excluida && <ComoConfirmarCampo zona={p} />}
+
+                {!p.excluida && <BayesZona bayes={p.bayes} causaRegla={causaEfectiva(p)} />}
+
+                {!p.excluida && metadata?.lote_id && metadata?.vuelo_id && (
+                  <RevisionZona
+                    loteId={metadata.lote_id}
+                    vueloId={metadata.vuelo_id}
+                    zonaId={p.zona_id}
+                    causaSugerida={causaEfectiva(p)}
+                    revision={revisiones[p.zona_id]}
+                    bayes={p.bayes}
+                    onCambio={actualizarRevision}
+                  />
                 )}
               </div>
             )

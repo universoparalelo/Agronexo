@@ -47,7 +47,11 @@ AREA_RELATIVA_SECTOR_MIN = 0.15    # la zona individual ocupa >= 15% del área d
 RECTANGULARIDAD_MIN_SECTOR = 0.70  # area_zona / area(minimum_rotated_rectangle) — "llena" su rectángulo
 
 # Patrón: focos_aislados
-AREA_MAX_FOCO_M2 = 2000.0          # cada foco es individualmente chico
+# El worker descarta zonas < 1 ha (workers/gis/zonas.py::AREA_MINIMA_M2), así
+# que con el corte original de 2000 m² este patrón no podía darse nunca.
+# "Chico" pasa a ser hasta 3 ha y a lo sumo el 5% del lote.
+AREA_MAX_FOCO_M2 = 30_000.0        # cada foco es individualmente chico
+AREA_RELATIVA_MAX_FOCO = 0.05
 N_ZONAS_FOCOS_AISLADOS_MIN = 3     # y hay varios de la misma clase dispersos
 
 # Patrón: difuso_homogeneo
@@ -158,7 +162,10 @@ def clasificar_patron_zona(
         return "circular"
     if elongacion >= ELONGACION_MIN_LINEAL:
         return "lineal"
-    if area_m2 <= AREA_MAX_FOCO_M2 and n_zonas_misma_clase >= N_ZONAS_FOCOS_AISLADOS_MIN:
+    if (
+        area_m2 <= AREA_MAX_FOCO_M2 and area_relativa <= AREA_RELATIVA_MAX_FOCO
+        and n_zonas_misma_clase >= N_ZONAS_FOCOS_AISLADOS_MIN
+    ):
         return "focos_aislados"
     if area_total_clase_relativa >= AREA_RELATIVA_DIFUSO_MIN and n_zonas_misma_clase <= N_ZONAS_DIFUSO_MAX:
         return "difuso_homogeneo"

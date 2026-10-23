@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
 import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
-import { fechaISOLocal, fechaDDMMAAAA } from '../utils/fechas'
+import { fechaISOLocal, fechaDDMMAAAA, fechaVuelo } from '../utils/fechas'
 import { listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
@@ -30,7 +30,7 @@ function VueloCard({ vuelo, estadoActual, onVerResultados }) {
     <div className="vuelo-card">
       <div className="vuelo-card-info">
         <p className="vuelo-fecha">
-          {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
+          {fechaVuelo(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
             day: '2-digit', month: 'long', year: 'numeric',
           })}
         </p>
@@ -139,7 +139,7 @@ export default function DetalleLote() {
   )
 
   const vuelosDelDiaSeleccionado = vuelos
-    .filter(v => fechaISOLocal(new Date(v.fecha_vuelo)) === diaSeleccionado)
+    .filter(v => fechaISOLocal(fechaVuelo(v.fecha_vuelo)) === diaSeleccionado)
     .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
 
   const contenido = (

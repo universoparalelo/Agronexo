@@ -1,8 +1,8 @@
 """
-Las 20 reglas del motor de diagnóstico, en el orden exacto de cascada del
-documento de referencia (sección 5): exclusiones → malezas → enfermedades
-fúngicas → insectos → déficit nutricional → estrés hídrico → madurez
-diferencial algodón → vigor excesivo → cierre. La primera regla que cumple
+Las reglas del motor de diagnóstico. Las 20 originales vienen del documento
+de referencia (sección 5); en la v1.1.0 se reordenaron R60 y R10 y se
+agregaron R45 (patrón lineal) y R80 (vigor bajo para el estadio) — ver el
+comentario sobre REGLAS. La primera regla que cumple
 TODAS sus condiciones (cultivo, estadio, índices disponibles, condición
 numérica/de patrón) gana — evaluar_zona() en engine.py no sigue evaluando
 las siguientes.
@@ -22,7 +22,20 @@ from app.lotes.models import CultivoEnum
 # Versión del set de 20 reglas de este módulo (HU-R4-02, trazabilidad) — subir
 # al agregar, quitar o cambiar el criterio de una regla, para que un
 # diagnóstico guardado quede ligado a la versión que lo generó.
-MOTOR_VERSION = "1.0.0"
+MOTOR_VERSION = "1.2.0"
+
+# Corte de "NDVI bajo" cuando no hay curva esperada para el cultivo+estadio
+# del vuelo (estadio sin cargar o fuera de la curva). Con curva, "bajo"
+# significa por debajo del rango normal de ESE estadio: un 0.35 es normal en
+# V3 y grave en R3 — un corte fijo daba falsas alarmas en estadios tempranos
+# y dejaba pasar caídas en reproductivos.
+NDVI_BAJO_SIN_REFERENCIA = 0.50
+
+
+def ndvi_bajo(z: ContextoZona) -> bool:
+    if z.ndvi_esperado_min is not None:
+        return z.valores["ndvi"] < z.ndvi_esperado_min
+    return z.valores["ndvi"] < NDVI_BAJO_SIN_REFERENCIA
 
 
 @dataclass(frozen=True)
@@ -61,7 +74,11 @@ R00 = Regla(
 R01 = Regla(
     id="R01", nombre="Suelo desnudo — sin cobertura vegetal", bloque="exclusiones",
     cultivos=None, estadios=None, requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.20,
+    # En VE/VC un NDVI < 0.20 es lo esperado (planta recién emergida): solo es
+    # suelo desnudo si además está por debajo del rango normal del estadio.
+    condicion=lambda z: z.valores["ndvi"] < 0.20 and (
+        z.ndvi_esperado_min is None or z.valores["ndvi"] < z.ndvi_esperado_min
+    ),
     confianza=ConfianzaEnum.alta, causa_indice="sin_problema_detectado",
     accion_recomendada=(
         "No se genera recomendación de agroquímico. Se alerta al usuario para que verifique "
@@ -77,7 +94,7 @@ R01 = Regla(
 R10 = Regla(
     id="R10", nombre="Interferencia de malezas", bloque="malezas",
     cultivos=None, estadios=None, requiere_indices=("ndvi", "exg"),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.valores["exg"] > 0.20,
+    condicion=lambda z: ndvi_bajo(z) and z.valores["exg"] > 0.20,
     confianza=ConfianzaEnum.alta, causa_indice="interferencia_vegetacion",
     accion_recomendada=(
         "Aplicar herbicida selectivo según el cultivo presente. Para soja usar herbicida "
@@ -96,7 +113,7 @@ R20 = Regla(
     cultivos=frozenset({CultivoEnum.soja}),
     estadios=frozenset({"r1", "r2", "r3", "r4", "r5"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial == "circular",
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial == "circular",
     confianza=ConfianzaEnum.alta, causa_indice="estres_biotico_fungico",
     accion_recomendada=(
         "Aplicar fungicida en las zonas afectadas. Los más usados en el NEA son los "
@@ -137,7 +154,7 @@ R22 = Regla(
     cultivos=frozenset({CultivoEnum.maiz}),
     estadios=frozenset({"v7", "v8", "v9", "v10", "v11", "v12", "vt"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial == "circular",
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial == "circular",
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_fungico",
     accion_recomendada=(
         "Si se confirma en campo, aplicar fungicida. Los triazoles tienen buena acción "
@@ -156,7 +173,7 @@ R23 = Regla(
     cultivos=frozenset({CultivoEnum.algodon}),
     estadios=frozenset({"boton_floral", "floracion", "r1", "r2"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial in {"circular", "focos_aislados"},
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial in {"circular", "focos_aislados"},
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_fungico",
     accion_recomendada=(
         "Si se confirma, aplicar fungicida. El mancozeb o los triazoles son efectivos "
@@ -176,7 +193,7 @@ R24 = Regla(
     cultivos=frozenset({CultivoEnum.sorgo}),
     estadios=frozenset({"v6", "v7", "v8", "v9", "espigado", "floracion"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial in {"circular", "focos_aislados"},
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial in {"circular", "focos_aislados"},
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_fungico",
     accion_recomendada=(
         "Evaluar la severidad y aplicar fungicida si corresponde. Los triazoles tienen "
@@ -195,7 +212,7 @@ R30 = Regla(
     cultivos=frozenset({CultivoEnum.soja}),
     estadios=frozenset({"v4", "v5", "v6", "r1", "r2", "r3", "r4"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial in {"manchas_irregulares", "focos_aislados"},
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial in {"manchas_irregulares", "focos_aislados"},
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_insecto",
     accion_recomendada=(
         "Aplicar insecticida solo si el monitoreo en campo confirma que se supera el umbral "
@@ -218,7 +235,7 @@ R31 = Regla(
     cultivos=frozenset({CultivoEnum.maiz, CultivoEnum.sorgo}),
     estadios=frozenset({"v6", "v7", "v8", "v9", "v10", "v11", "v12", "vt"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial in {"manchas_irregulares", "bordes_lote"},
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial in {"manchas_irregulares", "bordes_lote"},
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_insecto",
     accion_recomendada=(
         "Monitorear en campo antes de aplicar. El umbral para chinche en maíz es variable "
@@ -238,7 +255,7 @@ R32 = Regla(
     cultivos=frozenset({CultivoEnum.algodon}),
     estadios=frozenset({"boton_floral", "floracion", "r1", "r2", "r3"}),
     requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial in {"manchas_irregulares", "focos_aislados", "circular"},
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial in {"manchas_irregulares", "focos_aislados", "circular"},
     confianza=ConfianzaEnum.media, causa_indice="estres_biotico_insecto",
     accion_recomendada=(
         "Monitorear en campo para confirmar la presencia y nivel de infestación. Para oruga "
@@ -342,7 +359,7 @@ R44 = Regla(
     estadios=frozenset({"v1", "v2", "v3", "v4", "v5", "v6"}),
     requiere_indices=("ndvi", "ndre"),
     condicion=lambda z: (
-        z.valores["ndvi"] < 0.50 and z.valores["ndre"] < 0.20
+        ndvi_bajo(z) and z.valores["ndre"] < 0.20
         and z.patron_espacial in {"por_sectores", "difuso_homogeneo"}
     ),
     confianza=ConfianzaEnum.media, causa_indice="estres_nutricional_fosforo",
@@ -365,7 +382,7 @@ R44 = Regla(
 R50 = Regla(
     id="R50", nombre="Estrés hídrico generalizado", bloque="hidrico",
     cultivos=None, estadios=None, requiere_indices=("ndvi",),
-    condicion=lambda z: z.valores["ndvi"] < 0.50 and z.patron_espacial == "difuso_homogeneo",
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial == "difuso_homogeneo",
     confianza=ConfianzaEnum.media, causa_indice="estres_hidrico",
     accion_recomendada=(
         "No se aplica agroquímico. Verificar las precipitaciones de los últimos 10-15 días. "
@@ -449,10 +466,56 @@ R99 = Regla(
     ),
 )
 
+R45 = Regla(
+    id="R45", nombre="Compactación o falla de siembra — patrón lineal", bloque="fisico",
+    cultivos=None, estadios=None, requiere_indices=("ndvi",),
+    condicion=lambda z: ndvi_bajo(z) and z.patron_espacial == "lineal",
+    confianza=ConfianzaEnum.media, causa_indice="compactacion_falla_siembra",
+    accion_recomendada=(
+        "No se recomienda agroquímico: un daño en franjas rectas sigue el paso de la "
+        "maquinaria. Si es falla de sembradora, evaluar resiembra según el estadio y la "
+        "pérdida de stand. Si es compactación, planificar descompactación (escarificado o "
+        "cultivo de cobertura con raíz pivotante) para la próxima campaña y revisar el "
+        "tránsito de maquinaria con suelo húmedo."
+    ),
+    como_confirmar_campo=(
+        "Recorrer la franja de forma perpendicular. Si faltan plantas o hay surcos vacíos, "
+        "es falla de siembra (contar plantas por metro lineal y comparar con el resto del "
+        "lote). Si hay plantas pero más chicas, hacer un pozo o usar un penetrómetro: una capa "
+        "dura a 10–25 cm y raíces que doblan en horizontal confirman compactación."
+    ),
+)
+
+R80 = Regla(
+    id="R80", nombre="Vigor por debajo de lo esperado para el estadio", bloque="cierre",
+    cultivos=None, estadios=None, requiere_indices=("ndvi",),
+    # Solo con curva esperada: sin referencia por estadio no se puede afirmar
+    # que un NDVI sea anormal sin un patrón que lo explique.
+    condicion=lambda z: z.ndvi_esperado_min is not None and z.valores["ndvi"] < z.ndvi_esperado_min,
+    confianza=ConfianzaEnum.baja, causa_indice="bajo_vigor_estadio",
+    accion_recomendada=(
+        "El cultivo tiene menos vigor que el esperado para su estadio, pero el patrón no "
+        "permite atribuirlo a una causa puntual. No aplicar productos sin antes identificar "
+        "la causa. Revisar fecha de siembra real vs. la cargada, historial de lluvias y "
+        "análisis de suelo."
+    ),
+    como_confirmar_campo=(
+        "Comparar plantas de esta zona con las de una zona sana: altura, número de hojas o "
+        "nudos y color. Revisar raíces (nódulos en soja), presencia de plagas en el envés de "
+        "las hojas y humedad del suelo. Confirmar también que el estadio cargado sea el "
+        "correcto: un estadio mal cargado cambia lo que se considera normal."
+    ),
+)
+
+# R60 va antes de R01: en algodón ya avanzado un NDVI < 0.20 en manchas es
+# defoliación/madurez, no suelo desnudo — después de R01 nunca se alcanzaba.
+# R10 va después de enfermedades e insectos: con ExG disponible tapaba
+# cualquier zona baja (una mancha circular en R3 salía "malezas").
 REGLAS: list[Regla] = [
-    R00, R01, R10,
+    R00, R60, R01,
     R20, R21, R22, R23, R24,
     R30, R31, R32,
+    R45, R10,
     R40, R41, R42, R43, R44,
-    R50, R60, R70, R99,
+    R50, R70, R80, R99,
 ]

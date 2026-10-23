@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CalendarioMensual from './CalendarioMensual'
 import ResumenVuelo from './ResumenVuelo'
-import { fechaISOLocal, fechaDDMMAAAA } from '../utils/fechas'
+import { fechaISOLocal, fechaDDMMAAAA, fechaVuelo } from '../utils/fechas'
 
 const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 const ESTADO_LABELS = { pendiente: 'Pendiente', procesando: 'Procesando', completado: 'Completado', error: 'Error' }
@@ -20,7 +20,7 @@ export default function VuelosCalendario({ loteId, vuelos, vueloActualId, onCerr
   const navigate = useNavigate()
 
   const vueloActual = vuelos.find(v => idDe(v) === vueloActualId)
-  const fechaInicial = vueloActual ? new Date(vueloActual.fecha_vuelo) : new Date()
+  const fechaInicial = vueloActual ? fechaVuelo(vueloActual.fecha_vuelo) : new Date()
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => fechaISOLocal(fechaInicial))
   const [menuAbiertoId, setMenuAbiertoId] = useState(null)
   const [resumenAbiertoId, setResumenAbiertoId] = useState(null)
@@ -34,7 +34,7 @@ export default function VuelosCalendario({ loteId, vuelos, vueloActualId, onCerr
 
   const porFecha = {}
   for (const v of vuelos) {
-    const iso = fechaISOLocal(new Date(v.fecha_vuelo))
+    const iso = fechaISOLocal(fechaVuelo(v.fecha_vuelo))
     ;(porFecha[iso] ??= []).push(v)
   }
 

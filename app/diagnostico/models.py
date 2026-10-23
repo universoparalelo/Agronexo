@@ -130,3 +130,47 @@ class Diagnostico(Base):
     resultado: Mapped[dict] = mapped_column(JSONB, nullable=False)
     calculado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     motor_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+class DecisionRevisionEnum(str, enum.Enum):
+    aceptado = "aceptado"
+    modificado = "modificado"
+    rechazado = "rechazado"
+
+
+class RevisionDiagnostico(Base):
+    """
+    Criterio técnico del agrónomo sobre el diagnóstico de UNA zona (RFDR-04):
+    acepta, modifica (indica la causa real) o rechaza la causa sugerida. Una
+    revisión vigente por zona — revisar de nuevo la sobrescribe.
+
+    `evidencia` guarda los valores crudos de la zona al momento de revisar
+    (bayes.EvidenciaZona.a_dict) para entrenar el motor probabilístico: un
+    recálculo posterior del diagnóstico no altera el caso etiquetado.
+    """
+
+    __tablename__ = "revisiones_diagnostico"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.uuid_generate_v4()
+    )
+    vuelo_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vuelos.id", ondelete="CASCADE"), nullable=False
+    )
+    zona_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    regla_id: Mapped[str] = mapped_column(String(5), nullable=False)
+    causa_sugerida: Mapped[str] = mapped_column(String(40), nullable=False)
+    decision: Mapped[DecisionRevisionEnum] = mapped_column(
+        Enum(DecisionRevisionEnum, name="decisionrevisionenum"), nullable=False
+    )
+    causa_confirmada: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    comentario: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidencia: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    motor_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

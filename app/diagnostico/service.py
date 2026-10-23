@@ -35,7 +35,9 @@ from starlette.concurrency import run_in_threadpool
 
 from sqlalchemy import select
 
-from app.diagnostico.engine import ContextoZona, evaluar_zona
+from app.diagnostico.bayes import MODELO_VERSION as BAYES_VERSION, EvidenciaZona, ModeloBayes, construir_modelo, evaluar_bayes
+from app.diagnostico.engine import ContextoZona, evaluar_zona, precisar_con_bayes
+from app.diagnostico.revisiones import cargar_casos_entrenamiento
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import (
@@ -160,6 +162,21 @@ def enriquecer_con_indice(
     return resultado
 
 
+async def obtener_ndvi_esperado_estadio(
+    db: AsyncSession, cultivo: CultivoEnum, estadio_fenologico: str | None,
+) -> NdviEsperadoEstadio | None:
+    estadio = normalizar_estadio(estadio_fenologico)
+    if estadio is None:
+        return None
+    result = await db.execute(
+        select(NdviEsperadoEstadio).where(
+            NdviEsperadoEstadio.tipo_cultivo == cultivo,
+            NdviEsperadoEstadio.estadio_normalizado == estadio,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def obtener_diagnostico_guardado(db: AsyncSession, vuelo_id: uuid.UUID) -> Diagnostico | None:
     stmt = select(Diagnostico).where(Diagnostico.vuelo_id == vuelo_id)
     result = await db.execute(stmt)
@@ -251,6 +268,8 @@ async def generar_diagnostico(
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
 
     catalogo = await _cargar_catalogo_productos(db)
+    esperado = await obtener_ndvi_esperado_estadio(db, cultivo.tipo_cultivo, _resolver_estadio(vuelo))
+    modelo_bayes = construir_modelo(await cargar_casos_entrenamiento(db))
 
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
@@ -264,6 +283,9 @@ async def generar_diagnostico(
         variedad=cultivo.variedad,
         fecha_siembra=cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
         fecha_cosecha=cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
+        ndvi_esperado=esperado.ndvi_esperado if esperado else None,
+        ndvi_esperado_min=esperado.ndvi_min if esperado else None,
+        modelo_bayes=modelo_bayes,
     )
 
     calculado_en = datetime.now(timezone.utc)
@@ -298,6 +320,9 @@ def _calcular_diagnostico(
     variedad: str | None = None,
     fecha_siembra: str | None = None,
     fecha_cosecha: str | None = None,
+    ndvi_esperado: float | None = None,
+    ndvi_esperado_min: float | None = None,
+    modelo_bayes: ModeloBayes | None = None,
 ) -> dict:
     """Cómputo geométrico puro (Shapely, sin I/O ni DB) — ver generar_diagnostico()."""
     estadio_normalizado = normalizar_estadio(estadio_fenologico)
@@ -324,6 +349,7 @@ def _calcular_diagnostico(
     for nombre_indice, geojson_otro in geojson_por_indice.items():
         valores_por_indice[nombre_indice] = enriquecer_con_indice(zonas, geojson_otro, lon0, lat0)
 
+    modelo_bayes = modelo_bayes or construir_modelo()
     features_salida = []
     for zona, feat_original in zip(zonas, features_ndvi):
         valores: dict[str, float] = {}
@@ -339,11 +365,24 @@ def _calcular_diagnostico(
             ndvi_promedio_lote=ndvi_promedio_lote,
             cultivo=cultivo,
             estadio_normalizado=estadio_normalizado,
+            ndvi_esperado=ndvi_esperado,
+            ndvi_esperado_min=ndvi_esperado_min,
         )
         resultado = evaluar_zona(contexto)
 
         ndvi_zona = float(feat_original.get("properties", {}).get("ndvi_promedio", 0.0))
-        severidad = calcular_severidad(ndvi_zona, ndvi_promedio_lote, resultado.causa_indice)
+        evidencia = EvidenciaZona(
+            cultivo=cultivo, estadio=estadio_fenologico, patron=contexto.patron_espacial,
+            ndvi=ndvi_zona, ndvi_promedio_lote=ndvi_promedio_lote,
+            ndvi_esperado=ndvi_esperado, ndvi_esperado_min=ndvi_esperado_min,
+            ndre=valores.get("ndre"), exg=valores.get("exg"),
+        )
+        # Motor probabilístico en paralelo (experimental): solo cambia el
+        # resultado de R80, que sin él no identifica ninguna causa.
+        bayes = evaluar_bayes(evidencia, modelo_bayes)
+        resultado = precisar_con_bayes(resultado, bayes, cultivo, set(valores))
+
+        severidad = calcular_severidad(ndvi_zona, ndvi_promedio_lote, resultado.causa_indice, ndvi_esperado)
 
         props = dict(feat_original.get("properties", {}))
         props.update({
@@ -358,8 +397,10 @@ def _calcular_diagnostico(
             "como_confirmar_campo": resultado.como_confirmar_campo,
             "excluida": resultado.excluida,
             "productos_sugeridos": (catalogo or {}).get(resultado.causa_indice, []),
+            "evidencia": evidencia.a_dict(),
+            "bayes": bayes,
         })
-        props["texto_explicativo"] = generar_texto_zona(props, ndvi_promedio_lote)
+        props["texto_explicativo"] = generar_texto_zona(props, ndvi_promedio_lote, ndvi_esperado, estadio_fenologico)
 
         features_salida.append({
             "type": "Feature",
@@ -386,6 +427,9 @@ def _calcular_diagnostico(
             "fecha_cosecha": fecha_cosecha,
             "estadio_fenologico": estadio_fenologico,
             "ndvi_promedio_lote": round(ndvi_promedio_lote, 4),
+            "ndvi_esperado_estadio": ndvi_esperado,
+            "ndvi_esperado_estadio_min": ndvi_esperado_min,
+            "bayes": {"version": BAYES_VERSION, "n_revisiones_usadas": modelo_bayes.n_casos},
             "indices_disponibles": list(valores_por_indice.keys()),
             "n_unidades_manejo": len(unidades),
             "resumen_general": resumen,
