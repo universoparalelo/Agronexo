@@ -7,7 +7,7 @@ pydantic==2.10.4
 pydantic-settings==2.15.0
 
 # Base de datos
-sqlalchemy==2.1.4
+sqlalchemy==2.1.5
 # greenlet ya no es transitiva implícita de sqlalchemy desde 2.1 (antes se
 # auto-instalaba sin pedirla) — sin este pin, el soporte async rompe con
 # "SQLAlchemy asyncio module requires that the Python 'greenlet' library

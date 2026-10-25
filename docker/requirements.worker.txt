@@ -11,7 +11,7 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 
 # Base de datos (para escribir resultados)
-sqlalchemy==2.1.4
+sqlalchemy==2.1.5
 # greenlet ya no es transitiva implícita de sqlalchemy desde 2.1 — ver
 # requirements.api.txt para el detalle del error que previene este pin.
 greenlet==3.5.6
