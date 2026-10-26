@@ -131,6 +131,46 @@ def armar_catalogo_productos(
     }
 
 
+def armar_alternativas_marca(
+    productos: list[ProductoFitosanitario],
+    presentaciones: list[PresentacionProducto],
+    cultivo: CultivoEnum,
+) -> dict[str, list[dict]]:
+    """
+    Marcas aptas para el cultivo de cada activo, de menor a mayor costo por
+    hectárea (dosis × precio de la misma marca: la concentración cambia la
+    dosis, así que no se puede mezclar dosis de una con precio de otra).
+    Va una sola vez por diagnóstico y no dentro de cada zona, para no
+    repetir la lista de marcas en cada feature del GeoJSON guardado.
+    """
+    nombre_por_id = {p.id: p.nombre for p in productos}
+    alternativas: dict[str, list[dict]] = {}
+    for pres in presentaciones:
+        nombre = nombre_por_id.get(pres.producto_id)
+        if nombre is None or _marcas_aptas([pres.cultivos], cultivo) == 0:
+            continue
+        alternativas.setdefault(nombre, []).append({
+            "marca": pres.marca,
+            "concentracion": pres.concentracion or None,
+            "variante": pres.variante or None,
+            "dosis_por_ha": pres.dosis_referencia,
+            "unidad_dosis": pres.unidad,
+            "confiabilidad_dosis": pres.confiabilidad_dosis,
+            "precio_usd": pres.precio_usd,
+            "unidad_precio": pres.unidad_precio,
+            "costo_por_ha_usd": round(pres.dosis_referencia * pres.precio_usd, 2),
+        })
+    for marcas in alternativas.values():
+        marcas.sort(key=lambda m: (m["costo_por_ha_usd"], m["marca"]))
+    return alternativas
+
+
+async def _cargar_alternativas_marca(db: AsyncSession, cultivo: CultivoEnum) -> dict[str, list[dict]]:
+    productos = list((await db.execute(select(ProductoFitosanitario))).scalars().all())
+    presentaciones = list((await db.execute(select(PresentacionProducto))).scalars().all())
+    return armar_alternativas_marca(productos, presentaciones, cultivo)
+
+
 async def _cargar_catalogo_productos(
     db: AsyncSession, cultivo: CultivoEnum | None = None,
 ) -> dict[str, list[dict[str, str]]]:
@@ -298,6 +338,7 @@ async def generar_diagnostico(
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
 
     catalogo = await _cargar_catalogo_productos(db, cultivo.tipo_cultivo)
+    alternativas_marca = await _cargar_alternativas_marca(db, cultivo.tipo_cultivo)
 
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
@@ -308,6 +349,7 @@ async def generar_diagnostico(
         vuelo_id=str(vuelo_id),
         fecha_vuelo=str(vuelo.fecha_vuelo) if vuelo.fecha_vuelo else None,
         cultivo_id=str(cultivo.id),
+        alternativas_marca=alternativas_marca,
         variedad=cultivo.variedad,
         fecha_siembra=cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
         fecha_cosecha=cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
@@ -342,6 +384,7 @@ def _calcular_diagnostico(
     vuelo_id: str | None = None,
     fecha_vuelo: str | None = None,
     cultivo_id: str | None = None,
+    alternativas_marca: dict[str, list[dict]] | None = None,
     variedad: str | None = None,
     fecha_siembra: str | None = None,
     fecha_cosecha: str | None = None,
@@ -417,10 +460,18 @@ def _calcular_diagnostico(
     resumen = generar_resumen_general(features_salida)
     unidades = generar_unidades_manejo(features_salida, lon0, lat0)
 
+    nombres_sugeridos = {
+        prod["nombre"]
+        for feat in features_salida
+        for prod in feat["properties"].get("productos_sugeridos", [])
+    }
     return {
         "type": "FeatureCollection",
         "features": features_salida,
         "unidades_manejo": unidades,
+        "alternativas_marca": {
+            n: m for n, m in (alternativas_marca or {}).items() if n in nombres_sugeridos
+        },
         "metadata": {
             "lote_id": lote_id,
             "lote_nombre": lote_nombre,

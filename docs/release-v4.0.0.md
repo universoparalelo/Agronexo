@@ -796,3 +796,29 @@ El motor ahora sugiere solo productos aptos para el cultivo del vuelo. Con eso s
 - Los fungicidas, insecticidas y fertilizantes del motor siguen con la lista genérica "soja, maíz, algodón, sorgo", que no es de marbete: el filtro no los distingue.
 
 **Pendiente:** mostrar alternativas con marca, dosis, precio y costo por hectárea en la recomendación, y el ahorro como rango.
+
+---
+
+#### Catálogo de fitosanitarios — tanda 4: alternativas con marca en la recomendación
+**Fecha:** 2026-10-26
+**Rama:** `feat/alternativas-con-marca` (sin commitear todavía)
+
+El diagnóstico ahora recomienda el activo y, debajo de cada uno, las marcas aptas para el cultivo del vuelo, con dosis, precio y costo por hectárea.
+
+**Qué se hizo:**
+- `app/diagnostico/service.py`: `armar_alternativas_marca()` (función pura) arma, por activo, las presentaciones aptas para el cultivo con `dosis_por_ha`, `unidad_dosis`, `confiabilidad_dosis`, `precio_usd`, `unidad_precio` y `costo_por_ha_usd` (dosis × precio de la misma marca), ordenadas de menor a mayor costo por hectárea.
+- Se devuelven una sola vez en una clave nueva `alternativas_marca` de la respuesta (nombre de activo → marcas), solo para los activos que el diagnóstico sugiere. No viaja dentro de cada zona: repetir la lista en cada feature inflaba el diagnóstico guardado. `productos_sugeridos` no cambia, así que no se rompe ningún contrato existente.
+- `frontend/src/components/TablaDiagnostico.jsx`: cada activo sugerido se despliega con la tabla de marcas (dosis marcada "según marbete" o "habitual según web") y el aviso "Verificá en el marbete que sea apto para tu cultivo".
+- 5 tests nuevos (16 en `tests/test_catalogo_productos_cultivo.py`).
+
+**Decisiones tomadas:**
+- La orden de trabajo sigue mostrando solo el activo, sin marca (decisión previa).
+- Entre marcas del mismo activo sí se ordena por costo por hectárea: son alternativas equivalentes, a diferencia de activos distintos (ver tanda 3).
+- La marca se muestra con su concentración; la variante solo cuando no repite el nombre de la marca (ej. Paraquat "uso herbicida" / "uso desecante").
+
+**Alcance y límites:**
+- Los diagnósticos ya guardados no traen `alternativas_marca` hasta recalcularse; la pantalla los sigue mostrando como antes.
+- No se probó la pantalla en el navegador, solo el build del frontend, los tests y la salida con la base real.
+- 19 de las 21 dosis de los activos del motor son "habitual según web": contrastar antes de presentarlas como recomendación real.
+
+**Pendiente:** ahorro como rango (marca más barata a más cara).

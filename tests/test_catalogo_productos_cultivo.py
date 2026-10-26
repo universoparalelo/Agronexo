@@ -10,7 +10,7 @@ import uuid
 from types import SimpleNamespace
 
 from app.diagnostico.models import CausaIndiceEnum, TipoProductoEnum
-from app.diagnostico.service import armar_catalogo_productos
+from app.diagnostico.service import armar_alternativas_marca, armar_catalogo_productos
 from app.lotes.models import CultivoEnum
 
 HERBICIDA = CausaIndiceEnum.interferencia_vegetacion
@@ -92,3 +92,57 @@ def test_agrupa_por_causa():
     catalogo = armar_catalogo_productos([herbicida, fungicida], cultivos, CultivoEnum.soja)
     assert _nombres(catalogo) == ["Glifosato"]
     assert _nombres(catalogo, CausaIndiceEnum.estres_biotico_fungico) == ["Mancozeb"]
+
+
+def _presentacion(producto, marca, cultivos, dosis=1.0, precio=10.0, **extra):
+    datos = dict(
+        producto_id=producto.id, marca=marca, concentracion="", variante="", dosis_referencia=dosis,
+        unidad="L/ha", confiabilidad_dosis="marbete", precio_usd=precio, unidad_precio="L", cultivos=cultivos,
+    )
+    datos.update(extra)
+    return SimpleNamespace(**datos)
+
+
+def test_alternativas_solo_marcas_aptas_para_el_cultivo():
+    glifosato = _producto("Glifosato")
+    marcas = [
+        _presentacion(glifosato, "Roundup Top", "soja, maiz"),
+        _presentacion(glifosato, "Glifosato Gold", "barbecho"),
+        _presentacion(glifosato, "Sin cultivos", None),
+    ]
+    alternativas = armar_alternativas_marca([glifosato], marcas, CultivoEnum.soja)
+    assert [m["marca"] for m in alternativas["Glifosato"]] == ["Roundup Top"]
+
+
+def test_alternativas_ordenadas_por_costo_por_ha():
+    glifosato = _producto("Glifosato")
+    marcas = [
+        _presentacion(glifosato, "Cara", "soja", dosis=2.0, precio=7.0),
+        _presentacion(glifosato, "Barata", "soja", dosis=2.0, precio=4.0),
+        _presentacion(glifosato, "Dosis baja", "soja", dosis=1.0, precio=6.0),
+    ]
+    alternativas = armar_alternativas_marca([glifosato], marcas, CultivoEnum.soja)["Glifosato"]
+    assert [m["marca"] for m in alternativas] == ["Dosis baja", "Barata", "Cara"]
+    assert [m["costo_por_ha_usd"] for m in alternativas] == [6.0, 8.0, 14.0]
+
+
+def test_alternativas_usa_dosis_y_precio_de_la_misma_marca():
+    atrazina = _producto("Atrazina")
+    marca = _presentacion(atrazina, "Trac 50 FL", "maiz", dosis=3.96, precio=2.84, unidad="L/ha", unidad_precio="L")
+    alternativa = armar_alternativas_marca([atrazina], [marca], CultivoEnum.maiz)["Atrazina"][0]
+    assert alternativa["costo_por_ha_usd"] == round(3.96 * 2.84, 2)
+    assert alternativa["unidad_dosis"] == "L/ha"
+    assert alternativa["confiabilidad_dosis"] == "marbete"
+
+
+def test_alternativas_concentracion_y_variante_vacias_quedan_en_none():
+    producto = _producto("Paraquat")
+    marca = _presentacion(producto, "Delta", "soja")
+    alternativa = armar_alternativas_marca([producto], [marca], CultivoEnum.soja)["Paraquat"][0]
+    assert alternativa["concentracion"] is None and alternativa["variante"] is None
+
+
+def test_alternativas_producto_sin_marcas_aptas_no_aparece():
+    producto = _producto("Cletodim")
+    marca = _presentacion(producto, "Resolutor", "soja, algodon")
+    assert armar_alternativas_marca([producto], [marca], CultivoEnum.maiz) == {}
