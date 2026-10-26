@@ -767,3 +767,32 @@ Se descartó ordenar por costo por hectárea (dosis × precio): con los precios 
 **Sugerencia pendiente de decisión — "barbecho" como tipo de cultivo**
 En el Excel, varios productos (Glifosato Gold, 2,4-D microemulsión, 2,4 D 30 NEO, Glifomax GS) son de barbecho, pero hoy todo análisis exige un cultivo y un vuelo sin cultivo devuelve 409 en `/diagnostico`. Sugerencia: **agregar `barbecho` a los tipos de cultivo** (se elige al crear el cultivo del lote) y que el filtro por cultivo lo trate como uno más. Alternativa descartada por ahora: permitir vuelos sin cultivo. Falta decidir también qué mostrar cuando ningún producto es apto para el cultivo del vuelo (¿"sin producto sugerido" o caer a la lista sin filtrar?).
 
+
+---
+
+#### Catálogo de fitosanitarios — tanda 3: filtro por cultivo y carga de los 9 activos nuevos
+**Fecha:** 2026-10-26
+**Rama:** `feat/filtro-productos-por-cultivo` (sin commitear todavía)
+
+El motor ahora sugiere solo productos aptos para el cultivo del vuelo. Con eso se cargaron las 12 filas que estaban frenadas (9 activos nuevos, todos herbicidas): 59 de 59 filas del Excel están en la base.
+
+**Qué se hizo:**
+- `app/diagnostico/service.py`: `_cargar_catalogo_productos(db, cultivo)` filtra con `armar_catalogo_productos()` (función pura). Un producto es apto si alguna de sus marcas (`presentaciones_productos.cultivos`) incluye el cultivo; la comparación ignora tildes, mayúsculas y espacios. Sin migración ni columna nueva.
+- Orden dentro de cada causa: más marcas aptas primero, después por nombre. La Orden de Trabajo toma el primero, así que el orden tiene que ser estable.
+- Si ningún producto es apto, la causa queda sin producto sugerido (no se cae a la lista sin filtrar).
+- `tests/test_catalogo_productos_cultivo.py`: 11 tests.
+- Excel: cultivos y marbete de Glifomax GS; los 9 precios con "$" y coma pasaron de texto a número.
+
+**Resultado verificado con la base real (herbicidas, primero de la lista):** soja, maíz y algodón → Glifosato; sorgo → Atrazina (4 marcas aptas contra 3 de 2,4-D y 1 de Glifosato).
+
+**Decisiones tomadas:**
+- Se descartó ordenar por costo por hectárea: dejaba primero a Cletodim y Haloxyfop, graminicidas selectivos, para cualquier interferencia de vegetación.
+- "Más marcas aptas primero" es un desempate provisorio, no un criterio agronómico: se revisa con el equipo junto con la decisión de barbecho.
+- Un producto sin ninguna marca cargada no se sugiere cuando hay cultivo.
+
+**Alcance y límites:**
+- Los diagnósticos ya guardados conservan sus `productos_sugeridos` anteriores; el filtro aplica a los diagnósticos nuevos o recalculados ("Recalcular").
+- Las marcas de "barbecho" no aparecen hasta que el equipo decida si `barbecho` pasa a ser tipo de cultivo (ver sugerencia arriba).
+- Los fungicidas, insecticidas y fertilizantes del motor siguen con la lista genérica "soja, maíz, algodón, sorgo", que no es de marbete: el filtro no los distingue.
+
+**Pendiente:** mostrar alternativas con marca, dosis, precio y costo por hectárea en la recomendación, y el ahorro como rango.
