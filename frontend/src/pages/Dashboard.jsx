@@ -13,6 +13,7 @@ import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
+import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
 import ModalPreviewPdf from '../components/ModalPreviewPdf'
@@ -295,6 +296,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
+  const { avisar } = useAvisos()
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaLimites, setLoteParaLimites] = useState(null)
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
@@ -497,7 +499,7 @@ export default function Dashboard() {
       {loteParaLimites && (
         <ModalLimites
           lote={loteParaLimites}
-          onSuccess={() => { setLoteParaLimites(null); cargarDatos() }}
+          onSuccess={() => { setLoteParaLimites(null); cargarDatos(); avisar('Límites del lote actualizados') }}
           onClose={() => setLoteParaLimites(null)}
         />
       )}
@@ -539,10 +541,13 @@ export default function Dashboard() {
             </h1>
             <div className="hero-panel-acciones">
               <button type="button" className="hero-btn hero-btn--principal" onClick={() => setShowModal(true)}>
-                Cargar nuevo análisis <IconArrow />
+                Cargar nuevo análisis
               </button>
               <button type="button" className="hero-btn" onClick={() => setShowModalNuevoLote(true)}>
                 Nuevo lote
+              </button>
+              <button type="button" className="hero-btn" onClick={() => navigate('/lotes')}>
+                Ver lotes
               </button>
               <button
                 type="button"

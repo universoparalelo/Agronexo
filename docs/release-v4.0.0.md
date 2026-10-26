@@ -844,6 +844,9 @@ Antes no había forma de editar un lote desde la pantalla ni de editar o elimina
 - El estadio no se valida contra la lista del cultivo, igual que al subir un vuelo.
 - La fecha se guarda a mediodía local para que la zona horaria no corra el día.
 
+**Decisión pendiente con el equipo — recálculo automático del diagnóstico al editar un vuelo**
+Hoy, si se cambia el cultivo o el estadio de un vuelo, el diagnóstico guardado queda desactualizado y la pantalla pide al usuario que abra el diagnóstico y apriete "Recalcular" (ventana "Vuelo actualizado" con el texto "Se necesita una acción"). La alternativa propuesta es que lo haga el sistema: al abrir el diagnóstico, comparar el cultivo y el estadio guardados en `metadata` del resultado con los del vuelo y, si no coinciden, recalcular y sobrescribir el guardado (sin borrar nada, igual que "Recalcular"). Costo: la primera apertura después del cambio tarda lo que un diagnóstico nuevo. Si se aprueba: comparación en `app/diagnostico/service.py` con test, se saca la ventana de aviso de `ModalEditarVuelo.jsx` y `diagnostico_desactualizado` queda en la respuesta sin usarse para no romper el contrato. "Recalcular" se mantiene.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
@@ -856,3 +859,7 @@ Cambios chicos de interfaz de la tarjeta HU-R4-13, uno por fila.
 | 2026-10-26 | Dashboard — miga de pan | "Dashboard › Resumen" pasa a solo "Dashboard". | El Dashboard ya es un resumen; la miga repetía lo mismo. | `Dashboard.jsx` |
 | 2026-10-26 | Lotes — tarjetas | Se saca la lupa; el cuadrado y el nombre del lote abren el detalle. | Las tarjetas parecían clicables y no lo eran. | `Lotes.jsx`, `panel-tema.css` |
 | 2026-10-26 | Detalle del lote — encabezado | Lápiz de edición al lado del nombre; etiqueta de cultivo y hectáreas debajo del nombre, más grandes. | El botón "Editar lote" no estaba bien ubicado y la etiqueta y las hectáreas se veían chicas. | `DetalleLote.jsx`, `panel-tema.css` |
+| 2026-10-26 | Toda la app — confirmación al guardar | Aviso chico abajo a la derecha ("Lote actualizado", "Vuelo actualizado", "Límites del lote actualizados"), se cierra solo a los 4 segundos o con la ✕. | Al guardar una edición no había confirmación visible. Perfil y preferencias ya tenían su mensaje propio y no se tocaron. | `AvisosProvider.jsx` (nuevo), `App.jsx`, `Lotes.jsx`, `DetalleLote.jsx`, `Dashboard.jsx`, `panel-tema.css` |
+| 2026-10-26 | Ventanas de eliminar (lote, vuelo, diagnóstico) y aviso "Vuelo actualizado" | Ícono de advertencia (triángulo con exclamación) en rojo sobre un cuadrado redondeado rosado, a la izquierda del título. En "Vuelo actualizado", el mensaje va en un recuadro con borde rojo y las frases clave en negrita. | Eliminar es una acción delicada y la ventana no la destacaba; el aviso de recalcular pasaba desapercibido. | `IconoAdvertencia.jsx` (nuevo), `ModalConfirmarEliminar.jsx`, `ModalEditarVuelo.jsx`, `panel-tema.css` |
+| 2026-10-26 | Barra lateral — logo | El logo lleva al Dashboard al hacer clic, desde cualquier pantalla del panel. | Era una imagen sin acción; el logo es el atajo habitual al inicio. | `SidebarNav.jsx`, `panel-tema.css` |
+| 2026-10-26 | Dashboard — portada | Botón "Ver lotes" junto a "Nuevo lote", que lleva a la pantalla de Lotes. Se saca la flecha de "Cargar nuevo análisis". | No había un acceso directo a Lotes desde la portada. | `Dashboard.jsx` |

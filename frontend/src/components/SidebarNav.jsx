@@ -71,7 +71,14 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
 
   return (
     <aside className="sidebar-nav">
-      <div className="sidebar-logo-wrap">
+      <div
+        className="sidebar-logo-wrap sidebar-logo-wrap--link"
+        role="link"
+        tabIndex={0}
+        title="Ir al Dashboard"
+        onClick={() => navigate('/dashboard')}
+        onKeyDown={(e) => { if (e.key === 'Enter') navigate('/dashboard') }}
+      >
         <img src="/logo.png" alt="AgroNexo" className="sidebar-logo-img" />
         <span className="sidebar-beta">BETA</span>
       </div>
