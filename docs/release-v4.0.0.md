@@ -761,3 +761,9 @@ El motor sugiere para cada causa **todos** los productos de `productos_fitosanit
 
 **Pendiente de la tanda 2:** crear los 9 activos y cargar sus 12 presentaciones (con el orden estable resuelto), mostrar las alternativas con marca y precio en la recomendación, y calcular el ahorro como rango (presentación más barata a más cara).
 
+**Criterio de orden de sugerencia (2026-10-26)**
+Se descartó ordenar por costo por hectárea (dosis × precio): con los precios actuales dejaría primero a Cletodim (4,14 USD/ha) y, con los activos nuevos, a Haloxyfop, ambos graminicidas selectivos — cambiaría la recomendación para cualquier "interferencia de vegetación" sin criterio agronómico. El criterio acordado es **sugerir solo productos aptos para el cultivo del vuelo** (aptitud de la sustancia = unión de los cultivos de sus presentaciones, sin columna nueva); entre los aptos, desempate estable con los 21 activos actuales primero (Glifosato sigue primero) y los nuevos después.
+
+**Sugerencia pendiente de decisión — "barbecho" como tipo de cultivo**
+En el Excel, varios productos (Glifosato Gold, 2,4-D microemulsión, 2,4 D 30 NEO, Glifomax GS) son de barbecho, pero hoy todo análisis exige un cultivo y un vuelo sin cultivo devuelve 409 en `/diagnostico`. Sugerencia: **agregar `barbecho` a los tipos de cultivo** (se elige al crear el cultivo del lote) y que el filtro por cultivo lo trate como uno más. Alternativa descartada por ahora: permitir vuelos sin cultivo. Falta decidir también qué mostrar cuando ningún producto es apto para el cultivo del vuelo (¿"sin producto sugerido" o caer a la lista sin filtrar?).
+
