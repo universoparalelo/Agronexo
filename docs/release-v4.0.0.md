@@ -41,7 +41,8 @@
 | HU-R4-11 — ahorro comparativo entre campañas (variable vs. uniforme, precios de productos) | Completada |
 | HU-R4-09 — comparar dos vuelos del mismo lote (estadísticas) | Completada — parcial, ver detalle |
 | Fix: sidebar no marcaba "Diagnósticos" como activo en la vista de resultados | Completada |
-| Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada — tanda 2 (marcas/presentaciones) pendiente |
+| Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada |
+| Catálogo de fitosanitarios — tanda 2: tabla de presentaciones (marcas/concentraciones) | Completada — parcial, ver detalle |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -734,3 +735,29 @@ Cierra el hueco de datos que dejaba "Uniforme" y "Ahorro" en `—` en `/lotes/{i
 - Correr el importador en producción cuando haya servidor (el Excel se copia al contenedor; ver docstring).
 - 19 de las 21 dosis son "habitual según WEB", no del marbete: conviene contrastarlas antes de mostrarlas como recomendación real. El Excel marca Imazetapir en 5,36 sin fuente clara (antes 22): confirmar con quien edita la planilla.
 - Tanda 2: tabla de marcas/presentaciones, 38 productos pendientes, alternativas con marca y precio en la recomendación, y ahorro sobre presentaciones.
+
+---
+
+#### Catálogo de fitosanitarios — tanda 2: presentaciones (marcas y concentraciones)
+**Fecha:** 2026-10-26
+**Rama:** `feat/catalogo-presentaciones` (sin commitear todavía)
+
+Una presentación es una marca/concentración comercial de un principio activo (ej. "Roundup Top" 57,5 % de Glifosato). La tabla `productos_fitosanitarios` guarda el activo; la nueva `presentaciones_productos` (migración `0027`) guarda cada marca con su propia dosis y precio, porque la concentración cambia la dosis. El precio vive en la tabla nueva; `precios_productos` queda para los que carga el usuario.
+
+**Qué se hizo:**
+- Migración `0027` y modelo `PresentacionProducto`. Restricción única `(producto, marca, concentración, variante)`: `concentracion` y `variante` son `''` y no NULL para que detecte duplicados (en Postgres los NULL no chocan).
+- `app/catalogo/importador.py` ampliado: además de actualizar los 21 del motor, carga todas las filas del Excel como presentaciones. Idempotente (segunda corrida: 47 sin cambios).
+- 17 casos de test nuevos (35 en total en `tests/test_catalogo_importador.py`).
+
+**Decisiones tomadas:**
+- La clave de una presentación incluye la variante: Paraquat tiene dos filas con la misma marca y concentración que se distinguen solo por "uso herbicida" / "uso desecante", con dosis distintas (2 y 1,5 L/ha).
+- La concentración está en una columna sin título al lado de "Marca"; el importador la toma por posición.
+- Un principio activo que no existe solo se crea con `--crear-activos-nuevos`.
+
+**Estado de la carga:** 47 de las 59 filas están cargadas (todas las que cuelgan de los 21 activos existentes: Glifosato 17 marcas, 2,4-D 6, Atrazina 4, Cletodim 3…). **Faltan 12 filas de 9 activos nuevos**, todos herbicidas: Halauxifen-metil, Haloxyfop-R-metil (3), Diclosulam, Clopyralid, Picloram, Flumetsulam 12 %, Sulfometurón metil + Clorimurón etil, Paraquat (2) y Saflufenacil.
+
+**Problema abierto — efecto de crear los activos nuevos en el motor**
+El motor sugiere para cada causa **todos** los productos de `productos_fitosanitarios` de esa causa (`_cargar_catalogo_productos`), y la Orden de Trabajo usa el primero de esa lista (`productos_sugeridos[0]` en `orden_trabajo.py`). Los 9 activos nuevos son todos de la causa `interferencia_vegetacion`: pasarían de 5 a 14 herbicidas sugeridos, y como esa consulta ordena solo por causa (sin desempate), el "primero" puede dejar de ser Glifosato. Antes de crearlos hay que fijar un orden estable de sugerencia.
+
+**Pendiente de la tanda 2:** crear los 9 activos y cargar sus 12 presentaciones (con el orden estable resuelto), mostrar las alternativas con marca y precio en la recomendación, y calcular el ahorro como rango (presentación más barata a más cara).
+
