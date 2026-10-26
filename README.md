@@ -151,7 +151,7 @@ agronexo/
 ├── workers/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
-├── migrations/versions/    # Migraciones Alembic versionadas (0001 → 0026)
+├── migrations/versions/    # Migraciones Alembic versionadas (0001 → 0027)
 ├── tests/                  # Pipeline GIS, motor diagnóstico, API
 ├── frontend/               # React + Vite
 ├── docker/
