@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import math
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 
@@ -39,7 +40,8 @@ from app.diagnostico.engine import ContextoZona, evaluar_zona
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import (
-    CausaIndiceEnum, Diagnostico, NdviEsperadoEstadio, ProductoFitosanitario, TipoProductoEnum,
+    CausaIndiceEnum, Diagnostico, NdviEsperadoEstadio, PresentacionProducto, ProductoFitosanitario,
+    TipoProductoEnum,
 )
 from app.diagnostico.reglas import MOTOR_VERSION
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
@@ -85,17 +87,62 @@ async def listar_ndvi_esperado(db: AsyncSession, cultivo: CultivoEnum) -> list[N
     return list(result.scalars().all())
 
 
-async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[str, str]]]:
-    result = await db.execute(
-        select(ProductoFitosanitario).order_by(ProductoFitosanitario.causa_indice)
+def _normalizar_cultivo(texto: str) -> str:
+    sin_tildes = unicodedata.normalize("NFD", texto)
+    return "".join(c for c in sin_tildes if unicodedata.category(c) != "Mn").strip().lower()
+
+
+def _marcas_aptas(cultivos_por_marca: list[str | None], cultivo: CultivoEnum) -> int:
+    objetivo = cultivo.value
+    return sum(
+        1 for texto in cultivos_por_marca
+        if texto and objetivo in {_normalizar_cultivo(c) for c in texto.split(",")}
     )
-    catalogo: dict[str, list[dict[str, str]]] = {}
-    for prod in result.scalars().all():
-        catalogo.setdefault(prod.causa_indice.value, []).append({
-            "nombre": prod.nombre,
-            "tipo": prod.tipo.value,
-        })
-    return catalogo
+
+
+def armar_catalogo_productos(
+    productos: list[ProductoFitosanitario],
+    cultivos_por_producto: dict[uuid.UUID, list[str | None]],
+    cultivo: CultivoEnum | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """
+    Sin cultivo devuelve todos los productos. Con cultivo, solo los que tienen
+    al menos una marca apta (presentaciones_productos.cultivos) — un producto
+    sin marcas cargadas no se sugiere, porque no hay forma de saber si sirve.
+    Orden dentro de cada causa: más marcas aptas primero, después por nombre.
+    La orden de trabajo toma siempre el primero, así que el orden tiene que
+    ser estable.
+    """
+    aptos: dict[str, list[tuple[int, str, ProductoFitosanitario]]] = {}
+    for prod in productos:
+        n_aptas = 0
+        if cultivo is not None:
+            n_aptas = _marcas_aptas(cultivos_por_producto.get(prod.id, []), cultivo)
+            if n_aptas == 0:
+                continue
+        aptos.setdefault(prod.causa_indice.value, []).append((n_aptas, prod.nombre, prod))
+
+    return {
+        causa: [
+            {"nombre": prod.nombre, "tipo": prod.tipo.value}
+            for _, _, prod in sorted(items, key=lambda i: (-i[0], i[1]))
+        ]
+        for causa, items in aptos.items()
+    }
+
+
+async def _cargar_catalogo_productos(
+    db: AsyncSession, cultivo: CultivoEnum | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    productos = list((await db.execute(select(ProductoFitosanitario))).scalars().all())
+    cultivos_por_producto: dict[uuid.UUID, list[str | None]] = {}
+    if cultivo is not None:
+        filas = await db.execute(
+            select(PresentacionProducto.producto_id, PresentacionProducto.cultivos)
+        )
+        for producto_id, cultivos in filas.all():
+            cultivos_por_producto.setdefault(producto_id, []).append(cultivos)
+    return armar_catalogo_productos(productos, cultivos_por_producto, cultivo)
 
 
 def _resolver_estadio(vuelo: Vuelo) -> str | None:
@@ -250,7 +297,7 @@ async def generar_diagnostico(
 
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
 
-    catalogo = await _cargar_catalogo_productos(db)
+    catalogo = await _cargar_catalogo_productos(db, cultivo.tipo_cultivo)
 
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
