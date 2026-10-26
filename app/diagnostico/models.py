@@ -60,6 +60,7 @@ class ProductoFitosanitario(Base):
     causa_indice: Mapped[CausaIndiceEnum] = mapped_column(Enum(CausaIndiceEnum), nullable=False)
     dosis_referencia: Mapped[float | None] = mapped_column(Float, nullable=True)
     unidad: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confiabilidad_dosis: Mapped[str | None] = mapped_column(String(20), nullable=True)
     restricciones_ambientales: Mapped[str | None] = mapped_column(Text, nullable=True)
     instrucciones_seguridad: Mapped[str | None] = mapped_column(Text, nullable=True)
 
