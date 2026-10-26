@@ -7,6 +7,7 @@ import SidebarNav from '../components/SidebarNav'
 import TopbarPanel from '../components/TopbarPanel'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
+import ModalEditarLote from '../components/ModalEditarLote'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
 
@@ -26,9 +27,9 @@ const IconCalendar = () => (
     <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
   </svg>
 )
-const IconZoom = () => (
+const IconPencil = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 )
 const IconTrash = () => (
@@ -84,6 +85,7 @@ export default function Lotes() {
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
+  const [loteParaEditar, setLoteParaEditar] = useState(null)
 
   // Filtros de la grilla — búsqueda con debounce para no pegarle a la API en cada tecla.
   const [busqueda, setBusqueda] = useState('')
@@ -168,6 +170,13 @@ export default function Lotes() {
         <ModalNuevoLote
           onSuccess={() => { setShowModalNuevoLote(false); recargarTodo() }}
           onClose={() => setShowModalNuevoLote(false)}
+        />
+      )}
+      {loteParaEditar && (
+        <ModalEditarLote
+          lote={loteParaEditar}
+          onSuccess={() => { setLoteParaEditar(null); recargarTodo() }}
+          onClose={() => setLoteParaEditar(null)}
         />
       )}
       {loteParaEliminar && (
@@ -263,18 +272,28 @@ export default function Lotes() {
                   const cultivo = etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo)
                   return (
                     <div className="lote-card" key={lote.id}>
-                      <div className="lote-card-thumb">
+                      <div
+                        className="lote-card-thumb lote-card-clicable"
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => navigate(`/lotes/${lote.id}`)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/lotes/${lote.id}`) }}
+                      >
                         <img src="/fondo.jpeg" alt={lote.nombre} />
                       </div>
                       <div className="lote-card-body">
                         <div className="lote-card-title-row">
                           <div>
-                            <h3 className="lote-card-nombre">{lote.nombre}</h3>
+                            <h3 className="lote-card-nombre">
+                              <button type="button" className="lote-card-nombre-link" onClick={() => navigate(`/lotes/${lote.id}`)}>
+                                {lote.nombre}
+                              </button>
+                            </h3>
                             {cultivo && <span className="lote-crop-tag">{cultivo}</span>}
                           </div>
                           <div className="lote-card-acciones">
-                            <button className="tbl-btn" title="Ver detalle del lote" onClick={() => navigate(`/lotes/${lote.id}`)}>
-                              <IconZoom />
+                            <button className="tbl-btn" title="Editar lote" onClick={() => setLoteParaEditar(lote)}>
+                              <IconPencil />
                             </button>
                             <button className="tbl-btn tbl-btn--danger" title="Eliminar lote" onClick={() => setLoteParaEliminar(lote)}>
                               <IconTrash />

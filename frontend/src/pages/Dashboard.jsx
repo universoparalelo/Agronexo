@@ -529,7 +529,7 @@ export default function Dashboard() {
 
       <div className="dashboard-body">
         {/* Topbar */}
-        <TopbarPanel migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Resumen' }]} />
+        <TopbarPanel migas={[{ label: 'Dashboard' }]} />
 
         <main className="dashboard-main">
           {/* Portada */}

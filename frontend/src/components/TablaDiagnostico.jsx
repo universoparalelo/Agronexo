@@ -35,6 +35,21 @@ const CONFIABILIDAD_DOSIS = {
 
 const formatoUsd = (n) => (n == null ? '—' : `USD ${n.toFixed(2)}`)
 
+const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+// La variante del catálogo suele repetir marca y concentración ("250 SC — genérico"):
+// se muestra solo si agrega algo, como "uso herbicida" en Paraquat.
+function detalleMarca(m) {
+  const partes = [m.concentracion]
+  const variante = m.variante
+  if (variante) {
+    const v = sinTildes(variante)
+    const repite = v.includes(sinTildes(m.marca)) || (m.concentracion && v.includes(sinTildes(m.concentracion)))
+    if (!repite) partes.push(variante)
+  }
+  return partes.filter(Boolean).join(' · ')
+}
+
 function ProductosSugeridos({ productos, alternativas }) {
   if (!productos?.length) return null
   return (
@@ -58,9 +73,7 @@ function ProductosSugeridos({ productos, alternativas }) {
                   <tr key={k}>
                     <td>
                       {m.marca}
-                      {(m.concentracion || (m.variante && !m.variante.includes(m.marca))) && (
-                        <small>{[m.concentracion, !m.variante?.includes(m.marca) && m.variante].filter(Boolean).join(' · ')}</small>
-                      )}
+                      {detalleMarca(m) && <small>{detalleMarca(m)}</small>}
                     </td>
                     <td>
                       {m.dosis_por_ha} {m.unidad_dosis}

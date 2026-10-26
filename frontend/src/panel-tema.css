@@ -1087,3 +1087,22 @@
 .resultados-shell .resultados-sidebar {
   border-left-color: #edf1ed;
 }
+
+.lote-card-clicable { cursor: pointer; }
+.lote-card-nombre-link {
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.lote-card-nombre-link:hover { text-decoration: underline; }
+
+.detalle-titulo-fila { display: flex; align-items: center; gap: 0.5rem; }
+.detalle-editar-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; padding: 0;
+  background: none; border: 0; border-radius: 6px;
+  color: #6b7a70; cursor: pointer;
+}
+.detalle-editar-btn:hover { background: #e8f0ea; color: #12261a; }
+.detalle-titulo-meta { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.35rem; }
+.detalle-titulo-meta .cultivo-badge { font-size: 0.85rem; padding: 0.3rem 0.85rem; }
+.detalle-titulo-meta .pagina-encabezado-meta { font-size: 1.05rem; }

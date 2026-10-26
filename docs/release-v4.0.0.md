@@ -822,3 +822,37 @@ El diagnóstico ahora recomienda el activo y, debajo de cada uno, las marcas apt
 - 19 de las 21 dosis de los activos del motor son "habitual según web": contrastar antes de presentarlas como recomendación real.
 
 **Pendiente:** ahorro como rango (marca más barata a más cara).
+
+---
+
+#### Edición de lotes y vuelos
+**Fecha:** 2026-10-26
+**Rama:** `feat/alternativas-con-marca` (sin commitear todavía)
+
+Antes no había forma de editar un lote desde la pantalla ni de editar o eliminar un vuelo desde el detalle del lote.
+
+**Qué se hizo:**
+- **Lote:** botón de lápiz en cada tarjeta de la lista de Lotes y al lado del nombre en el detalle. Abre `ModalEditarLote.jsx` (nombre y tipo de suelo) y usa el `PUT /lotes/{id}` que ya existía; el servidor no cambió.
+- **Vuelo:** nuevo `PUT /lotes/{lote_id}/vuelos/{vuelo_id}` (`app/ingesta/router.py`, `service.py`, `schemas.py`) para editar fecha, estadio fenológico y cultivo. Valida que el cultivo sea del lote (404 si no) y que el estadio no esté vacío (422). Responde `diagnostico_desactualizado: true` si cambió el cultivo o el estadio.
+- En las tarjetas de vuelo del detalle del lote: lápiz (`ModalEditarVuelo.jsx`) y papelera (borrado lógico con confirmación, `DELETE` que ya existía).
+- `tests/test_vuelos_editar.py`: 9 casos.
+
+**Decisiones tomadas:**
+- El lote edita solo nombre y tipo de suelo. Los límites quedan afuera: cambiarlos no recalcula las zonas de los análisis ya hechos, que quedan recortadas al límite anterior.
+- Sensor y archivo del vuelo no se editan: cambiarlos obligaría a reprocesar el GeoTIFF.
+- Cambiar cultivo o estadio no recalcula solo el diagnóstico guardado; la pantalla avisa que hay que apretar "Recalcular".
+- El estadio no se valida contra la lista del cultivo, igual que al subir un vuelo.
+- La fecha se guarda a mediodía local para que la zona horaria no corra el día.
+
+---
+
+### Ajustes de diseño (HU-R4-13)
+
+Cambios chicos de interfaz de la tarjeta HU-R4-13, uno por fila.
+
+| Fecha | Pantalla / componente | Qué se cambió | Por qué | Archivos |
+|---|---|---|---|---|
+| 2026-10-26 | Diagnóstico — tabla de marcas | Se oculta el texto repetido de la variante, el texto deja de heredar el rojo de la tarjeta crítica y precio y costo quedan en una línea. | La variante repetía la marca y la concentración ("250 SC · 250 SC — genérico"). | `TablaDiagnostico.jsx`, `index.css` |
+| 2026-10-26 | Dashboard — miga de pan | "Dashboard › Resumen" pasa a solo "Dashboard". | El Dashboard ya es un resumen; la miga repetía lo mismo. | `Dashboard.jsx` |
+| 2026-10-26 | Lotes — tarjetas | Se saca la lupa; el cuadrado y el nombre del lote abren el detalle. | Las tarjetas parecían clicables y no lo eran. | `Lotes.jsx`, `panel-tema.css` |
+| 2026-10-26 | Detalle del lote — encabezado | Lápiz de edición al lado del nombre; etiqueta de cultivo y hectáreas debajo del nombre, más grandes. | El botón "Editar lote" no estaba bien ubicado y la etiqueta y las hectáreas se veían chicas. | `DetalleLote.jsx`, `panel-tema.css` |
