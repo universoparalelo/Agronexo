@@ -3,12 +3,15 @@ import uuid
 from datetime import datetime, timezone
 
 from celery.result import AsyncResult
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.storage import download_bytes
-from app.ingesta.schemas import EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse
+from app.ingesta.schemas import (
+    EstadoVueloResponse, IndiceAnalisisItem, IndiceEstadoResponse, LoteDesdeGeotiffResponse, VueloUpdate,
+)
 from app.lotes.models import AnalisisIndice, Cultivo, CultivoEnum, EstadoVueloEnum, IndiceEnum, Lote, SensorEnum, Vuelo
 from workers.celery_app import celery_app
 
@@ -247,6 +250,33 @@ async def eliminar_vuelo(db: AsyncSession, vuelo: Vuelo) -> None:
     """Soft delete — nunca DELETE físico."""
     vuelo.deleted_at = datetime.now(timezone.utc)
     await db.flush()
+
+
+async def actualizar_vuelo(
+    db: AsyncSession, vuelo: Vuelo, data: VueloUpdate,
+) -> tuple[Vuelo, bool]:
+    """Devuelve el vuelo y si cambió algo que invalida el diagnóstico guardado
+    (cultivo o estadio); la fecha por sí sola no lo invalida."""
+    from app.lotes.service import obtener_cultivo
+
+    campos = data.model_dump(exclude_unset=True)
+    invalida_diagnostico = False
+
+    if campos.get("cultivo_id") is not None and campos["cultivo_id"] != vuelo.cultivo_id:
+        cultivo = await obtener_cultivo(db, vuelo.lote_id, campos["cultivo_id"])
+        if cultivo is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cultivo no encontrado en este lote.")
+        vuelo.cultivo_id = cultivo.id
+        invalida_diagnostico = True
+    if campos.get("estadio_fenologico") is not None and campos["estadio_fenologico"] != vuelo.estadio_fenologico:
+        vuelo.estadio_fenologico = campos["estadio_fenologico"]
+        invalida_diagnostico = True
+    if campos.get("fecha_vuelo") is not None:
+        vuelo.fecha_vuelo = campos["fecha_vuelo"]
+
+    await db.flush()
+    await db.refresh(vuelo)
+    return vuelo, invalida_diagnostico
 
 
 async def reintentar_vuelo(db: AsyncSession, vuelo: Vuelo) -> Vuelo:

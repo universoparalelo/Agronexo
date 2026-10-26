@@ -28,6 +28,73 @@ const SEVERIDAD_LABELS = {
   vigorosa: 'Vigorosa',
 }
 
+const CONFIABILIDAD_DOSIS = {
+  marbete: 'según marbete',
+  web: 'habitual según web',
+}
+
+const formatoUsd = (n) => (n == null ? '—' : `USD ${n.toFixed(2)}`)
+
+const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+// La variante del catálogo suele repetir marca y concentración ("250 SC — genérico"):
+// se muestra solo si agrega algo, como "uso herbicida" en Paraquat.
+function detalleMarca(m) {
+  const partes = [m.concentracion]
+  const variante = m.variante
+  if (variante) {
+    const v = sinTildes(variante)
+    const repite = v.includes(sinTildes(m.marca)) || (m.concentracion && v.includes(sinTildes(m.concentracion)))
+    if (!repite) partes.push(variante)
+  }
+  return partes.filter(Boolean).join(' · ')
+}
+
+function ProductosSugeridos({ productos, alternativas }) {
+  if (!productos?.length) return null
+  return (
+    <div className="diagnostico-productos">
+      {productos.map((prod, j) => {
+        const marcas = alternativas?.[prod.nombre] || []
+        if (marcas.length === 0) {
+          return <span key={j} className="producto-chip">{prod.nombre}</span>
+        }
+        return (
+          <details key={j} className="producto-alternativas">
+            <summary className="producto-chip">
+              {prod.nombre} · {marcas.length} {marcas.length === 1 ? 'marca' : 'marcas'}
+            </summary>
+            <table className="producto-alternativas-tabla">
+              <thead>
+                <tr><th>Marca</th><th>Dosis</th><th>Precio</th><th>Costo/ha</th></tr>
+              </thead>
+              <tbody>
+                {marcas.map((m, k) => (
+                  <tr key={k}>
+                    <td>
+                      {m.marca}
+                      {detalleMarca(m) && <small>{detalleMarca(m)}</small>}
+                    </td>
+                    <td>
+                      {m.dosis_por_ha} {m.unidad_dosis}
+                      {m.confiabilidad_dosis && <small> {CONFIABILIDAD_DOSIS[m.confiabilidad_dosis] || m.confiabilidad_dosis}</small>}
+                    </td>
+                    <td>{formatoUsd(m.precio_usd)}/{m.unidad_precio}</td>
+                    <td>{formatoUsd(m.costo_por_ha_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="producto-alternativas-aviso">
+              Ordenadas de menor a mayor costo por hectárea. Verificá en el marbete que sea apto para tu cultivo.
+            </p>
+          </details>
+        )
+      })}
+    </div>
+  )
+}
+
 const CAUSA_LABELS = {
   sin_problema_detectado: 'Sin problema',
   interferencia_vegetacion: 'Malezas',
@@ -215,13 +282,7 @@ export default function TablaDiagnostico({
                       <summary>Cómo confirmar en campo</summary>
                       <p>{p.como_confirmar_campo}</p>
                     </details>
-                    {p.productos_sugeridos?.length > 0 && (
-                      <div className="diagnostico-productos">
-                        {p.productos_sugeridos.map((prod, j) => (
-                          <span key={j} className="producto-chip">{prod.nombre}</span>
-                        ))}
-                      </div>
-                    )}
+                    <ProductosSugeridos productos={p.productos_sugeridos} alternativas={diagnostico?.alternativas_marca} />
                   </>
                 )}
               </div>
@@ -262,13 +323,7 @@ export default function TablaDiagnostico({
                   {p.texto_unidad && (
                     <p className="unidad-card-texto">{p.texto_unidad}</p>
                   )}
-                  {p.productos_sugeridos?.length > 0 && (
-                    <div className="diagnostico-productos">
-                      {p.productos_sugeridos.map((prod, j) => (
-                        <span key={j} className="producto-chip">{prod.nombre}</span>
-                      ))}
-                    </div>
-                  )}
+                  <ProductosSugeridos productos={p.productos_sugeridos} alternativas={diagnostico?.alternativas_marca} />
                 </div>
               )
             })}

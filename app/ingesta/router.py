@@ -22,9 +22,11 @@ from app.ingesta.schemas import (
     IndicesBatchRequest,
     InspeccionGeotiffResponse,
     LoteDesdeGeotiffResponse,
+    VueloActualizadoResponse,
     VueloDesdeSateliteRequest,
     VueloListItem,
     VueloReintentoResponse,
+    VueloUpdate,
     VueloUploadResponse,
 )
 from app.ingesta.tiff_inspector import contar_bandas_geotiff
@@ -375,6 +377,39 @@ async def estado_vuelo(
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
     return estado
+
+
+@router.put(
+    "/{lote_id}/vuelos/{vuelo_id}",
+    response_model=VueloActualizadoResponse,
+    summary="Editar fecha, estadio fenológico o cultivo de un vuelo",
+)
+async def actualizar_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    data: VueloUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    vuelo, diagnostico_desactualizado = await service.actualizar_vuelo(db, vuelo, data)
+    await db.commit()
+    return VueloActualizadoResponse(
+        vuelo_id=vuelo.id,
+        lote_id=vuelo.lote_id,
+        fecha_vuelo=vuelo.fecha_vuelo,
+        estadio_fenologico=vuelo.estadio_fenologico,
+        cultivo_id=vuelo.cultivo_id,
+        cultivo=vuelo.cultivo,
+        diagnostico_desactualizado=diagnostico_desactualizado,
+    )
 
 
 @router.delete(

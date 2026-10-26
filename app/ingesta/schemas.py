@@ -49,6 +49,35 @@ class VueloListItem(BaseModel):
     mapeo_bandas: dict | None = None
 
 
+class VueloUpdate(BaseModel):
+    """Solo los datos que el usuario carga a mano; sensor y archivo no se editan
+    porque cambiarlos obligaría a reprocesar el GeoTIFF."""
+    fecha_vuelo: datetime | None = None
+    estadio_fenologico: str | None = Field(None, min_length=1, max_length=30)
+    cultivo_id: uuid.UUID | None = None
+
+    @field_validator("estadio_fenologico")
+    @classmethod
+    def estadio_sin_espacios(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("El estadio fenológico no puede estar vacío.")
+        return v
+
+
+class VueloActualizadoResponse(BaseModel):
+    vuelo_id: uuid.UUID
+    lote_id: uuid.UUID
+    fecha_vuelo: datetime
+    estadio_fenologico: str | None = None
+    cultivo_id: uuid.UUID | None = None
+    cultivo: CultivoResponse | None = None
+    # Cambiar cultivo o estadio no recalcula solo el diagnóstico ya guardado.
+    diagnostico_desactualizado: bool = False
+
+
 class VueloUploadResponse(BaseModel):
     vuelo_id: uuid.UUID
     lote_id: uuid.UUID

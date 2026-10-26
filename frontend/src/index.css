@@ -3037,7 +3037,7 @@ body {
 .progreso-pct { position: absolute; right: 0; top: -1.2rem; font-size: 0.72rem; color: #666; }
 .vuelo-mensaje { font-size: 0.78rem; color: #4b5563; }
 .vuelo-error   { font-size: 0.78rem; color: #b91c1c; }
-.vuelo-card-acciones { display: flex; justify-content: flex-end; }
+.vuelo-card-acciones { display: flex; justify-content: flex-end; align-items: center; gap: 0.4rem; }
 
 /* ── Resultados Vuelo ── */
 .resultados-main { flex: 1; display: grid; grid-template-columns: 1fr 340px; overflow: hidden; }
@@ -3246,6 +3246,16 @@ body {
   font-size: 0.72rem; background: #f0f4f0; color: #1a3a2a;
   padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid #d1d5db;
 }
+
+.producto-alternativas { flex-basis: 100%; }
+.producto-alternativas > summary { cursor: pointer; display: inline-block; list-style: none; }
+.producto-alternativas > summary::-webkit-details-marker { display: none; }
+.producto-alternativas-tabla { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.75rem; }
+.producto-alternativas-tabla th { text-align: left; color: #6b7280; font-weight: 600; padding: 0.2rem 0.4rem; border-bottom: 1px solid #d1d5db; }
+.producto-alternativas-tabla td { padding: 0.25rem 0.4rem; border-bottom: 1px solid #eef0ee; vertical-align: top; overflow-wrap: anywhere; color: #1f2937; }
+.producto-alternativas-tabla td:nth-child(n+3) { white-space: nowrap; }
+.producto-alternativas-tabla small { display: block; color: #6b7280; }
+.producto-alternativas-aviso { font-size: 0.72rem; color: #6b7280; margin-top: 0.3rem; }
 
 /* ── Toggle vista tabla/cards ── */
 .diagnostico-title-row {
