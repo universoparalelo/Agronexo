@@ -41,6 +41,7 @@
 | HU-R4-11 — ahorro comparativo entre campañas (variable vs. uniforme, precios de productos) | Completada |
 | HU-R4-09 — comparar dos vuelos del mismo lote (estadísticas) | Completada — parcial, ver detalle |
 | Fix: sidebar no marcaba "Diagnósticos" como activo en la vista de resultados | Completada |
+| Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada — tanda 2 (marcas/presentaciones) pendiente |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -153,7 +154,7 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
-- **Ningún producto del catálogo (`productos_fitosanitarios`) tiene `dosis_referencia` cargada** — las 21 filas sembradas en la migración 0015 (HU-R4-05 solo cargó precios y, en 0018, restricciones/seguridad) dejaron ese campo en `NULL`. Efecto real, verificado en vivo (ver tarea HU-R4-11 más abajo): con un lote y una zona de problema reales, la orden de trabajo calcula bien la cantidad "variable" tratada, pero **"Uniforme" y "Ahorro" en `/lotes/{id}/ahorro` quedan en `—`** porque no hay dosis con la que calcular cuánto se gastaría tratando todo el lote parejo — y lo mismo le pasa de antes al PDF de Orden de Trabajo (`volumen_total` sale siempre vacío en producción). No es un bug de HU-R4-11 ni de la Orden de Trabajo: es un hueco de datos del catálogo. Pendiente: cargar `dosis_referencia`/`unidad` real por producto (consultar al equipo agronómico o fuentes CASAFE/INTA, mismo criterio que usó HU-R4-05 para precios) en una migración de datos.
+- ~~**Ningún producto del catálogo (`productos_fitosanitarios`) tiene `dosis_referencia` cargada**~~ — **resuelto el 2026-10-26** con el importador del catálogo (ver tarea "Catálogo de fitosanitarios desde Excel — tanda 1" al final). Texto original: las 21 filas sembradas en la migración 0015 (HU-R4-05 solo cargó precios y, en 0018, restricciones/seguridad) dejaron ese campo en `NULL`. Efecto real, verificado en vivo (ver tarea HU-R4-11 más abajo): con un lote y una zona de problema reales, la orden de trabajo calcula bien la cantidad "variable" tratada, pero **"Uniforme" y "Ahorro" en `/lotes/{id}/ahorro` quedan en `—`** porque no hay dosis con la que calcular cuánto se gastaría tratando todo el lote parejo — y lo mismo le pasa de antes al PDF de Orden de Trabajo (`volumen_total` sale siempre vacío en producción). No es un bug de HU-R4-11 ni de la Orden de Trabajo: es un hueco de datos del catálogo. Pendiente: cargar `dosis_referencia`/`unidad` real por producto (consultar al equipo agronómico o fuentes CASAFE/INTA, mismo criterio que usó HU-R4-05 para precios) en una migración de datos.
 - **HU-R4-09 — falta el mapa de diferencia (criterio opcional, vale la diferencia entre 5 y 8 pts de la tarjeta):** reproyectar/remuestrear a una grilla común con rasterio los rasters de los dos vuelos comparados, restar (vuelo B − vuelo A) y vectorizar el resultado en zonas "mejoró/empeoró/igual", más el slider en el frontend. Requiere tarea de Celery nueva — no se encaró en esta pasada, que cubrió solo el criterio de estadísticas (diferencia de índice promedio y de superficie por severidad). **Actualización 2026-10-15:** se agregó "Cambio por zona" (mini-mapas por zona con Empeoró/No empeoró), que cubre una necesidad parecida con zonas vectorizadas existentes — no reemplaza este criterio, que pide el raster de diferencia real pixel a pixel.
 - **La curva de NDVI esperado por estadio (migración 0025, 2026-10-15) es un placeholder genérico, no agronómicamente validada** — reemplazar con valores reales o recalcular estadísticamente cuando haya suficientes vuelos cargados por cultivo/estadio. Ver tarea "Tendencia del índice" del 2026-10-15.
 - ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
@@ -699,3 +700,37 @@ Cada tarjeta de "Cambio por zona" solo tenía un espacio reservado vacío ("Sin 
 - **Tarjetas más grandes** (pedido explícito): `cambio-zona-grid` pasó de 420px a 540px de ancho mínimo (2 por fila en vez de 3) y la columna de diagnóstico pasó a ser más ancha que la de NDVI/área (`0.8fr`/`1.2fr`) para que el texto explicativo entre sin cortarse.
 
 **Verificación:** navegador real contra datos de desarrollo (lote "Nueva Prueba", vuelos V18→VT) — 3 zonas con "Sin problema" y una con "Moderada / Insecto" (con el texto completo + productos sugeridos) renderizan correctamente, sin errores de consola.
+
+---
+
+#### Catálogo de fitosanitarios desde Excel — tanda 1
+**Fecha:** 2026-10-26
+**Rama:** `feat/catalogo-fitosanitarios` (sin commitear todavía)
+
+Cierra el hueco de datos que dejaba "Uniforme" y "Ahorro" en `—` en `/lotes/{id}/ahorro` y el `volumen_total` vacío en la Orden de Trabajo en PDF: ningún producto tenía `dosis_referencia`. La fuente es la planilla completa de Drive (59 productos, todos con dosis y precio), bajada como `.xlsx` y guardada en `docs/catalogo_productos_fitosanitarios.xlsx` (reemplaza la copia vieja del repo, que tenía 6 dosis).
+
+**Qué se hizo:**
+- Migración `0026`: columna `productos_fitosanitarios.confiabilidad_dosis` (`marbete` | `web` | NULL), el origen de la dosis.
+- `app/catalogo/importador.py`: lee el Excel y actualiza dosis, unidad, confiabilidad y precio de referencia de las filas con Estado "Recomendado por el motor", emparejadas por nombre exacto. Sin `--aplicar` solo simula; es idempotente (segunda corrida: 21 sin cambios). Uso en el docstring del módulo.
+- Dependencia nueva `openpyxl==3.1.5` en `docker/requirements.api.txt`.
+- 26 casos de test nuevos en `tests/test_catalogo_importador.py` (lectura/validación sin BD; `aplicar()` contra la BD real dentro de una transacción que siempre se revierte).
+
+**Decisiones tomadas:**
+- **Solo los 21 productos del motor, sin cambiar el esquema de productos.** Las otras 38 filas ("Pendiente") son marcas/concentraciones de un mismo activo (ej. 6 filas de Glifosato) y la base asume un producto por nombre — esperan a la tanda 2 (tabla de presentaciones).
+- **Para los 21, manda el precio del Excel de Drive.** Pisó 5 precios que tenían fuente CASAFE/INTA (Glifosato 3.50→5.50, 2,4-D 3.80→4.95, Atrazina 5.20→6.50, Cletodim 15→6.90, Imazetapir 22→5.36). Los 16 restantes ya coincidían y conservan su fuente y fecha originales (el importador solo toca el precio si cambia). Los nuevos quedan con la fuente de la planilla (`camposimple.com.ar, 10/2026`, que es una tienda y no una fuente oficial).
+- **Atrazina pasó a precio por kg**, la unidad de su dosis (antes estaba por litro con dosis en kg/ha: el ahorro de ese producto salía falseado).
+- No se importan restricciones ambientales ni instrucciones de seguridad: ya vienen de las migraciones 0018/0019.
+- La confiabilidad se guarda pero **todavía no se muestra al usuario** (el aviso "dosis estimada, verificá el marbete" queda para después).
+
+**Error encontrado — el test del ahorro fijaba el precio de la migración**
+`tests/test_ahorro_api.py::test_ahorro_vuelo_variable_vs_uniforme` comparaba contra `5.2` (precio de Atrazina sembrado por la 0023). Tras importar el catálogo falló porque el precio ahora es 6.5. Se cambió para leer el precio de referencia de la BD en vez de fijarlo, así pasa en una base recién migrada y en una con el catálogo importado.
+
+**Error encontrado — el importador fallaba al armar los mappers**
+`InvalidRequestError: ... expression 'Usuario' failed to locate a name` al usar `ProductoFitosanitario` fuera de FastAPI. Nadie más importa `app.auth.models` ni `app.lotes.models` y SQLAlchemy no resuelve `Lote → Usuario`. El importador los importa solo para registrarlos.
+
+**Verificación:** simulación y luego `--aplicar` sobre la base de desarrollo (21 productos con dosis, 19 con confiabilidad `web`, 2 sin dato: Glifosato y Atrazina); segunda corrida sin cambios; con las dosis reales el cálculo de ahorro devuelve cantidad uniforme y ahorro (Glifosato, 100 ha vs 10 ha tratadas: 222 L vs 22,2 L, 90 %); 289 tests de la imagen `api` pasan (no se corrieron los 9 archivos que necesitan `rasterio`/worker).
+
+**Pendiente de la tanda 1:**
+- Correr el importador en producción cuando haya servidor (el Excel se copia al contenedor; ver docstring).
+- 19 de las 21 dosis son "habitual según WEB", no del marbete: conviene contrastarlas antes de mostrarlas como recomendación real. El Excel marca Imazetapir en 5,36 sin fuente clara (antes 22): confirmar con quien edita la planilla.
+- Tanda 2: tabla de marcas/presentaciones, 38 productos pendientes, alternativas con marca y precio en la recomendación, y ahorro sobre presentaciones.
