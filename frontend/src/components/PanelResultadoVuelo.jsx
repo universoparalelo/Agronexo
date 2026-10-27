@@ -24,7 +24,7 @@ export default function PanelResultadoVuelo({
     tab, setTab,
     diagnostico, diagnosticoLoading, diagnosticoError,
     ahorro, ahorroLoading, ahorroError, recargarAhorro,
-    generandoOrden,
+    generandoOrden, ordenError,
     previewPdf, cerrarPreviewPdf,
     handleGenerarOrdenTrabajo,
   } = useResultadoVuelo(loteId, vueloId, lote?.nombre)
@@ -39,6 +39,8 @@ export default function PanelResultadoVuelo({
   }, [zonas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const features = zonas?.features || []
+  // Se sabe que no hay nada para tratar solo cuando el diagnóstico ya se calculó; antes el botón queda habilitado.
+  const sinUnidadesDeManejo = !!diagnostico && !(diagnostico.unidades_manejo?.length > 0)
 
   const renderMapa = ({ clase = '', agrandar = true } = {}) => (
     <div className={`resultados-mapa ${clase}`.trim()}>
@@ -86,7 +88,28 @@ export default function PanelResultadoVuelo({
         >
           Ahorro comparativo
         </button>
+        {!loading && (
+          <button
+            type="button"
+            className="btn-orden-trabajo btn-orden-trabajo--destacado"
+            onClick={handleGenerarOrdenTrabajo}
+            disabled={generandoOrden || sinUnidadesDeManejo}
+            title={sinUnidadesDeManejo
+              ? 'No hay zonas para tratar: todas están dentro de rangos normales'
+              : 'Genera el PDF de orden de trabajo con las dosis por unidad de manejo'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 2h8l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+              <path d="M14 2v5h5" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+              <rect x="3" y="12" width="14" height="7" rx="1.5" fill="#b3261e"/>
+              <text x="10" y="17.6" textAnchor="middle" fontSize="5.6" fontWeight="700" fill="#fff" fontFamily="Arial, sans-serif">PDF</text>
+            </svg>
+            {generandoOrden ? 'Generando orden...' : 'Generar orden de trabajo'}
+          </button>
+        )}
       </div>
+
+      {ordenError && <p className="error-message">{ordenError}</p>}
 
       {tab === 'zonas' && !loading && (
         features.length > 0
@@ -129,8 +152,6 @@ export default function PanelResultadoVuelo({
           {diagnostico && (
             <TablaDiagnostico
               diagnostico={diagnostico}
-              onGenerarOrdenTrabajo={handleGenerarOrdenTrabajo}
-              generandoOrden={generandoOrden}
             />
           )}
         </>

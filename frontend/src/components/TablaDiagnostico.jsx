@@ -109,7 +109,7 @@ const CAUSA_LABELS = {
 }
 
 export default function TablaDiagnostico({
-  diagnostico, onGenerarOrdenTrabajo, generandoOrden,
+  diagnostico,
 }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
@@ -130,36 +130,15 @@ export default function TablaDiagnostico({
       <div className="diagnostico-title-row">
         <div className="seccion-encabezado">
           <h3 className="tabla-zonas-title">Diagnóstico por zona</h3>
-          {metadata && (
+          {metadata?.calculado_en && (
             <p className="seccion-sub">
-              {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
-              {metadata.lote_nombre && ' · '}
-              {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
-              {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
-              {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
-              {metadata.calculado_en && (
-                <span className="diagnostico-calculado-en">
-                  {' · '}calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                  })}
-                </span>
-              )}
-              {metadata.motor_version && ` · motor de reglas v${metadata.motor_version}`}
+              Calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+              })}
             </p>
           )}
         </div>
         <div className="diagnostico-title-row-controles">
-          {diagnostico?.unidades_manejo?.length > 0 && (
-            <button
-              type="button"
-              className="btn-recalcular-diagnostico"
-              onClick={onGenerarOrdenTrabajo}
-              disabled={generandoOrden}
-              title="Genera el PDF de orden de trabajo con las dosis por unidad de manejo"
-            >
-              {generandoOrden ? 'Generando orden...' : '📋 Generar orden de trabajo'}
-            </button>
-          )}
           <div className="diagnostico-vista-toggle">
             <button
               className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}

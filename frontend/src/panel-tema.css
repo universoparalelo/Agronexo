@@ -1310,3 +1310,23 @@
 .stats-table th { padding: 0.45rem 0.6rem; color: #4b5563; font-size: 0.75rem; letter-spacing: 0.03em; }
 .stats-table td { padding: 0.55rem 0.6rem; }
 .stats-zona-id { font-size: 0.82rem; }
+
+/* Botón "Generar orden de trabajo": en la fila de pestañas, a la derecha. */
+.resultados-tabs { flex-wrap: wrap; }
+.resultados-tabs .btn-orden-trabajo { margin-left: auto; margin-bottom: 0.35rem; }
+
+/* Botón destacado: siempre visible en la fila de pestañas; blanco con borde oscuro grueso y sombra. */
+.btn-orden-trabajo--destacado {
+  background: #fff; color: #12261a; border: 2px solid #6b7a70;
+  box-shadow: 0 2px 8px rgba(18, 38, 26, 0.14);
+}
+.btn-orden-trabajo--destacado:hover:not(:disabled) { background: #f0f4f0; border-color: #3f5246; }
+.btn-orden-trabajo--destacado:disabled { background: #f3f4f6; border-color: #d1d5db; color: #9ca3af; box-shadow: none; }
+
+/* El panel de la derecha reserva siempre el lugar de la barra de scroll: al abrir una pestaña con mucho contenido
+   (Diagnóstico) la barra aparece sin quitarle ancho al contenido ni correr nada. */
+.resultados-shell--fija .resultados-main--dividida .resultados-sidebar { scrollbar-gutter: stable; }
+
+/* Resultados: las etiquetas de los índices usados van a continuación de R3, juntas entre sí y con el borde un poco más oscuro. */
+.indices-usados { display: inline-flex; flex-wrap: wrap; gap: 0.2rem; }
+.indices-usados .vuelo-estadio-tag { border: 1px solid #9cb99f; }

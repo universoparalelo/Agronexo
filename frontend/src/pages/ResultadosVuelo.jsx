@@ -129,6 +129,12 @@ export default function ResultadosVuelo() {
                 </span>
                 <span>{SENSOR_LABELS[vueloPrincipal.sensor] || vueloPrincipal.sensor}</span>
                 {lote?.area_ha ? <span>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha</span> : null}
+                {vueloPrincipal.estadio_fenologico && <span className="vuelo-estadio-tag" title="Estadio fenológico">{vueloPrincipal.estadio_fenologico}</span>}
+                <span className="indices-usados">
+                  {(vueloPrincipal.indices || []).filter((i) => i.estado === 'completado').map((i) => (
+                    <span key={i.indice} className="vuelo-estadio-tag" title="Índice usado en el diagnóstico">{i.indice.toUpperCase()}</span>
+                  ))}
+                </span>
               </div>
             )}
           </div>

@@ -26,6 +26,21 @@ const SENSOR_LABELS = {
   dji_mavic3: 'DJI Mavic 3',
 }
 
+function EstadoVuelo({ vuelo, estadoStr }) {
+  const n = vuelo.zonas_atencion
+  if (estadoStr === 'completado' && n != null) {
+    return n > 0
+      ? <span className="estado-badge estado-atencion">{n} zona{n === 1 ? '' : 's'} requiere{n === 1 ? '' : 'n'} atención</span>
+      : <span className="estado-badge estado-completado">Sin problemas</span>
+  }
+  return (
+    <span className={`estado-badge estado-${estadoStr}`}>
+      {estadoStr === 'procesando' && <span className="estado-spinner" />}
+      {ESTADO_LABELS[estadoStr] || estadoStr}
+    </span>
+  )
+}
+
 function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar }) {
   const estadoStr = estadoActual.estado || vuelo.estado
   const progreso = estadoActual.progreso ?? null
@@ -45,10 +60,7 @@ function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
       </div>
 
       <div className="vuelo-card-estado">
-        <span className={`estado-badge estado-${estadoStr}`}>
-          {estadoStr === 'procesando' && <span className="estado-spinner" />}
-          {ESTADO_LABELS[estadoStr] || estadoStr}
-        </span>
+        <EstadoVuelo vuelo={vuelo} estadoStr={estadoStr} />
 
         {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
           <div className="progreso-bar-wrapper">
@@ -100,10 +112,7 @@ function VueloFila({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
       <td>{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</td>
       <td>{vuelo.estadio_fenologico ? <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span> : '—'}</td>
       <td>
-        <span className={`estado-badge estado-${estadoStr}`}>
-          {estadoStr === 'procesando' && <span className="estado-spinner" />}
-          {ESTADO_LABELS[estadoStr] || estadoStr}
-        </span>
+        <EstadoVuelo vuelo={vuelo} estadoStr={estadoStr} />
         {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
           <div className="progreso-bar-wrapper">
             <div className="progreso-bar" style={{ width: `${progreso}%` }} />

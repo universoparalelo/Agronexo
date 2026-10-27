@@ -41,6 +41,8 @@ class VueloListItem(BaseModel):
     cultivo_id: uuid.UUID | None = None
     cultivo: CultivoResponse | None = None
     indices: list[IndiceAnalisisItem] = []
+    # None = el vuelo todavía no tiene diagnóstico guardado (se genera al abrirlo).
+    zonas_atencion: int | None = None
     # Trazabilidad (HU-R4-02): metodo_umbral y mapeo_bandas quedan en None
     # hasta que el worker termina de procesar (ver Vuelo.mapeo_bandas).
     archivo_original: str | None = None
