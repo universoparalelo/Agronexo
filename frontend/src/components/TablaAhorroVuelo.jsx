@@ -3,6 +3,11 @@ function fmtNum(valor, decimales = 2) {
   return valor.toLocaleString('es-AR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales })
 }
 
+// La dosis viene por hectárea ("L/ha"); las cantidades totales van sin "/ha".
+function unidadTotal(unidadDosis) {
+  return (unidadDosis ?? '').split('/')[0]
+}
+
 function fmtUsd(valor) {
   return valor == null ? '—' : `US$ ${fmtNum(valor, 2)}`
 }
@@ -67,9 +72,9 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
               {productos.map((p) => (
                 <tr key={p.producto}>
                   <td>{p.producto}</td>
-                  <td>{fmtNum(p.cantidad_variable)} {p.unidad_dosis}</td>
-                  <td>{p.cantidad_uniforme == null ? '—' : `${fmtNum(p.cantidad_uniforme)} ${p.unidad_dosis ?? ''}`}</td>
-                  <td>{fmtNum(p.ahorro_cantidad)}</td>
+                  <td>{fmtNum(p.cantidad_variable)} {unidadTotal(p.unidad_dosis)}</td>
+                  <td>{p.cantidad_uniforme == null ? '—' : `${fmtNum(p.cantidad_uniforme)} ${unidadTotal(p.unidad_dosis)}`}</td>
+                  <td>{p.ahorro_cantidad == null ? '—' : `${fmtNum(p.ahorro_cantidad)} ${unidadTotal(p.unidad_dosis)}`}</td>
                   <td>{p.ahorro_pct != null ? `${fmtNum(p.ahorro_pct, 0)}%` : '—'}</td>
                   <td>
                     {p.ahorro_pesos != null
