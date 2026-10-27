@@ -11,6 +11,7 @@ import ModalEditarLote from '../components/ModalEditarLote'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import { irAlUltimoDiagnostico } from '../utils/diagnosticos'
 
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
@@ -145,7 +146,7 @@ export default function Lotes() {
 
   function handleVerDiagnosticos() {
     if (lotesTodos.length === 1) {
-      navigate(`/lotes/${lotesTodos[0].id}`)
+      irAlUltimoDiagnostico(navigate, lotesTodos[0].id)
       return
     }
     setShowModalElegirLote(true)
@@ -187,7 +188,7 @@ export default function Lotes() {
       {showModalElegirLote && (
         <ModalElegirLote
           lotes={lotesTodos}
-          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onElegir={(loteId) => { setShowModalElegirLote(false); irAlUltimoDiagnostico(navigate, loteId) }}
           onClose={() => setShowModalElegirLote(false)}
         />
       )}

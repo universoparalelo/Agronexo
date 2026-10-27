@@ -15,11 +15,16 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
   return (
     <div className="ahorro-vuelo">
       <div className="seccion-encabezado">
-        <h3 className="tabla-zonas-title">Ahorro por aplicación selectiva</h3>
-        <p className="seccion-sub">
-          Cuánto producto y cuánto dinero se ahorra aplicando solo donde hace falta, según nuestra orden de trabajo,
-          en lugar de aplicarlo en todo el lote.
-        </p>
+        <h3 className="tabla-zonas-title titulo-con-ayuda">
+          Ahorro por aplicación selectiva
+          <span className="ayuda-tip">
+            <button type="button" className="ayuda-tip-boton" aria-label="¿Qué es el ahorro por aplicación selectiva?">i</button>
+            <span role="tooltip" className="ayuda-tip-caja">
+              Cuánto producto y cuánto dinero se ahorra aplicando solo donde hace falta, según nuestra orden de trabajo,
+              en lugar de aplicarlo en todo el lote.
+            </span>
+          </span>
+        </h3>
       </div>
 
       {productos.length === 0 ? (

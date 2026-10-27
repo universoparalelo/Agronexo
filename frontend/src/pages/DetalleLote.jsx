@@ -13,7 +13,6 @@ import ModalEditarVuelo from '../components/ModalEditarVuelo'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import { TIPOS_SUELO } from '../utils/suelos'
-
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
   procesando: 'Procesando',
@@ -107,7 +106,12 @@ function VueloFila({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
   return (
     <tr>
       <td className="tabla-vuelos-fecha">
-        {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+        {(() => {
+          const fecha = new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+          return vuelo.estado === 'completado'
+            ? <button type="button" className="tabla-vuelos-fecha-link" onClick={onVerResultados}>{fecha}</button>
+            : fecha
+        })()}
       </td>
       <td>{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</td>
       <td>{vuelo.estadio_fenologico ? <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span> : '—'}</td>
@@ -376,7 +380,6 @@ export default function DetalleLote() {
   return (
     <PanelLayout
       migas={[{ label: 'Lotes', to: '/lotes' }, { label: lote.nombre }]}
-      onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
       <main className={`detalle-main ${vista === 'calendario' ? 'detalle-main--calendario' : ''}`}>
         {cabecera}

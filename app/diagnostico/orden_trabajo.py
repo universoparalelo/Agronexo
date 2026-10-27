@@ -51,6 +51,7 @@ def generar_orden_trabajo(
             "severidad": props.get("severidad"),
             "area_ha": area_ha,
             "zona_ids": props.get("zona_ids", []),
+            "como_confirmar_campo": props.get("como_confirmar_campo", ""),
             "producto": nombre_producto,
             "dosis_por_ha": dosis_referencia,
             "unidad_dosis": unidad_dosis,

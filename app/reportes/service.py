@@ -130,6 +130,7 @@ def _zona_a_contexto(props: dict) -> dict:
         "sin_problema": props.get("regla_id") == "R99",
         "texto_explicativo": props.get("texto_explicativo", ""),
         "accion_recomendada": props.get("accion_recomendada", ""),
+        "como_confirmar_campo": props.get("como_confirmar_campo", ""),
         "productos_texto": ", ".join(p["nombre"] for p in productos[:3]) if productos else "",
     }
 

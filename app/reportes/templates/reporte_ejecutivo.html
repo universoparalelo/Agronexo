@@ -197,6 +197,9 @@
       {% if zona.accion_recomendada %}
       <p><strong>Acción recomendada:</strong> {{ zona.accion_recomendada }}</p>
       {% endif %}
+      {% if zona.como_confirmar_campo %}
+      <p><strong>Cómo confirmar en campo:</strong> {{ zona.como_confirmar_campo }}</p>
+      {% endif %}
       {% if zona.productos_texto %}
       <p class="productos"><strong>Productos sugeridos:</strong> {{ zona.productos_texto }}</p>
       {% endif %}

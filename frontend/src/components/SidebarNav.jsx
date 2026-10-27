@@ -56,7 +56,7 @@ export default function SidebarNav({ user, onVerDiagnosticos, plegable = false }
     {
       label: 'RESULTADOS',
       items: [
-        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', onClick: () => onVerDiagnosticos?.() },
+        { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', onClick: onVerDiagnosticos, bloqueado: !onVerDiagnosticos },
         { id: 'informes',    icon: <IconInformes />,    label: 'Informes',     proximamente: true },
       ],
     },
@@ -109,13 +109,13 @@ export default function SidebarNav({ user, onVerDiagnosticos, plegable = false }
         {sections.map(({ label, items }) => (
           <div key={label} className="sidebar-section">
             <span className="sidebar-section-label">{label}</span>
-            {items.map(({ id, icon, label: itemLabel, onClick, proximamente }) => (
+            {items.map(({ id, icon, label: itemLabel, onClick, proximamente, bloqueado }) => (
               <button
                 key={id}
-                className={`sidebar-link${activeId === id ? ' sidebar-link--active' : ''}${proximamente ? ' sidebar-link--disabled' : ''}`}
-                onClick={proximamente ? undefined : onClick}
-                disabled={proximamente}
-                title={proximamente ? `${itemLabel} — Próximamente` : itemLabel}
+                className={`sidebar-link${activeId === id ? ' sidebar-link--active' : ''}${proximamente || bloqueado ? ' sidebar-link--disabled' : ''}`}
+                onClick={proximamente || bloqueado ? undefined : onClick}
+                disabled={proximamente || bloqueado}
+                title={proximamente ? `${itemLabel} — Próximamente` : bloqueado ? 'Ya estás dentro de un lote' : itemLabel}
               >
                 <span className="sidebar-link-icon">{icon}</span>
                 <span className="sidebar-link-label">{itemLabel}</span>

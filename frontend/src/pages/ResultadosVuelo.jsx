@@ -110,7 +110,6 @@ export default function ResultadosVuelo() {
         { label: lote?.nombre ?? 'Lote', to: `/lotes/${loteId}` },
         { label: 'Resultados' },
       ]}
-      onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
       <div className={`resultados-shell${!vueloComparacionId ? ' resultados-shell--fija' : ''}`}>
         <div className="detalle-cabecera">

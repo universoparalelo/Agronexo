@@ -40,14 +40,14 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   }, [loteId, vueloId])
 
   useEffect(() => {
-    if (!loteId || !vueloId || tab !== 'diagnostico' || diagnostico || diagnosticoLoading) return
+    if (!loteId || !vueloId || diagnostico || diagnosticoLoading || diagnosticoError) return
     setDiagnosticoLoading(true)
     setDiagnosticoError('')
     obtenerDiagnostico(loteId, vueloId)
       .then(setDiagnostico)
       .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
       .finally(() => setDiagnosticoLoading(false))
-  }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
+  }, [loteId, vueloId, diagnostico, diagnosticoLoading, diagnosticoError])
 
   // El ahorro sale del diagnóstico: se pide al abrir la pestaña y se vuelve a pedir si se recalcula.
   useEffect(() => {

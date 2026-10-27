@@ -3468,6 +3468,23 @@ body {
   overflow-wrap: break-word;
 }
 
+.unidad-card-cuerpo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.unidad-card-cuerpo .unidad-card-causa { margin-top: 0; font-size: 0.9rem; }
+.unidad-card-cuerpo .unidad-card-meta { margin-bottom: 0.2rem; }
+.unidad-card-area {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #12261a;
+  white-space: nowrap;
+}
+.unidad-card .producto-alternativas:not([open]) { flex-basis: auto; }
+
 /* Diagnostico loading spinner */
 .diagnostico-loading {
   display: flex;

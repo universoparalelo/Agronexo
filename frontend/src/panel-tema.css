@@ -1302,6 +1302,14 @@
 .seccion-sub { font-size: 0.8rem; color: #6b7280; line-height: 1.45; margin: 0; }
 .seccion-sub strong { color: #374151; }
 .diagnostico-header-info { margin-top: 0; }
+.diagnostico-resumen--corto { margin: 0.9rem 0 0; }
+.resumen-atencion { color: #b91c1c; }
+.tabla-vuelos-fecha-link {
+  padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left;
+}
+.tabla-vuelos-fecha-link:hover { text-decoration: underline; }
+.titulo-con-ayuda { display: flex; align-items: center; gap: 0.45rem; }
+.titulo-con-ayuda .ayuda-tip-caja { font-size: 0.78rem; font-weight: 400; }
 .diagnostico-title-row { align-items: flex-start; }
 
 /* La tabla del diagnóstico toma el mismo estilo que la de zonas y la de ahorro */

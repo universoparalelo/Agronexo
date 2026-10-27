@@ -4,6 +4,7 @@ import { etiquetaTipoCultivo } from '../utils/cultivos'
 import MapaZonas from './MapaZonas'
 import TablaZonas from './TablaZonas'
 import TablaDiagnostico from './TablaDiagnostico'
+import ResumenDiagnostico from './ResumenDiagnostico'
 import TablaAhorroVuelo from './TablaAhorroVuelo'
 import ModalCargarPrecio from './ModalCargarPrecio'
 import ModalPreviewPdf from './ModalPreviewPdf'
@@ -115,6 +116,7 @@ export default function PanelResultadoVuelo({
         features.length > 0
           ? <>
               <TablaZonas features={features} />
+              <ResumenDiagnostico diagnostico={diagnostico} />
               <button className="link-diagnostico" onClick={() => setTab('diagnostico')}>
                 Ver diagnóstico agronómico →
               </button>

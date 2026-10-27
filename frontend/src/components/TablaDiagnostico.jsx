@@ -158,14 +158,6 @@ export default function TablaDiagnostico({
         </div>
       </div>
 
-      {metadata && (
-        <div className="diagnostico-header-info">
-          {metadata.resumen_general && (
-            <p className="diagnostico-resumen">{metadata.resumen_general}</p>
-          )}
-        </div>
-      )}
-
       {vista === 'tabla' && (
         <div className="stats-table-wrap">
           <table className="stats-table">
@@ -268,8 +260,15 @@ export default function TablaDiagnostico({
       {diagnostico?.unidades_manejo?.length > 0 && (
         <div className="unidades-manejo-section">
           <div className="seccion-encabezado">
-            <h3 className="tabla-zonas-title">Unidades de manejo</h3>
-            <p className="seccion-sub">Zonas agrupadas por causa y severidad para prescripción diferenciada.</p>
+            <h3 className="tabla-zonas-title titulo-con-ayuda">
+              Unidades de manejo
+              <span className="ayuda-tip">
+                <button type="button" className="ayuda-tip-boton" aria-label="¿Qué son las unidades de manejo?">i</button>
+                <span role="tooltip" className="ayuda-tip-caja">
+                  Zonas agrupadas por causa y severidad para prescripción diferenciada.
+                </span>
+              </span>
+            </h3>
           </div>
           <div className="unidades-manejo-lista">
             {diagnostico.unidades_manejo.map((u) => {
@@ -282,20 +281,23 @@ export default function TablaDiagnostico({
                       {SEVERIDAD_LABELS[p.severidad] || p.severidad}
                     </span>
                   </div>
-                  <div className="unidad-card-meta">
-                    <span>{p.area_total_ha} ha</span>
-                    <span>·</span>
-                    <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
-                    {p.ndvi_promedio != null && (
-                      <>
-                        <span>·</span>
-                        <span>NDVI: {p.ndvi_promedio.toFixed(3)}</span>
-                      </>
-                    )}
+                  <div className="unidad-card-cuerpo">
+                    <div>
+                      <p className="unidad-card-causa">{p.regla_nombre}</p>
+                      <div className="unidad-card-meta">
+                        <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
+                        {p.ndvi_promedio != null && (
+                          <>
+                            <span>·</span>
+                            <span>NDVI {p.ndvi_promedio.toFixed(3)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className="unidad-card-area">{Number(p.area_total_ha).toFixed(1).replace('.', ',')} ha</span>
                   </div>
-                  <p className="unidad-card-causa">{p.regla_nombre}</p>
-                  {p.texto_unidad && (
-                    <p className="unidad-card-texto">{p.texto_unidad}</p>
+                  {p.accion_recomendada && (
+                    <p className="unidad-card-texto">{p.accion_recomendada.split('. ')[0].replace(/\.$/, '')}.</p>
                   )}
                   <ProductosSugeridos productos={p.productos_sugeridos} alternativas={diagnostico?.alternativas_marca} />
                 </div>
