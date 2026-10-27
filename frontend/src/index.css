@@ -2815,7 +2815,9 @@ body {
 
 .vuelos-calendario-lista ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 
-.vuelos-calendario-item-fila { display: flex; align-items: center; gap: 0.3rem; }
+.vuelos-calendario-item-fila { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.vuelos-calendario-item-row { display: flex; align-items: center; gap: 0.3rem; }
 
 .vuelos-calendario-item {
   flex: 1;
@@ -2882,6 +2884,135 @@ body {
 
 .vuelos-calendario-item-menu-lista button:hover { background: #f0f5ec; color: #27500a; }
 
+.vuelos-calendario-item-resumen-boton {
+  flex-shrink: 0;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #27500a;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.vuelos-calendario-item-resumen-boton:hover { background: #f0f5ec; }
+
+/* Resumen por vuelo en el historial (HU-R4-07) */
+.resumen-vuelo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbf8;
+}
+
+.resumen-vuelo--cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.resumen-vuelo-error { margin: 0; }
+
+.resumen-vuelo-indice-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1a3a2a;
+  margin-bottom: 0.4rem;
+}
+
+.resumen-vuelo-indice-recomendado {
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: #6b7280;
+  cursor: help;
+}
+
+.resumen-vuelo-rango-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #ef4444, #eab308, #4ade80, #16a34a);
+  opacity: 0.35;
+}
+
+.resumen-vuelo-rango-relleno {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  background: rgba(26, 58, 42, 0.25);
+}
+
+.resumen-vuelo-rango-marca {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: #1a3a2a;
+  transform: translateX(-1px);
+}
+
+.resumen-vuelo-rango-numeros {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  color: #4b5563;
+}
+
+.resumen-vuelo-severidad-titulo { display: block; font-size: 0.78rem; font-weight: 700; color: #1a3a2a; margin-bottom: 0.4rem; }
+
+.resumen-vuelo-severidad-barra {
+  display: flex;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.resumen-vuelo-severidad-tramo { height: 100%; }
+
+.resumen-vuelo-severidad-leyenda {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.7rem;
+  color: #374151;
+}
+
+.resumen-vuelo-severidad-leyenda li { display: flex; align-items: center; gap: 0.3rem; }
+
+.resumen-vuelo-severidad-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.resumen-vuelo-acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.resumen-vuelo-acciones button {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #1a3a2a;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+
+.resumen-vuelo-acciones button:hover:not(:disabled) { background: #f0f5ec; border-color: #27500a; }
+.resumen-vuelo-acciones button:disabled { cursor: not-allowed; opacity: 0.55; }
+
 .mapa-dibujo-wrapper {
   position: relative;
 }
@@ -2941,6 +3072,73 @@ body {
 }
 
 .detalle-main--calendario { max-width: 1120px; }
+
+.grafico-evolucion {
+  padding: 1rem 1.1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.grafico-evolucion--cargando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.grafico-evolucion-svg { width: 100%; height: auto; display: block; margin-top: 0.4rem; }
+
+.td-fecha-subido { font-size: 0.7rem; color: #9ca3af; margin-top: 2px; }
+
+/* Criterio técnico (RFDR-04) y motor probabilístico por zona */
+.diagnostico-revisadas { font-size: 0.75rem; color: #6b7280; margin: 0.3rem 0 0; }
+.revision-badge { display: inline-flex; width: 1.4rem; height: 1.4rem; align-items: center; justify-content: center; border-radius: 50%; font-size: 0.75rem; font-weight: 700; }
+.revision-badge--aceptado { background: #dcfce7; color: #15803d; }
+.revision-badge--modificado { background: #fef3c7; color: #b45309; }
+.revision-badge--rechazado { background: #fee2e2; color: #b91c1c; }
+
+.revision-zona { margin-top: 0.6rem; padding: 0.5rem 0.65rem; border: 1px dashed #d1d5db; border-radius: 6px; font-size: 0.78rem; color: #374151; }
+.revision-zona--aceptado { border-style: solid; border-color: #86efac; background: #f0fdf4; }
+.revision-zona--modificado { border-style: solid; border-color: #fcd34d; background: #fffbeb; }
+.revision-zona--rechazado { border-style: solid; border-color: #fca5a5; background: #fef2f2; }
+.revision-zona-titulo { font-weight: 600; color: #1a3a2a; }
+.revision-zona-comentario { margin: 0.3rem 0 0; font-style: italic; color: #4b5563; }
+.revision-zona-acciones { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+.revision-btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; border: 1px solid #d1d5db; border-radius: 5px; background: #fff; cursor: pointer; color: #374151; }
+.revision-btn:hover:not(:disabled) { background: #f3f4f6; }
+.revision-btn:disabled { opacity: 0.6; cursor: wait; }
+.revision-btn--ok { border-color: #16a34a; color: #15803d; }
+.revision-btn--activo { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
+.revision-zona-form { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
+.revision-zona-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.72rem; color: #6b7280; }
+.revision-zona-form select, .revision-zona-form textarea { font: inherit; font-size: 0.78rem; padding: 0.3rem; border: 1px solid #d1d5db; border-radius: 5px; color: #1f2937; }
+.revision-zona-error { color: #b91c1c; margin: 0.3rem 0 0; }
+
+.bayes-zona { margin-top: 0.6rem; padding: 0.5rem 0.65rem; border-radius: 6px; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.75rem; }
+.bayes-zona-header { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.bayes-zona-titulo { font-weight: 600; color: #334155; }
+.bayes-zona-titulo em { font-weight: 400; color: #94a3b8; }
+.bayes-zona-certeza { color: #475569; }
+.bayes-zona--alta .bayes-zona-certeza { color: #15803d; }
+.bayes-zona--ambigua .bayes-zona-certeza { color: #b45309; }
+.bayes-zona-fila { display: grid; grid-template-columns: minmax(0, 1fr) 5rem 2.5rem; align-items: center; gap: 0.5rem; margin: 0.15rem 0; }
+.bayes-zona-causa { color: #334155; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bayes-zona-barra { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+.bayes-zona-barra span { display: block; height: 100%; background: #3b82f6; }
+.bayes-zona-pct { text-align: right; color: #475569; font-variant-numeric: tabular-nums; }
+.bayes-zona-nota { margin: 0.35rem 0 0; color: #b45309; }
+
+.grafico-evolucion-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.grafico-evolucion-toggle { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: #374151; cursor: pointer; }
+.grafico-evolucion-toggle--off { color: #9ca3af; cursor: not-allowed; }
+.grafico-evolucion-explicacion { margin-top: 0.6rem; padding: 0.6rem 0.8rem; background: #f8faf8; border-left: 3px solid #27500a; border-radius: 4px; }
+.grafico-evolucion-explicacion h4 { margin: 0 0 0.3rem; font-size: 0.8rem; color: #1a3a2a; }
+.grafico-evolucion-explicacion p { margin: 0.2rem 0; font-size: 0.8rem; color: #374151; line-height: 1.45; }
+
+.grafico-evolucion-punto { cursor: pointer; }
+.grafico-evolucion-punto:hover { r: 6; }
 
 .vuelos-header-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 
@@ -3240,7 +3438,7 @@ body {
 .diagnostico-accion { font-size: 0.82rem; color: #1a1a1a; margin: 0.4rem 0; line-height: 1.4; overflow-wrap: break-word; }
 .diagnostico-confirmar { font-size: 0.8rem; margin: 0.4rem 0; }
 .diagnostico-confirmar summary { cursor: pointer; color: #1a3a2a; font-weight: 600; }
-.diagnostico-confirmar p { margin-top: 0.35rem; color: #4b5563; line-height: 1.4; overflow-wrap: break-word; }
+.diagnostico-confirmar p { margin-top: 0.35rem; color: #4b5563; line-height: 1.4; overflow-wrap: break-word; white-space: pre-line; }
 
 .diagnostico-productos { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
 .producto-chip {
@@ -3264,13 +3462,30 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
+/* En el panel lateral angosto los botones no entraban en una fila y el
+   toggle tabla/detalle quedaba fuera de la vista. */
 .diagnostico-title-row-controles {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
 }
+
+.stats-row--clickable { cursor: pointer; }
+.stats-row--clickable:hover td { background: #f0f7f0; }
+.diagnostico-card { scroll-margin-top: 1rem; }
+.diagnostico-card--destacada { box-shadow: 0 0 0 2px #27500a; }
+
+.como-confirmar { margin: 0.6rem 0; padding: 0.55rem 0.7rem; background: #f0f9ff; border-left: 3px solid #0ea5e9; border-radius: 4px; font-size: 0.8rem; color: #1f2937; }
+.como-confirmar--ok { background: #f8faf8; border-left-color: #86efac; }
+.como-confirmar-titulo { display: block; font-weight: 700; color: #0c4a6e; margin-bottom: 0.3rem; }
+.como-confirmar--ok .como-confirmar-titulo { color: #1a3a2a; }
+.como-confirmar ol { margin: 0; padding-left: 1.2rem; }
+.como-confirmar li { margin: 0.25rem 0; line-height: 1.45; overflow-wrap: break-word; }
+.como-confirmar p { margin: 0; line-height: 1.45; }
 
 .diagnostico-vista-toggle {
   display: flex;

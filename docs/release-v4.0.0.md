@@ -37,10 +37,17 @@
 | Fix: bump coordinado `vite` 6→8 + `@vitejs/plugin-react` 4→6 (PRs Dependabot #69 + #41) | Completada |
 | Fix: bump `geoalchemy2` 0.15.2 → 0.20.0 (regresión de `sqlalchemy` 2.1 ya en `main`) | Completada |
 | Fix: bump `python-jose` 3.3.0 → 3.5.0 + `pillow` 10.4.0 → 12.3.0 (hallazgos SCA) | Completada |
+| HU-R4-07 — resumen por vuelo en el historial (índice + severidad + enlaces) | Completada |
 | HU-R4-12 — preferencias de uso (índice preferido, unidad de área, producto habitual) | Completada |
 | HU-R4-11 — ahorro comparativo entre campañas (variable vs. uniforme, precios de productos) | Completada |
 | HU-R4-09 — comparar dos vuelos del mismo lote (estadísticas) | Completada — parcial, ver detalle |
 | Fix: sidebar no marcaba "Diagnósticos" como activo en la vista de resultados | Completada |
+| Reporte PDF: resumen ejecutivo no técnico + "Cómo confirmar en campo" + paridad con Diagnóstico | Completada |
+| Gráfico de evolución NDVI por fecha de vuelo con NDVI esperado superpuesto y explicación | Completada |
+| Fix: "Análisis Recientes" muestra la fecha real del vuelo (la de carga pasa a segundo plano) | Completada |
+| Motor de reglas v1.1.0: umbrales relativos al estadio + reglas inalcanzables corregidas | Completada |
+| RFDR-04 — criterio técnico del agrónomo por zona (aceptar/modificar/rechazar) | Completada |
+| Motor probabilístico (Naive Bayes) experimental en paralelo a las reglas | Completada — tablas a validar |
 | Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada |
 | Catálogo de fitosanitarios — tanda 2: tabla de presentaciones (marcas/concentraciones) | Completada — parcial, ver detalle |
 
@@ -154,6 +161,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - ~~Upgrade coordinado de `rasterio`/`gdal`~~ — **resuelto**, ver tarea más abajo (incluyó un segundo breakage no previsto: `pydantic` sin wheel para el Python 3.14 que trae la imagen nueva).
 - **Upgrade coordinado de `rasterio`/`gdal`** (PR de Dependabot #21) — el bump de la imagen base `osgeo/gdal` rompe el build del worker: `rasterio==1.3.11` (2023) falla al compilar contra el Python 3.14 que trae la imagen nueva (`ModuleNotFoundError: No module named 'pkg_resources'`, un problema del build backend de esa versión vieja de rasterio, no de GDAL en sí). Arreglarlo de verdad implica bumpear `rasterio` también, lo que toca todo el pipeline de índices/vectorización — tarea aparte con testeo real, no un cambio aislado.
 - **Triage de las ~20 PRs de Dependabot acumuladas (2026-10-04/08):** la mayoría (setup-node, setup-python, checkout, gitleaks-action, jinja2, leaflet-geoman-free, rasterio→1.5.1, minio, email-validator, geopandas, asyncpg, celery, vitest→5) tienen CI verde (salvo el ruido ya aceptado de pip-audit/npm-audit) y quedan pendientes de que el equipo las mergee desde GitHub — Claude Code tiene bloqueado `gh pr merge` incluso pedido explícitamente. De las rotas de verdad: **sqlalchemy/greenlet ya resuelto** (ver tarea arriba). Quedan: `bcrypt` 5.0 (rompe `passlib==1.7.4`, `ValueError: password cannot be longer than 72 bytes` al hashear — necesita decisión de alcance, no es un fix de una línea), `vite`→8 + `@vitejs/plugin-react`→6.1.1 (necesitan bumpearse juntos, cada uno solo rompe por peer dependency cruzada, mismo patrón que el bump de React del Sprint 14), y `osgeo/gdal`→3.13.3 (debería andar solo si se mergea primero `rasterio`→1.5.1, que ya viene con CI verde en su propia PR).
+- **Validación agronómica del motor (2026-10-23):** (1) las tablas expertas de `app/diagnostico/bayes.py` (priors por fase y verosimilitudes) son un borrador sin revisar; (2) la curva `ndvi_esperado_estadio` (0025) sigue siendo genérica y ahora define qué es "NDVI bajo" en las reglas, así que sus errores pasan a ser falsos positivos o negativos del diagnóstico. Las dos cosas las tiene que revisar un agrónomo.
+- **R00 (copa de árbol / obstáculo) inalcanzable:** pide zonas < 0.05 ha y el worker descarta las < 1 ha (`workers/gis/zonas.py::AREA_MINIMA_M2`). Para que funcione hay que bajar el área mínima, lo que cambia la fragmentación de todas las zonas y requiere probarlo con ortomosaicos reales.
 - **SQLAlchemy 2.1 deprecó pasar una expresión a `.distinct()`** para `DISTINCT ON` (`app/lotes/service.py::listar_lotes`, de HU-R4-03) — sugiere migrar a `postgresql.distinct_on()`. Sigue funcionando (solo warning), sin apuro.
 - ~~**Ningún producto del catálogo (`productos_fitosanitarios`) tiene `dosis_referencia` cargada**~~ — **resuelto el 2026-10-26** con el importador del catálogo (ver tarea "Catálogo de fitosanitarios desde Excel — tanda 1" al final). Texto original: las 21 filas sembradas en la migración 0015 (HU-R4-05 solo cargó precios y, en 0018, restricciones/seguridad) dejaron ese campo en `NULL`. Efecto real, verificado en vivo (ver tarea HU-R4-11 más abajo): con un lote y una zona de problema reales, la orden de trabajo calcula bien la cantidad "variable" tratada, pero **"Uniforme" y "Ahorro" en `/lotes/{id}/ahorro` quedan en `—`** porque no hay dosis con la que calcular cuánto se gastaría tratando todo el lote parejo — y lo mismo le pasa de antes al PDF de Orden de Trabajo (`volumen_total` sale siempre vacío en producción). No es un bug de HU-R4-11 ni de la Orden de Trabajo: es un hueco de datos del catálogo. Pendiente: cargar `dosis_referencia`/`unidad` real por producto (consultar al equipo agronómico o fuentes CASAFE/INTA, mismo criterio que usó HU-R4-05 para precios) en una migración de datos.
 - **Hallazgos de seguridad vistos en el PR #120 (2026-10-27), todos preexistentes en `main` y no causados por ese PR** (ningún archivo de dependencias ni de migraciones cambió). Los tres jobs son `continue-on-error: true`, así que avisan pero no deberían bloquear el merge, aunque el PR los muestra en rojo:
@@ -166,6 +175,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - **La curva de NDVI esperado por estadio (migración 0025, 2026-10-15) es un placeholder genérico, no agronómicamente validada** — reemplazar con valores reales o recalcular estadísticamente cuando haya suficientes vuelos cargados por cultivo/estadio. Ver tarea "Tendencia del índice" del 2026-10-15.
 - ~~`pillow` 10.4.0 tiene múltiples CVEs~~ — **resuelto**, ver tarea más abajo.
 - ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código).
+- **`docker/certs/avast-root.crt` no es portable entre instalaciones de Avast de distintas máquinas** — Avast genera una raíz TLS-scanning self-signed distinta por cada instalación aunque el Subject/Issuer sea el mismo texto literal. El cert commiteado solo sirve en la máquina donde se exportó originalmente; cualquier otro dev con Avast activo necesita exportar su propia raíz (`Cert:\LocalMachine\Root` en Windows) y reemplazar el archivo localmente (sin commitear) para poder buildear la imagen `api`. Sin solución de equipo todavía — ver tarea HU-R4-07 más abajo donde se detectó.
+- **El volumen `minio_data` de desarrollo creado con la imagen vieja `minio/minio` no es compatible con el usuario no-root de `cgr.dev/chainguard/minio`** — falla con `FATAL Unable to initialize backend: Unable to write to the backend`. Cualquier entorno local que todavía tenga el volumen viejo necesita recrearlo (`docker volume rm`) para migrar a la imagen nueva; se pierden los archivos ya subidos a MinIO (Postgres no se ve afectado). Ver tarea HU-R4-07 más abajo.
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
@@ -502,6 +513,36 @@ Triage de las ~20 PRs de Dependabot acumuladas (ver Problemas abiertos). La mayo
 - Generación de imagen con Pillow 12.3.0 probada directo en el contenedor (`Image`/`ImageDraw`/`ImageFont`) — OK.
 - `pip-audit` local contra el `requirements.api.txt` nuevo: de 3 paquetes con hallazgos (`python-jose`, `pillow`, `ecdsa`) queda solo `ecdsa` (sin fix) y el CVE nuevo de `python-jose` (sin fix, no explotable acá) — `pillow` sale limpio.
 
+#### HU-R4-07 — Resumen por vuelo en el historial
+**Fecha:** 2026-10-08
+**Rama:** `feat/hu-r4-07-resumen-vuelo-historial`
+
+En el historial de vuelos del lote (`VuelosCalendario.jsx`, HU-R4-04), cada vuelo completado ahora tiene un botón "Resumen" que expande un panel inline (nuevo `ResumenVuelo.jsx` + `useResumenVuelo.js`) con tres criterios de aceptación de la HU:
+
+- **Índice con valor medio/mínimo/máximo en gráfico**: barra de rango NDVI (mín—prom—máx) más una nota de qué índice correspondería según el estadio fenológico del vuelo (estadios tempranos V1-V3 → SAVI, NDVI>0.75 → GNDVI, resto → NDVI). Es solo una recomendación informativa — el motor de diagnóstico sigue calculando únicamente sobre NDVI.
+- **Porcentaje de superficie por nivel de severidad**: barra apilada + leyenda (crítica/moderada/leve/normal/vigorosa), agregando el `area_ha` de cada zona del diagnóstico por su `severidad`.
+- **Enlaces a prescripción, orden de trabajo e informe PDF**: 3 botones de descarga, cada uno deshabilitado cuando no corresponde (ej. "Orden de trabajo" sin unidades de manejo).
+
+**Decisiones tomadas:**
+- No se agregó ningún endpoint backend nuevo — todo el resumen se arma reutilizando `GET /lotes/{id}/vuelos/{id}/diagnostico` (ya trae `ndvi_promedio_lote`, `ndvi_promedio` y `severidad` por zona, y `unidades_manejo`) más los endpoints de export ya existentes (`reporte/pdf`, `orden-trabajo/pdf`, `zonas/export?formato=shapefile`).
+- "Prescripción" se mapeó al export Shapefile (RFSA-02) y "orden de trabajo" al PDF de orden de trabajo (RFSA-04) — son dos artefactos distintos según el ERS, no sinónimos, pese a que el código interno comenta la orden de trabajo como "orden de trabajo / prescripción" (`app/ordenes_trabajo/service.py`).
+- El diagnóstico se carga on-demand solo al expandir el resumen de ESE vuelo puntual (no para todos los vuelos del historial a la vez) — `generar_diagnostico()` no es gratis.
+- Sin librería de gráficos nueva — el rango NDVI y la barra de severidad son CSS plano (consistente con la convención del proyecto de no sumar dependencias de UI todavía).
+
+**Verificación:** stack completo levantado con Docker Compose (login real con `admin@agronexo.com`), lote "Release 2.2" con 2 vuelos completados — resumen expandido mostró NDVI mín/prom/máx reales, severidad "Normal · 100%" (zona uniforme, esperado), y descarga de Informe PDF + Prescripción SHP devolvieron `200`. "Orden de trabajo" quedó correctamente deshabilitado (sin unidades de manejo en ese vuelo). `npm test` (2 archivos, 9 tests) y `vite build` corridos dentro del contenedor `frontend` (Node correcto) sin errores.
+
+**Error encontrado — build de `api` falla con `SSLCertVerificationError` contra pypi.org**
+```
+ERROR: Could not find a version that satisfies the requirement fastapi==0.141.1 (from versions: none)
+```
+`docker/certs/avast-root.crt` (usado por `Dockerfile.api` para confiar en el TLS-scanning de Avast) resultó ser el certificado raíz de **otra** instalación de Avast — Avast genera una raíz self-signed distinta por cada instalación aunque el Subject/Issuer sea el mismo texto literal (verificado con `openssl verify`: el cert del repo no valida la cadena real que presenta `pypi.org` en esta máquina). Se resolvió localmente, sin commitear, exportando la raíz real de Avast de esta máquina desde `Cert:\LocalMachine\Root` (PowerShell) y reemplazando el archivo solo para el build; se revirtió a la versión del repo después. Ver "Problemas abiertos".
+
+**Error encontrado — MinIO no arranca tras el rebuild (`FATAL Unable to initialize backend`)**
+```
+Error: unable to rename (/data/.minio.sys/tmp -> /data/.minio.sys/tmp-old/...) file access denied
+```
+El volumen `minio_data` local fue creado por la imagen vieja `minio/minio` (corría como root); `cgr.dev/chainguard/minio` corre como usuario no-root y no puede escribir ahí. Se resolvió recreando el volumen (confirmado con el usuario primero, porque implica perder los archivos de prueba subidos a MinIO en este entorno — Postgres no se tocó). Ver "Problemas abiertos".
+
 ---
 
 #### HU-R4-05 · Investigación de costos de fitosanitarios
@@ -711,6 +752,121 @@ Cada tarjeta de "Cambio por zona" solo tenía un espacio reservado vacío ("Sin 
 **Verificación:** navegador real contra datos de desarrollo (lote "Nueva Prueba", vuelos V18→VT) — 3 zonas con "Sin problema" y una con "Moderada / Insecto" (con el texto completo + productos sugeridos) renderizan correctamente, sin errores de consola.
 
 ---
+
+#### Reporte PDF: resumen ejecutivo + "Cómo confirmar en campo" + paridad con Diagnóstico
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+El PDF (`GET .../reporte/pdf`) no incluía cómo confirmar en campo cada diagnóstico y le faltaban datos que sí muestra la pantalla de Diagnóstico. Se agregó:
+- **"En pocas palabras"** al inicio (`app/reportes/service.py::generar_resumen_ejecutivo`): % del lote sano vs. con problemas, tabla de problemas agrupados por causa (qué es, superficie, prioridad, qué hacer) ordenada de más a menos urgente, y un "Próximo paso" que pide confirmar a campo (y lo marca como imprescindible si hay zonas con confianza media/baja).
+- En el detalle por zona: nombre de la regla, patrón espacial, NDVI, confianza en texto largo, **"Cómo confirmar en campo"** y la lista completa de productos (antes solo 3).
+- Sección **"Unidades de manejo"** (no estaba), variedad en el encabezado e índices usados en la trazabilidad.
+- Tests puros nuevos en `tests/test_reporte_ejecutivo.py` (5), sin DB ni MinIO.
+
+**Decisiones tomadas:**
+- El resumen ejecutivo se arma en Python de forma determinística con un mapeo causa → (qué es, qué hacer) en lenguaje de productor (`CAUSA_SIMPLE`), sin mencionar NDVI ni reglas. Lo técnico queda en "Detalle técnico — diagnóstico por zona".
+- La zona excluida (R00) no cuenta en la superficie analizada del porcentaje.
+
+**Error encontrado — suelo desnudo aparecía como "Sin problema detectado"**
+Probando con datos reales (lote "Campo Chaco - Prueba tasa variable"), el resumen listaba "Sin problema detectado — 1.9 ha". La regla R01 (suelo desnudo) comparte `causa_indice = "sin_problema_detectado"` con R99, porque no hay nada que tratar con productos. Se agrupa aparte por `regla_id == "R01"` como "Zonas sin plantas (suelo desnudo)". El mismo criterio se aplicó al gráfico de evolución.
+
+#### Gráfico de evolución NDVI por fecha de vuelo con NDVI esperado y explicación
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+`GraficoEvolucionNdvi.jsx`: el eje X es la fecha del vuelo y el eje Y el NDVI real promedio del lote. Una casilla "Mostrar NDVI normal esperado" superpone el NDVI esperado para el estadio de cada vuelo (curva de `ndvi_esperado_estadio`, migración 0025) con su rango normal; los puntos reales se colorean por estado (debajo/normal/encima del rango). Debajo va "¿Qué muestra la diferencia?" (`frontend/src/utils/evolucionNdvi.js::explicarEvolucion`): cuántos vuelos estuvieron en rango, cómo está el último contra lo esperado, si la brecha se achica o se agranda, y las causas por superficie según los diagnósticos de los vuelos por debajo de lo normal.
+
+**Decisiones tomadas:**
+- El esperado se ubica en la fecha de cada vuelo, matcheando su `estadio_fenologico` contra la curva del cultivo de ESE vuelo (`buscarPuntoPorEstadio`). La curva no tiene duración por estadio, así que no se puede dibujar como función continua del tiempo. Los vuelos sin estadio comparable se grafican igual y se informan en la nota.
+- Con la curva visible se ocultan las franjas genéricas de fondo (<0.20 / 0.20–0.70 / ≥0.70), para no tener dos referencias superpuestas. Vuelven al desactivarla.
+- Las fechas de vuelo se formatean en UTC: `fecha_vuelo` se guarda como medianoche UTC y en Argentina se mostraba el día anterior.
+- Sin endpoint nuevo: reusa `GET /diagnostico` por vuelo y `GET /estadios-fenologicos/ndvi-esperado`.
+
+**Verificación:** navegador real con el lote "Campo Chaco - Prueba tasa variable" (4 vuelos de soja): curva esperada y rango visibles, el interruptor oculta y muestra la curva, explicación coherente con los diagnósticos y sin errores de consola. `npx vitest run` pasa 26/26 tests (5 nuevos en `evolucionNdvi.test.js`).
+
+#### Fix: "Análisis Recientes" muestra la fecha real del vuelo
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+La columna FECHA del Dashboard mostraba `created_at` (cuándo se subió el ortomosaico). Ahora se llama "FECHA DE VUELO" y muestra `fecha_vuelo`, con "Subido dd mmm aaaa" en gris debajo. El mismo cambio se aplicó a las etiquetas del panel "Análisis — ..." y del comparador de capas. El orden de la tabla sigue siendo por fecha de carga, para que lo recién subido quede arriba.
+
+---
+
+#### Motor de reglas v1.1.0 — umbrales relativos al estadio y reglas inalcanzables
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+Revisión del motor a pedido: las reglas usaban cortes fijos (NDVI < 0.50) para cualquier estadio, y la severidad solo comparaba contra el promedio del propio lote. Casos reales del motor viejo: soja V3 con NDVI 0.35 (normal para la etapa) salía "estrés hídrico"; un lote entero en 0.30 en R5 salía "sin problema / normal".
+
+Barrido exhaustivo (cultivo × estadio × patrón × índices × valores) contra `evaluar_zona()` para ver qué regla gana:
+- **R00** y el patrón **focos aislados** (usado por R21/R23/R24/R30/R32/R60) no se podían dar: el worker descarta zonas < 1 ha (`AREA_MINIMA_M2`) y R00 pedía < 0.05 ha y "focos" < 0.2 ha.
+- **R60** casi nunca se aplicaba (45 casos de ~600k): R01 tomaba antes todo NDVI < 0.20.
+- **R10** (malezas) iba antes que enfermedades e insectos: con ExG, una mancha circular en R3 salía "malezas".
+- El patrón **lineal** no tenía ninguna regla: zonas lineales dañadas salían "sin problema".
+
+Cambios (`MOTOR_VERSION` 1.0.0 → 1.1.0):
+- `reglas.py::ndvi_bajo()`: "bajo" = por debajo del `ndvi_min` del estadio (tabla `ndvi_esperado_estadio`); sin curva, corte fijo 0.50. R01 no marca suelo desnudo si el NDVI está dentro de lo normal para el estadio (VE/VC).
+- Severidad (`texto.py::calcular_severidad`): la peor caída entre la del promedio del lote y la de lo esperado. El texto por zona dice cuánto se aparta de lo esperado para el estadio.
+- Nuevas reglas: **R45** (patrón lineal → compactación o falla de siembra) y **R80** (vigor bajo para el estadio sin causa puntual, confianza baja, antes de R99).
+- Reorden: R60 antes de R01; R10 después de enfermedades e insectos.
+- `forma.py`: "focos aislados" = zonas ≤ 3 ha y ≤ 5% del lote (antes ≤ 2000 m²).
+
+**Verificación:** el barrido muestra que todas las reglas menos R00 se alcanzan con zonas ≥ 1 ha (R60 pasó de 45 a 2160 casos). Al recalcular los 5 vuelos reales del admin, 4 zonas pasaron de R99 / normal a R80 / moderada o crítica (NDVI 0.26–0.30 con esperado 0.45–0.79). Pasan 317 tests del contenedor `api`.
+
+**Decisiones tomadas:**
+- Se usa `ndvi_min` (banda inferior) y no `ndvi_esperado` como corte de "bajo", para no disparar alertas con una curva que todavía es genérica.
+- R00 queda inalcanzable mientras `AREA_MINIMA_M2` sea 1 ha. No se bajó el área mínima del worker porque cambia la fragmentación de todas las zonas; ver "Problemas abiertos".
+
+#### RFDR-04 — criterio técnico del agrónomo por zona
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+Tabla `revisiones_diagnostico` (migración 0028 — era 0026 en la rama, se renumeró al mergear main que ya tenía 0026/0027, UNIQUE `vuelo_id`+`zona_id`) y endpoints `PUT/DELETE /lotes/{id}/vuelos/{id}/diagnostico/zonas/{zona_id}/revision`. El agrónomo acepta, modifica (indica la causa confirmada a campo) o rechaza (con causa real opcional) cada zona. `GET .../diagnostico` adjunta `revision` en cada zona y `n_zonas_revisadas` en metadata. UI en `RevisionZona.jsx` (vista detalle de `TablaDiagnostico`) y columna "Rev." en la vista tabla. Tests en `tests/test_revisiones_api.py` (6).
+
+**Decisiones tomadas:**
+- La revisión NO se guarda dentro del JSON del diagnóstico: se adjunta al responder, para que "Recalcular" no borre el criterio del agrónomo.
+- Cada revisión guarda `evidencia` (valores crudos de la zona: patrón, NDVI, NDRE, ExG, estadio, esperado). Es el caso etiquetado para el motor probabilístico y no cambia si después se recalcula.
+
+**Error encontrado — los tests contaminaban los datos de entrenamiento**
+Después de correr `test_revisiones_api.py` quedaban 3 filas en `revisiones_diagnostico` de usuarios `revisiones_*@agronexo-test.com`. Como el motor bayesiano aprende de todas las revisiones, eran casos falsos. Se borraron y el test ahora las elimina en `teardown_module`.
+
+#### Motor probabilístico (Naive Bayes) experimental
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+`app/diagnostico/bayes.py`: P(causa | evidencia) ∝ P(causa | fase fenológica) · Π P(evidencia | causa), sobre 12 causas y 5 evidencias discretas: desvío contra lo esperado para el estadio, patrón, NDVI absoluto, NDRE y ExG (los índices sin dato se omiten). Devuelve el top 3 con probabilidad y la certeza según los mensajes del `CLAUDE.md` (alta / media / ambigua). Corre en paralelo a las reglas, sin cambiar la causa que estas asignan: `props.bayes` por zona y `metadata.bayes`. UI en `BayesZona.jsx`, que avisa cuando no coincide con las reglas. Tests en `tests/test_bayes.py` (21).
+
+**Decisiones tomadas:**
+- **No es Naive Bayes entrenado con datos**: no hay casos confirmados a campo. Las tablas iniciales son un BORRADOR experto escrito a partir de la tabla de patrones del `CLAUDE.md` y de las reglas existentes. Las tiene que validar un agrónomo.
+- Aprendizaje: actualización Dirichlet con la tabla experta como prior de 20 casos por causa (`PESO_PRIOR_EXPERTO`): `(20·p_experto + n_obs) / (20 + n_total)`. El modelo se reconstruye con todas las revisiones en cada cálculo de diagnóstico. Los diagnósticos guardados no se actualizan hasta "Recalcular".
+- R80 (`bajo_vigor_estadio`) no es una clase del modelo: es "no se sabe". Un rechazo sin causa real no se usa como etiqueta.
+- Se aprende de las revisiones de todos los usuarios: la evidencia son solo valores numéricos y patrón, sin datos del lote.
+
+#### Motor v1.2.0 — R80 se precisa con el motor probabilístico
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+Feedback del usuario: R80 ("vigor por debajo de lo esperado, sin causa puntual") no decía nada útil. Pedía confirmar a campo y listaba todas las posibilidades, mientras el motor probabilístico ya tenía un ranking para esa zona. Ahora `engine.py::precisar_con_bayes()` reemplaza el resultado de R80 usando el posterior bayesiano condicionado a "hay un problema" (sin "sin problema" ni "suelo desnudo", renormalizado):
+- **Causa clara** (≥ 40% y 15 puntos sobre la segunda): R80 adopta esa causa ("Vigor bajo para el estadio — probable X"), con confianza baja, la acción, el "cómo confirmar" y los productos de la regla representativa de esa causa para el cultivo.
+- **Empate:** diagnóstico diferencial "X o Y", con el "cómo confirmar" de las dos causas y, si falta el índice que las separa (por ejemplo NDRE para nitrógeno contra agua), la sugerencia de calcularlo. Sin productos.
+
+En "Modificar", la lista ahora muestra arriba las causas más probables con su porcentaje (`posterior` completo en `props.bayes`).
+
+**Verificación:** recalculados los 5 vuelos del admin. La zona de 15.2 ha (soja V6, NDVI 0.26 contra 0.63 esperado, sin NDRE) pasó de "sin causa puntual" a "estrés hídrico o déficit de nitrógeno", con la indicación de calcular NDRE. 322 tests del contenedor `api` en verde.
+
+#### Fix: validación, gráfico probabilístico y guía de campo visibles en todas las zonas
+**Fecha:** 2026-10-23
+**Rama:** `feat/grafico-evolucion-ndvi-lote`
+
+Feedback del usuario: "solo algunos vuelos me piden validar y muestran el gráfico de lo más probable", y "Cómo confirmar en campo" había desaparecido. No era un problema de datos (los 5 vuelos tenían `bayes` y metadata completa), sino de la UI:
+- `TablaDiagnostico` abría en **vista tabla**, que no muestra ni el criterio técnico, ni el motor probabilístico, ni la guía de campo. En el panel lateral angosto, el toggle tabla/detalle quedaba fuera de la vista porque la fila de botones no hacía wrap. Ahora abre en **vista detalle**, la fila de controles hace wrap, y tocar una fila de la tabla lleva a esa zona en el detalle y la resalta.
+- "Cómo confirmar en campo" estaba en un `<details>` cerrado. Ahora es `ComoConfirmarCampo.jsx`, siempre visible, como guía paso a paso para alguien sin experiencia: ubicar la zona en el mapa, qué buscar (un paso por causa en el diagnóstico diferencial de R80), comparar con una zona sana y cargar el criterio técnico.
+- El texto de las zonas R80 decía "sin una causa puntual identificada" aunque el nombre ya daba dos candidatas. Ahora el texto nombra las causas candidatas.
+
+**Error encontrado — fecha de vuelo un día antes en Resultados, detalle del lote y calendarios**
+Mismo problema que en el Dashboard: `new Date(fecha_vuelo)` sobre medianoche UTC se muestra como el día anterior en UTC-3 (el vuelo del 06/08 figuraba como 05/08, y en los calendarios se marcaba el día previo). Se agregó `utils/fechas.js::fechaVuelo()`, que arma un Date local con el día calendario UTC, y se aplicó en `PanelResultadoVuelo`, `TablaDiagnostico`, `DetalleLote`, `VuelosCalendario` y `CalendarioMensual`.
+
+**Verificación:** navegador real (vuelo soja V3 de "Campo Chaco"): abre en detalle con la guía paso a paso, el gráfico probabilístico y "Criterio técnico"; desde la tabla, tocar Z2 lleva a su tarjeta; la fecha dice 06 de agosto. 323 tests de `api` y 27 de frontend en verde.
 
 #### Catálogo de fitosanitarios desde Excel — tanda 1
 **Fecha:** 2026-10-26

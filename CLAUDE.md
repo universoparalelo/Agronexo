@@ -12,7 +12,7 @@
 |---|---|---|
 | Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
 | FastAPI + SQLAlchemy async + PostGIS | ✅ | |
-| Migraciones Alembic (0001 → 0020) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Migraciones Alembic (0001 → 0028) | ✅ | Correr `alembic upgrade head` al arrancar |
 | Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
 | CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
@@ -31,7 +31,9 @@
 | Botón "Nuevo lote" (formulario + límite dibujado en mapa, sin GeoTIFF) | ✅ | `frontend/src/components/ModalNuevoLote.jsx` → `POST /lotes`. El límite se puede omitir: el primer GeoTIFF lo completa (`workers/gis/tasks.py::_poligono_cobertura_wkt`) |
 | Modal "Cargar Ortomosaico" con selector de lote existente | ✅ | `ModalCargaGeoTIFF.jsx` ahora sube vuelos a un lote ya creado vía `POST /lotes/{id}/vuelos`, no crea lote nuevo |
 | Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
-| Motor de diagnóstico (RFDR-01) | ✅ | On-demand/sin persistencia — `GET /lotes/{id}/vuelos/{id}/diagnostico`. 20 reglas en `app/diagnostico/reglas.py`. Historial persistido queda para release 4 (ver `docs/release-v1.0.0.md`) |
+| Motor de diagnóstico (RFDR-01) | ✅ | `GET /lotes/{id}/vuelos/{id}/diagnostico` (se guarda en `diagnosticos`, "Recalcular" lo sobrescribe). 22 reglas en `app/diagnostico/reglas.py` (v1.1.0): "NDVI bajo" es relativo al rango esperado del estadio (`ndvi_esperado_estadio`) y solo cae al corte fijo 0.50 sin curva |
+| Motor probabilístico (Naive Bayes) | 🧪 | `app/diagnostico/bayes.py`, en paralelo a las reglas (`props.bayes` por zona). Tablas expertas BORRADOR sin validar por agrónomo; se ajustan con las revisiones RFDR-04 |
+| Criterio técnico del agrónomo (RFDR-04) | ✅ | Tabla `revisiones_diagnostico` (migración 0028), `PUT/DELETE .../diagnostico/zonas/{zona_id}/revision`. Cada revisión con causa es un caso de entrenamiento del motor probabilístico — los tests que crean revisiones tienen que borrarlas |
 | Atributos del lote | ✅ | `tipo_suelo` (enum 7 valores NEA). Cultivo, variedad y fechas ya NO son del lote — viven en `cultivos` (migración 0020, ver fila siguiente) |
 | Cultivos por lote | ✅ | Tabla `cultivos` (`tipo_cultivo`, `variedad`, `fecha_siembra`, `fecha_cosecha`, soft delete). `GET/POST/PUT/DELETE /lotes/{id}/cultivos`. Todo análisis (`vuelos.cultivo_id`) se hace sobre un cultivo existente del lote o uno nuevo creado en el momento (`cultivo_id` o `cultivo_tipo…` en el upload; `cultivo_id` o `cultivo{…}` en `desde-satelite`). El diagnóstico toma tipo/variedad del cultivo del vuelo; el estadio fenológico es solo del vuelo |
 | Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |
@@ -39,7 +41,7 @@
 | Zonificación de manejo (RFDR-02) | ✅ | Agrupa zonas contiguas por causa+severidad en unidades de manejo. `app/diagnostico/zonificacion.py` |
 | Mapa de zonas por clase NDVI en Diagnóstico + PDF | ✅ | Relleno siempre por clase real del índice (`MapaZonas.jsx`, `app/reportes/mapa.py`); coloreado por severidad relativa al promedio del lote quedaba "todo verde" en lotes con variación moderada. Severidad sigue visible en popup y en el contorno de unidades de manejo |
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
-| Tests unitarios del motor de diagnóstico | ✅ | 84 tests: engine, forma, texto, zonificación, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py` |
+| Tests unitarios del motor de diagnóstico | ✅ | engine, forma, texto, zonificación, bayes, revisiones, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py tests/test_bayes.py tests/test_revisiones_api.py` |
 | Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
 | Exportación Shapefile | ❌ | Pendiente |
 
@@ -92,52 +94,12 @@ PostgreSQL + PostGIS              MinIO (archivos)
 
 ---
 
-## Stack por capa
+## Stack — lo que no se deduce de las dependencias
 
-### Frontend
-| Tecnología | Rol |
-|---|---|
-| React | UI principal |
-| React-Leaflet | Mapas, capas GIS, polígonos GeoJSON |
-| Vite | Build y dev server |
-| CSS plano (Tailwind previsto) | Estilos — no incorporar Tailwind aún |
-
-Comunicación con backend: exclusivamente REST API + GeoJSON.
-
-### Backend (`app/`)
-| Tecnología | Rol |
-|---|---|
-| FastAPI | API REST, routing, coordinación |
-| Pydantic / pydantic-settings | Validación y configuración |
-| SQLAlchemy + GeoAlchemy2 | ORM + geometrías PostGIS |
-| python-jose + bcrypt | JWT + hashing |
-| WeasyPrint | Reportes PDF desde HTML/CSS |
-| Redis | Broker Celery (db 0) + result_backend de tareas (db 1) — **ambos deben configurarse** para que el polling de estado funcione |
-| Celery | Cola de tareas asíncronas |
-
-Módulos FastAPI: `app/auth/`, `app/lotes/`, `app/ingesta/`, `app/diagnostico/`, `app/reportes/`
-
-### Worker GIS (dentro de workers Celery)
-| Tecnología | Rol |
-|---|---|
-| Rasterio | Lectura raster, extracción de bandas, vectorización |
-| NumPy | Cálculos de índices pixel a pixel |
-| GDAL | Motor geoespacial base (dependencia de Rasterio) |
-| scikit-image | Umbralización Otsu para clasificación |
-| GeoPandas | Manipulación vectorial, exportación GeoJSON/SHP |
-| Shapely | Geometrías, circularidad, simplificación Douglas-Peucker |
-
-### Datos
-| Tecnología | Rol |
-|---|---|
-| PostgreSQL + PostGIS | BD relacional + geometrías (polígonos de zonas) |
-| MinIO | Archivos binarios (GeoTIFF, PDF, SHP) — S3-compatible |
-
-Separación: PostGIS guarda **metadatos y vectores**. MinIO guarda **archivos binarios**.
-
-### Infraestructura
-- Docker + Docker Compose (desarrollo y producción)
-- Nginx (planificado para producción, R7)
+- Frontend: CSS plano — **no incorporar Tailwind aún**. Comunicación con backend exclusivamente REST API + GeoJSON.
+- Redis: broker Celery (db 0) + result_backend de tareas (db 1) — **ambos deben configurarse** para que el polling de estado funcione.
+- Separación: PostGIS guarda **metadatos y vectores**. MinIO guarda **archivos binarios**.
+- Nginx planificado para producción (R7).
 
 ---
 
@@ -165,93 +127,9 @@ GET  /analisis/{id}/reportes/shapefile → .zip para maquinaria
 
 ---
 
-## Dominio agronómico — reglas de negocio clave
+## Dominio agronómico y pipeline GIS
 
-### Índices de vegetación y cuándo usar cada uno
-
-| Índice | Cuándo usarlo | Bandas (Sentinel-2) |
-|---|---|---|
-| **SAVI** | Primeras 3 semanas post-siembra (cobertura < 30%) | NIR, RED |
-| **NDVI** | Crecimiento vegetativo (25–60 días desde siembra) | B8, B4 |
-| **GNDVI** | Cuando NDVI > 0.75 (fase reproductiva, saturación) | B8, B3 |
-| **NDRE** | Detección temprana de estrés clorofílico, nitrógeno | B8, B5 |
-| **EVI** | Cultivos muy densos donde NDVI satura | B8, B4, B2 |
-| **MSAVI** | Inicio de campaña, suelo expuesto | NIR, RED |
-
-**Fórmula NDVI:** `(NIR - RED) / (NIR + RED)` → bandas Sentinel-2: B8 (NIR), B4 (RED)
-
-### Umbrales NDVI para alertas automáticas
-
-```python
-# Reglas generales
-ndvi < 0.20          → suelo desnudo / sin vegetación
-0.20 <= ndvi < 0.70  → cultivo con estrés o en desarrollo
-ndvi >= 0.70         → vigor óptimo
-
-# Soja — ciclo fenológico
-if dias_desde_siembra < 25:       usar SAVI
-if 25 <= dias_desde_siembra < 60: usar NDVI
-if ndvi > 0.75:                   usar GNDVI (floración/llenado)
-if delta_ndvi < 0 and ndvi → 0.2: estado Senescencia/Cosecha
-
-# Clasificación temporal soja/maíz (sur Córdoba)
-pico_ndvi < 2026-02-01  → Siembra Temprana (De Primera)
-pico_ndvi > 2026-02-01  → Siembra Tardía (De Segunda)
-ndvi_max_estival < 0.70 → alerta "Ciclo Incompleto"
-```
-
-### Patrones espaciales → diagnóstico
-
-| Patrón | Causa probable | Índice afectado |
-|---|---|---|
-| Circular / radial | Enfermedades fúngicas (Sclerotinia, Rhizoctonia) | NDRE bajo, NDVI bajo |
-| Lineal / franjas | Compactación, falla sembradora | NDVI bajo uniforme en franjas |
-| Difuso / gradiente | Variabilidad edáfica, déficit hídrico, deficiencia N | NDVI bajo generalizado |
-| Aleatorio / disperso | Plagas móviles (orugas, chinches), granizo | NDVI bajo puntual |
-| Manchones persistentes | Nematodos, salinidad, suelo (posición fija entre campañas) | NDVI/GNDVI crónicos |
-| Siguiendo microtopografía | Anegamiento, Phytophthora (partes bajas del lote) | NDWI alto + NDVI bajo |
-
-**Métricas de forma (Shapely):**
-```python
-circularidad = (4 * pi * area) / perimetro**2  # ~1 → enfermedad focal
-elongacion   = eje_mayor / eje_menor            # alta → compactación/maquinaria
-densidad     = num_poligonos / area_total       # alta → plagas/granizo
-```
-
-### Particularidades del NEA (Chaco)
-- Vertisoles: grietas en época seca generan patrones lineales — usar SAVI en lugar de NDVI cuando la cobertura es < 30%
-- Anegamiento temporario frecuente (pendientes < 0.5%) — cruzar NDWI + NDVI + MDE
-- Suelos sódico-salinos: NDVI crónico < 0.2 — marcar como limitación edáfica permanente, no fitosanitaria
-- Temperaturas altas (> 25°C suelo) → Meloidogyne incognita es el nematodo predominante en algodón
-
----
-
-## Procesamiento GIS — pipeline
-
-```
-GeoTIFF (Sentinel-2 / DJI Mavic 3 Multispectral)
-    ↓ Rasterio (windowed reading para archivos > 500 MB)
-Extracción de bandas → matrices NumPy
-    ↓ NumPy
-Cálculo de índice (NDVI, SAVI, GNDVI, etc.)
-    ↓ scipy.ndimage.gaussian_filter (sigma=1px, NaN-safe) — `suavizar_indice()`
-Suavizado espacial → evita fragmentación "sal y pimienta" al clasificar gradientes continuos
-    ↓ scikit-image (Otsu)
-Umbralización → máscara de píxeles (las estadísticas reportadas usan el valor SIN suavizar)
-    ↓ cast a float32 / uint8 (shapes() rechaza float64 e int8)
-    ↓ rasterio.features.shapes()  — para archivos > 500 MB usar rasterio.band(src, n) en lugar de src.read() para evitar cargar el array completo en memoria
-Vectorización → polígonos
-    ↓ GeoPandas + Shapely
-gdf.explode() ANTES de filtrar por área — si no, un buffer(0) que fusiona fragmentos en un MultiPolygon deja pasar ruido cuya área total agregada supera el mínimo
-    ↓
-Filtrado por área mínima (por fragmento individual), simplificación Douglas-Peucker
-    ↓
-Exportación: GeoJSON (API) / SHP.zip (maquinaria) / ISO-XML (ISOBUS)
-```
-
-**Limitación técnica documentada:** DJI Mavic 3 Multispectral no tiene banda SWIR → NDWI convencional (NIR − SWIR) no es calculable. Usar NDWI de McFeeters (Verde − NIR) / (Verde + NIR) como proxy de agua superficial. NDRE como proxy de estrés hídrico foliar.
-
-**Ojo con el DJI Mavic 3 Multispectral real:** captura solo 4 bandas (Green, Red, RedEdge, NIR) — **no tiene banda Blue**. `workers/gis/band_mapping.py` refleja esto (`GREEN=1, RED=2, RE=3, NIR=4`, sin `BLUE`). Por eso el índice `ExG` (que necesita RGB) no está disponible para `sensor="dji_mavic3"` — es una limitación real del sensor, no un bug.
+Las reglas agronómicas (índices, umbrales NDVI, patrones espaciales → causa, particularidades del NEA, niveles de certeza del diagnóstico) están en `app/diagnostico/CLAUDE.md`. El pipeline GIS y las limitaciones del sensor DJI Mavic 3 están en `workers/gis/CLAUDE.md`. Leerlos antes de tocar lógica de diagnóstico, índices o vectorización, aunque se esté trabajando fuera de esas carpetas.
 
 ---
 
@@ -295,49 +173,13 @@ Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estruct
 
 **El archivo activo ahora es: `docs/release-v4.0.0.md`**
 
-**Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional:**
-- Se completa una tarea del sprint → agregar entrada en "Tareas completadas" con fecha, rama/commit, decisiones tomadas y resultado.
-- Surge un error relevante → documentarlo dentro de la tarea con el mensaje exacto del error y cómo se resolvió.
-- Se toma una decisión de arquitectura no obvia → agregarla a la tabla "Decisiones de arquitectura".
-- Aparece un problema abierto sin solución → agregarlo a "Problemas abiertos" y borrarlo cuando se resuelva.
-- Se cierra la release → completar la sección "Presentación" y marcar el checklist.
-
-**No documentar:**
-- Cambios internos triviales (renombrar variable, ajustar formato).
-- Errores de tipeo o de sintaxis resueltos en el mismo momento.
-- Decisiones obvias que cualquiera tomaría igual.
-
-**Formato de entrada de tarea completada:**
-```
-#### Nombre de la tarea
-**Fecha:** YYYY-MM-DD
-**Rama:** `feat/nombre` (commit `abc1234`)
-
-Descripción breve de qué se hizo y por qué.
-
-**Decisiones tomadas:**
-- decisión 1
-- decisión 2
-
-**Error encontrado — título descriptivo**
-[mensaje de error exacto o descripción]
-Cómo se resolvió.
-```
+**Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional** (skill `release-tracking`: qué sección tocar, qué no documentar y formato exacto de entrada).
 
 ---
 
 ## Mantenimiento del README.md
 
-El archivo `README.md` es la puerta de entrada para los colaboradores del proyecto. Actualizarlo es obligatorio cuando ocurre cualquiera de estos eventos:
-
-- Se agrega un nuevo servicio al `docker-compose.yml` → actualizar la tabla de servicios y puertos
-- Cambia el proceso de instalación o los requisitos previos → actualizar la sección de instalación
-- Se crea un módulo nuevo en `app/` o `workers/` → actualizar el árbol de estructura
-- Cambia alguna variable de entorno requerida → actualizar `.env.example` Y la tabla del README
-
-El README ya no incluye "Comandos frecuentes" ni "Problemas comunes" (se sacaron por decisión explícita para mantenerlo como puerta de entrada profesional, sin contenido de wiki interna). No volver a agregar esas secciones salvo pedido explícito.
-
-No actualizar el README en cambios internos de implementación (refactors, renombrar funciones, ajustar lógica de negocio).
+Actualizar `README.md` solo ante: servicio nuevo en `docker-compose.yml`, cambio de instalación/requisitos, módulo nuevo en `app/` o `workers/`, o cambio de variable de entorno (`.env.example` Y la tabla del README). Detalle en la skill `readme-maintenance`. No volver a agregar "Comandos frecuentes" ni "Problemas comunes" al README salvo pedido explícito.
 
 ---
 
@@ -416,14 +258,6 @@ test:   tests
 refactor: reestructura sin cambiar comportamiento
 ```
 
-### Protección de main (configurar en GitHub)
-
-En Settings → Branches → Add rule sobre `main`:
-- ✅ Require pull request before merging
-- ✅ Require at least 1 approval
-- ✅ Dismiss stale reviews when new commits are pushed
-- ✅ Do not allow bypassing the above settings
-
 ---
 
 ## Verificación de cambios remotos
@@ -473,15 +307,6 @@ Al completar cualquier tarea, recordar explícitamente al usuario que haga commi
 ### Comentarios y documentación
 - No escribir comentarios que expliquen qué hace el código (los nombres lo dicen).
 - Solo comentar el POR QUÉ cuando hay una restricción no obvia (ej. limitación del sensor, quirk de PostGIS).
-
----
-
-## Diagnóstico — mensajes al usuario
-
-El sistema debe comunicar tres niveles de certeza:
-1. **"Diagnóstico probable con alta confianza"** — patrón + índice + contexto consistentes con una sola causa
-2. **"Diagnóstico ambiguo — se requiere verificación en campo"** — dos o más causas con igual verosimilitud
-3. **"Patrón no clasificable — factor edáfico permanente probable"** — patrón persistente entre campañas, sin respuesta a tratamiento
 
 ---
 

@@ -105,6 +105,30 @@
   .zona-detalle p { margin: 1mm 0; }
   .zona-detalle .productos { font-size: 9pt; color: #4b5563; }
 
+  .ejecutivo {
+    border: 1pt solid #16a34a;
+    border-radius: 2mm;
+    padding: 4mm 5mm;
+    margin-bottom: 6mm;
+    page-break-inside: avoid;
+  }
+  .ejecutivo h2 { margin-top: 0; border-bottom: none; padding-bottom: 0; }
+  .ejecutivo .estado { font-size: 11pt; margin: 0 0 3mm 0; }
+  .ejecutivo table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .ejecutivo th { text-align: left; color: #4b5563; font-weight: 600; font-size: 8.5pt; padding: 1mm 2mm; border-bottom: 0.5pt solid #d1d5db; }
+  .ejecutivo td { padding: 1.5mm 2mm; vertical-align: top; border-bottom: 0.5pt solid #f3f4f6; }
+  .ejecutivo .proximo { margin: 3mm 0 0 0; padding: 2mm 3mm; background: #fffbeb; border-left: 3pt solid #f59e0b; font-size: 9.5pt; }
+
+  .zona-detalle .meta { font-size: 8.5pt; color: #6b7280; }
+  .zona-detalle .confirmar {
+    margin: 2mm 0;
+    padding: 2mm 3mm;
+    background: #f0f9ff;
+    border-left: 2pt solid #0ea5e9;
+    font-size: 9pt;
+    white-space: pre-line;
+  }
+
   .footer-legal {
     margin-top: 8mm;
     font-size: 7.5pt;
@@ -123,13 +147,38 @@
       <h1>{{ lote_nombre }}</h1>
     </div>
     <div class="meta">
-      <div><strong>Cultivo:</strong> {{ cultivo_label }}</div>
+      <div><strong>Cultivo:</strong> {{ cultivo_label }}{% if variedad %} ({{ variedad }}){% endif %}</div>
       <div><strong>Fecha de vuelo:</strong> {{ fecha_vuelo }}</div>
       <div><strong>Estadio fenológico:</strong> {{ estadio_fenologico or '—' }}</div>
       <div><strong>Generado:</strong> {{ generado_en }}</div>
       {% if nombre_empresa %}<div><strong>Empresa:</strong> {{ nombre_empresa }}</div>{% endif %}
       {% if aplicador_nombre %}<div><strong>Aplicador:</strong> {{ aplicador_nombre }}{% if matricula_aplicador %} (Mat. {{ matricula_aplicador }}){% endif %}</div>{% endif %}
     </div>
+  </div>
+
+  <div class="ejecutivo">
+    <h2>En pocas palabras</h2>
+    <p class="estado">{{ resumen_ejecutivo.estado }}</p>
+    {% if resumen_ejecutivo.problemas %}
+    <table>
+      <thead>
+        <tr><th>Qué se detectó</th><th>Superficie</th><th>Prioridad</th><th>Qué hacer</th></tr>
+      </thead>
+      <tbody>
+        {% for p in resumen_ejecutivo.problemas %}
+        <tr>
+          <td><strong>{{ p.que_es }}</strong></td>
+          <td>{{ "%.1f"|format(p.area_ha) }} ha{% if p.n_zonas > 1 %} ({{ p.n_zonas }} zonas){% endif %}</td>
+          <td><span class="badge badge-{{ p.severidad }}">{{ p.urgencia }}</span></td>
+          <td>{{ p.que_hacer }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if resumen_ejecutivo.proximo_paso %}
+    <p class="proximo"><strong>Próximo paso:</strong> {{ resumen_ejecutivo.proximo_paso }}</p>
+    {% endif %}
   </div>
 
   <div class="mapa">
@@ -188,20 +237,21 @@
     </tbody>
   </table>
 
-  <h2>Diagnóstico agronómico por zona</h2>
+  <h2>Detalle técnico — diagnóstico por zona</h2>
   {% for zona in zonas %}
     {% if not zona.excluida and not zona.sin_problema %}
     <div class="zona-detalle {{ zona.severidad }}">
-      <h3>Zona #{{ zona.zona_id }} — {{ zona.severidad_label }} ({{ "%.2f"|format(zona.area_ha) }} ha)</h3>
+      <h3>Zona #{{ zona.zona_id }} — {{ zona.regla_nombre or zona.causa_label }} · {{ zona.severidad_label }} ({{ "%.2f"|format(zona.area_ha) }} ha)</h3>
+      <p class="meta">Patrón: {{ zona.patron_label or '—' }} · NDVI {{ "%.3f"|format(zona.ndvi_promedio) }} · {{ zona.confianza_label }}</p>
       <p>{{ zona.texto_explicativo }}</p>
       {% if zona.accion_recomendada %}
       <p><strong>Acción recomendada:</strong> {{ zona.accion_recomendada }}</p>
       {% endif %}
       {% if zona.como_confirmar_campo %}
-      <p><strong>Cómo confirmar en campo:</strong> {{ zona.como_confirmar_campo }}</p>
+      <div class="confirmar"><strong>Cómo confirmar en campo:</strong> {{ zona.como_confirmar_campo }}</div>
       {% endif %}
-      {% if zona.productos_texto %}
-      <p class="productos"><strong>Productos sugeridos:</strong> {{ zona.productos_texto }}</p>
+      {% if zona.productos_completo %}
+      <p class="productos"><strong>Productos sugeridos:</strong> {{ zona.productos_completo }}</p>
       {% endif %}
     </div>
     {% endif %}
@@ -210,12 +260,26 @@
   <p class="footer-legal">Todas las zonas del lote están dentro de rangos normales — sin causas para reportar.</p>
   {% endif %}
 
+  {% if unidades %}
+  <h2>Unidades de manejo</h2>
+  <p class="meta" style="font-size: 9pt; color: #4b5563;">Zonas agrupadas por causa y severidad para prescripción diferenciada.</p>
+  {% for u in unidades %}
+  <div class="zona-detalle {{ u.severidad }}">
+    <h3>Unidad #{{ u.unidad_id }} — {{ u.regla_nombre }} · {{ u.severidad_label }}</h3>
+    <p class="meta">{{ u.area_total_ha }} ha · {{ u.n_zonas }} zona{{ 's' if u.n_zonas != 1 else '' }} ({{ u.zona_ids }}){% if u.ndvi_promedio is not none %} · NDVI {{ "%.3f"|format(u.ndvi_promedio) }}{% endif %}</p>
+    {% if u.texto_unidad %}<p>{{ u.texto_unidad }}</p>{% endif %}
+    {% if u.productos_completo %}<p class="productos"><strong>Productos sugeridos:</strong> {{ u.productos_completo }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+
   <h2>Trazabilidad del análisis</h2>
   <table class="zonas">
     <tbody>
       <tr><td style="width: 40%;"><strong>Archivo de origen</strong></td><td>{{ archivo_original or '—' }}</td></tr>
       <tr><td><strong>Subido por</strong></td><td>{{ subido_por or '—' }}</td></tr>
       <tr><td><strong>Mapeo de bandas</strong></td><td>{{ mapeo_bandas or 'Sin calcular' }}</td></tr>
+      <tr><td><strong>Índices usados</strong></td><td>{{ indices_usados }}</td></tr>
       <tr><td><strong>Método de umbral</strong></td><td>{{ metodo_umbral or 'Sin calcular' }}</td></tr>
       <tr><td><strong>Versión del motor de reglas</strong></td><td>{{ motor_version or '—' }}</td></tr>
     </tbody>

@@ -44,4 +44,6 @@ CATALOGO_PRODUCTOS: dict[str, list[dict[str, str]]] = {
         {"nombre": "Tiidiazurón + Diurón", "tipo": "defoliante"},
     ],
     "vigor_excesivo": [],
+    "compactacion_falla_siembra": [],
+    "bajo_vigor_estadio": [],
 }

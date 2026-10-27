@@ -78,6 +78,14 @@ export const obtenerDiagnostico = (loteId, vueloId) =>
 export const recalcularDiagnostico = (loteId, vueloId) =>
   client.post(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/recalcular`).then(r => r.data)
 
+// Criterio técnico del agrónomo sobre una zona (RFDR-04).
+// revision = { decision: 'aceptado'|'modificado'|'rechazado', causa_confirmada?, comentario? }
+export const revisarZonaDiagnostico = (loteId, vueloId, zonaId, revision) =>
+  client.put(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/zonas/${zonaId}/revision`, revision).then(r => r.data)
+
+export const borrarRevisionZona = (loteId, vueloId, zonaId) =>
+  client.delete(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/zonas/${zonaId}/revision`)
+
 // { fecha_vuelo?, estadio_fenologico?, cultivo_id? } — devuelve diagnostico_desactualizado en true si cambió
 // el cultivo o el estadio; el diagnóstico guardado se recalcula solo al abrirlo (firma de datos).
 export const actualizarVuelo = (loteId, vueloId, datos) =>

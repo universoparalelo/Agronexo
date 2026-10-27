@@ -7,7 +7,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.diagnostico.models import CausaIndiceEnum, ConfianzaEnum, TipoProductoEnum
+from app.diagnostico.models import CausaIndiceEnum, ConfianzaEnum, DecisionRevisionEnum, TipoProductoEnum
 
 
 class ProductoSugerido(BaseModel):
@@ -149,3 +149,19 @@ class DiagnosticoLoteResponse(BaseModel):
     type: str = "FeatureCollection"
     features: list[dict]
     metadata: DiagnosticoMetadata
+
+
+class RevisionZonaRequest(BaseModel):
+    decision: DecisionRevisionEnum
+    causa_confirmada: str | None = Field(None, max_length=40)
+    comentario: str | None = Field(None, max_length=2000)
+
+
+class RevisionZonaResponse(BaseModel):
+    zona_id: int
+    decision: str
+    causa_sugerida: str
+    causa_confirmada: str | None
+    comentario: str | None
+    usuario_id: str
+    actualizado_en: str | None

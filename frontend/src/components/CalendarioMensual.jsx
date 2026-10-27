@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fechaISOLocal } from '../utils/fechas'
+import { fechaISOLocal, fechaVuelo } from '../utils/fechas'
 
 const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 const MESES = [
@@ -32,7 +32,7 @@ export default function CalendarioMensual({ vuelos, vueloActualId, diaSelecciona
   const vueloActual = vuelos.find(v => idDe(v) === vueloActualId)
   const fechaInicial = diaSeleccionado
     ? new Date(`${diaSeleccionado}T00:00:00`)
-    : vueloActual ? new Date(vueloActual.fecha_vuelo) : new Date()
+    : vueloActual ? fechaVuelo(vueloActual.fecha_vuelo) : new Date()
 
   const [mesVisible, setMesVisible] = useState(
     () => new Date(fechaInicial.getFullYear(), fechaInicial.getMonth(), 1)
@@ -41,7 +41,7 @@ export default function CalendarioMensual({ vuelos, vueloActualId, diaSelecciona
 
   const porFecha = {}
   for (const v of vuelos) {
-    const iso = fechaISOLocal(new Date(v.fecha_vuelo))
+    const iso = fechaISOLocal(fechaVuelo(v.fecha_vuelo))
     ;(porFecha[iso] ??= []).push(v)
   }
 
@@ -64,7 +64,7 @@ export default function CalendarioMensual({ vuelos, vueloActualId, diaSelecciona
 
   const mesesConVueloDelAnio = new Set(
     vuelos
-      .map(v => new Date(v.fecha_vuelo))
+      .map(v => fechaVuelo(v.fecha_vuelo))
       .filter(f => f.getFullYear() === mesVisible.getFullYear())
       .map(f => f.getMonth())
   )

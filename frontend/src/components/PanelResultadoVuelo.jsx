@@ -9,6 +9,7 @@ import TablaAhorroVuelo from './TablaAhorroVuelo'
 import ModalCargarPrecio from './ModalCargarPrecio'
 import ModalPreviewPdf from './ModalPreviewPdf'
 import ModalMapaAmpliado from './ModalMapaAmpliado'
+import { fechaVuelo } from '../utils/fechas'
 
 const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 
@@ -184,7 +185,7 @@ export default function PanelResultadoVuelo({
         {vuelo && (
           <span className="pagina-encabezado-meta">
             <span className="resultados-panel-fecha">
-              {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              {fechaVuelo(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
             </span>
             {' · '}
             {SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}

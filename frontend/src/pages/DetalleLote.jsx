@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
 import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
-import { fechaISOLocal, fechaDDMMAAAA } from '../utils/fechas'
+import { fechaISOLocal, fechaDDMMAAAA, fechaVuelo } from '../utils/fechas'
 import { eliminarVuelo, listarVuelos, obtenerEstadoVuelo } from '../api/analisis'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
 import CalendarioMensual from '../components/CalendarioMensual'
+import GraficoEvolucionNdvi from '../components/GraficoEvolucionNdvi'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalEditarLote from '../components/ModalEditarLote'
 import ModalEditarVuelo from '../components/ModalEditarVuelo'
@@ -48,7 +49,7 @@ function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
     <div className="vuelo-card">
       <div className="vuelo-card-info">
         <p className="vuelo-fecha">
-          {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
+          {fechaVuelo(vuelo.fecha_vuelo).toLocaleDateString('es-AR', {
             day: '2-digit', month: 'long', year: 'numeric',
           })}
         </p>
@@ -230,100 +231,62 @@ export default function DetalleLote() {
   )
 
   const vuelosDelDiaSeleccionado = vuelos
-    .filter(v => fechaISOLocal(new Date(v.fecha_vuelo)) === diaSeleccionado)
+    .filter(v => fechaISOLocal(fechaVuelo(v.fecha_vuelo)) === diaSeleccionado)
     .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
 
   const contenido = (
-    <section className="vuelos-tarjeta">
-      <div className="vuelos-toolbar">
-        <div>
-          <h2 className="vuelos-title">Vuelos registrados</h2>
-          <span className="vuelos-conteo">
-            {vuelos.length} vuelo{vuelos.length === 1 ? '' : 's'} registrado{vuelos.length === 1 ? '' : 's'}
-          </span>
-        </div>
-        <div className="vuelos-vista-toggle">
-          <button
-            type="button"
-            className={`vista-btn ${vista === 'lista' ? 'vista-btn--active' : ''}`}
-            onClick={() => setVista('lista')}
-            title="Vista lista"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="3" rx="0.5" fill="currentColor"/><rect x="1" y="5.5" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="1" y="10" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.35"/></svg>
-          </button>
-          <button
-            type="button"
-            className={`vista-btn ${vista === 'calendario' ? 'vista-btn--active' : ''}`}
-            onClick={() => setVista('calendario')}
-            title="Vista calendario"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
-          </button>
-        </div>
-      </div>
+    <>
+      {vuelos.length > 0 && <GraficoEvolucionNdvi loteId={loteId} vuelos={vuelos} />}
 
-      {vuelos.length === 0 && (
-        <div className="empty-state">
-          <p>No hay vuelos registrados para este lote.</p>
-          <p className="empty-hint">Usá "Cargar ortomosaico" para subir un vuelo a este lote.</p>
-        </div>
-      )}
-
-      {vuelos.length > 0 && vista === 'lista' && (
-        <table className="tabla-vuelos">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Sensor</th>
-              <th>Estadio</th>
-              <th>Estado</th>
-              <th className="tabla-vuelos-acciones">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vuelos.map(vuelo => (
-              <VueloFila
-                key={vuelo.vuelo_id}
-                vuelo={vuelo}
-                estadoActual={estados[vuelo.vuelo_id] || vuelo}
-                onVerResultados={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
-                onEditar={() => setVueloParaEditar(vuelo)}
-                onEliminar={() => setVueloParaEliminar(vuelo)}
-              />
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {vuelos.length > 0 && vista === 'calendario' && (
-        <div className="vuelos-tarjeta-cuerpo">
-        <div className="vuelos-calendario-inline">
-          <div className="vuelos-calendario-inline-calendario">
-            <CalendarioMensual
-              vuelos={vuelos}
-              vueloActualId={null}
-              diaSeleccionado={diaSeleccionado}
-              onSeleccionarDia={setDiaSeleccionado}
-            />
+      <section className="vuelos-tarjeta">
+        <div className="vuelos-toolbar">
+          <div>
+            <h2 className="vuelos-title">Vuelos registrados</h2>
+            <span className="vuelos-conteo">
+              {vuelos.length} vuelo{vuelos.length === 1 ? '' : 's'} registrado{vuelos.length === 1 ? '' : 's'}
+            </span>
           </div>
+          <div className="vuelos-vista-toggle">
+            <button
+              type="button"
+              className={`vista-btn ${vista === 'lista' ? 'vista-btn--active' : ''}`}
+              onClick={() => setVista('lista')}
+              title="Vista lista"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="3" rx="0.5" fill="currentColor"/><rect x="1" y="5.5" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="1" y="10" width="12" height="3" rx="0.5" fill="currentColor" opacity="0.35"/></svg>
+            </button>
+            <button
+              type="button"
+              className={`vista-btn ${vista === 'calendario' ? 'vista-btn--active' : ''}`}
+              onClick={() => setVista('calendario')}
+              title="Vista calendario"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
+            </button>
+          </div>
+        </div>
 
-          <div className="vuelos-calendario-inline-lista">
-            <div className="vuelos-calendario-inline-lista-header">
-              <h3 className="vuelos-calendario-lista-titulo">Vuelos del {fechaDDMMAAAA(diaSeleccionado)}</h3>
-              <button
-                type="button"
-                className="vuelos-calendario-nuevo-analisis"
-                onClick={() => setNuevoAnalisisAbierto(true)}
-              >
-                ＋ Cargar nuevo análisis
-              </button>
-            </div>
-            {vuelosDelDiaSeleccionado.length === 0 && (
-              <p className="empty-hint">Sin vuelos cargados ese día.</p>
-            )}
-            <div className="vuelos-lista">
-              {vuelosDelDiaSeleccionado.map(vuelo => (
-                <VueloCard
+        {vuelos.length === 0 && (
+          <div className="empty-state">
+            <p>No hay vuelos registrados para este lote.</p>
+            <p className="empty-hint">Usá "Cargar ortomosaico" para subir un vuelo a este lote.</p>
+          </div>
+        )}
+
+        {vuelos.length > 0 && vista === 'lista' && (
+          <table className="tabla-vuelos">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Sensor</th>
+                <th>Estadio</th>
+                <th>Estado</th>
+                <th className="tabla-vuelos-acciones">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vuelos.map(vuelo => (
+                <VueloFila
                   key={vuelo.vuelo_id}
                   vuelo={vuelo}
                   estadoActual={estados[vuelo.vuelo_id] || vuelo}
@@ -332,15 +295,57 @@ export default function DetalleLote() {
                   onEliminar={() => setVueloParaEliminar(vuelo)}
                 />
               ))}
+            </tbody>
+          </table>
+        )}
+
+        {vuelos.length > 0 && vista === 'calendario' && (
+          <div className="vuelos-tarjeta-cuerpo">
+          <div className="vuelos-calendario-inline">
+            <div className="vuelos-calendario-inline-calendario">
+              <CalendarioMensual
+                vuelos={vuelos}
+                vueloActualId={null}
+                diaSeleccionado={diaSeleccionado}
+                onSeleccionarDia={setDiaSeleccionado}
+              />
+            </div>
+
+            <div className="vuelos-calendario-inline-lista">
+              <div className="vuelos-calendario-inline-lista-header">
+                <h3 className="vuelos-calendario-lista-titulo">Vuelos del {fechaDDMMAAAA(diaSeleccionado)}</h3>
+                <button
+                  type="button"
+                  className="vuelos-calendario-nuevo-analisis"
+                  onClick={() => setNuevoAnalisisAbierto(true)}
+                >
+                  ＋ Cargar nuevo análisis
+                </button>
+              </div>
+              {vuelosDelDiaSeleccionado.length === 0 && (
+                <p className="empty-hint">Sin vuelos cargados ese día.</p>
+              )}
+              <div className="vuelos-lista">
+                {vuelosDelDiaSeleccionado.map(vuelo => (
+                  <VueloCard
+                    key={vuelo.vuelo_id}
+                    vuelo={vuelo}
+                    estadoActual={estados[vuelo.vuelo_id] || vuelo}
+                    onVerResultados={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
+                    onEditar={() => setVueloParaEditar(vuelo)}
+                    onEliminar={() => setVueloParaEliminar(vuelo)}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        </div>
-      )}
-    </section>
+          </div>
+        )}
+      </section>
+    </>
   )
 
-  const ultimoVuelo = vuelos.length > 0 ? new Date(vuelos[0].fecha_vuelo).toLocaleDateString('es-AR') : null
+  const ultimoVuelo = vuelos.length > 0 ? fechaVuelo(vuelos[0].fecha_vuelo).toLocaleDateString('es-AR') : null
   const suelo = TIPOS_SUELO.find((t) => t.value && t.value === lote.tipo_suelo)?.label
 
   const cabecera = (
