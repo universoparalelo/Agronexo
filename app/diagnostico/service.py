@@ -20,6 +20,8 @@ ver docs/release-v1.0.0.md "Problemas abiertos").
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 import unicodedata
@@ -272,6 +274,47 @@ async def guardar_diagnostico(
     await db.flush()
 
 
+def calcular_firma_datos(
+    *,
+    motor_version: str,
+    lote: dict,
+    vuelo: dict,
+    cultivo: dict,
+    catalogo: dict,
+    alternativas_marca: dict,
+    indices: dict[str, str | None],
+) -> str:
+    """
+    Firma de todo lo que usa el diagnóstico para calcularse. Se guarda junto al
+    resultado; al abrirlo de nuevo se arma otra con los datos de hoy y, si
+    difiere, se recalcula solo. Así no hace falta que nadie apriete "Recalcular".
+    """
+    datos = {
+        "motor_version": motor_version,
+        "lote": lote,
+        "vuelo": vuelo,
+        "cultivo": cultivo,
+        "catalogo": catalogo,
+        "alternativas_marca": alternativas_marca,
+        "indices": indices,
+    }
+    return hashlib.sha256(json.dumps(datos, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+async def _indices_completados(db: AsyncSession, lote_id: uuid.UUID, vuelo_id: uuid.UUID) -> dict[str, str | None]:
+    """Índices adicionales ya calculados, con una marca que cambia si se reprocesan."""
+    listos: dict[str, str | None] = {}
+    for indice in _INDICES_ADICIONALES:
+        try:
+            analisis = await obtener_analisis_indice(db, lote_id, vuelo_id, indice)
+        except Exception:
+            logger.exception("No se pudo leer el índice %s del vuelo %s", indice.value, vuelo_id)
+            continue
+        if analisis is not None and analisis.estado == EstadoVueloEnum.completado and analisis.geojson_key:
+            listos[indice.value] = f"{analisis.geojson_key}:{analisis.task_id}"
+    return listos
+
+
 async def generar_diagnostico(
     db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID, *, forzar_recalculo: bool = False,
 ) -> dict | None:
@@ -284,9 +327,10 @@ async def generar_diagnostico(
     NDVI calculado — el router lo traduce a 404.
 
     Primera llamada para un vuelo: calcula y guarda en `diagnosticos`. Las
-    siguientes devuelven lo guardado sin recalcular, salvo
-    forzar_recalculo=True (botón "Recalcular" del frontend), que vuelve a
-    calcular todo y sobrescribe la fila guardada.
+    siguientes devuelven lo guardado mientras la firma de datos (cultivo,
+    estadio, fecha, motor de reglas, catálogo de productos y marcas, zonas e
+    índices del vuelo) no haya cambiado; si cambió, recalculan solas y
+    sobrescriben la fila. forzar_recalculo=True recalcula siempre.
 
     Solo la parte async (DB + descarga de GeoJSON de MinIO, esta última ya
     corre en threadpool dentro de obtener_resultado_geojson*) toca el event
@@ -301,10 +345,40 @@ async def generar_diagnostico(
     if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
         return None
 
-    if not forzar_recalculo:
-        guardado = await obtener_diagnostico_guardado(db, vuelo_id)
-        if guardado is not None:
+    cultivo = vuelo.cultivo
+    guardado = None if forzar_recalculo else await obtener_diagnostico_guardado(db, vuelo_id)
+
+    firma = None
+    catalogo = alternativas_marca = None
+    if cultivo is not None:
+        catalogo = await _cargar_catalogo_productos(db, cultivo.tipo_cultivo)
+        alternativas_marca = await _cargar_alternativas_marca(db, cultivo.tipo_cultivo)
+        firma = calcular_firma_datos(
+            motor_version=MOTOR_VERSION,
+            lote={"nombre": lote.nombre, "actualizado": lote.updated_at.isoformat() if lote.updated_at else None},
+            vuelo={
+                "fecha": vuelo.fecha_vuelo.isoformat() if vuelo.fecha_vuelo else None,
+                "estadio": vuelo.estadio_fenologico,
+                "geojson_key": vuelo.geojson_key,
+                "task_id": vuelo.task_id,
+                "metodo_umbral": vuelo.metodo_umbral,
+                "mapeo_bandas": vuelo.mapeo_bandas,
+            },
+            cultivo={
+                "id": str(cultivo.id),
+                "tipo": cultivo.tipo_cultivo.value,
+                "variedad": cultivo.variedad,
+                "siembra": cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
+                "cosecha": cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
+            },
+            catalogo=catalogo,
+            alternativas_marca=alternativas_marca,
+            indices=await _indices_completados(db, lote.id, vuelo_id),
+        )
+        if guardado is not None and (guardado.resultado.get("metadata") or {}).get("firma_datos") == firma:
             return guardado.resultado
+    elif guardado is not None:
+        return guardado.resultado  # datos viejos sin cultivo: se conserva lo guardado
 
     ndvi_geojson = await obtener_resultado_geojson(db, lote.id, vuelo_id)
     if ndvi_geojson is None:
@@ -328,7 +402,6 @@ async def generar_diagnostico(
             logger.exception("No se pudo resolver el índice %s para el vuelo %s", indice.value, vuelo_id)
             continue
 
-    cultivo = vuelo.cultivo
     if cultivo is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -336,9 +409,6 @@ async def generar_diagnostico(
         )
 
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
-
-    catalogo = await _cargar_catalogo_productos(db, cultivo.tipo_cultivo)
-    alternativas_marca = await _cargar_alternativas_marca(db, cultivo.tipo_cultivo)
 
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
@@ -366,6 +436,7 @@ async def generar_diagnostico(
     )
     resultado["metadata"]["metodo_umbral"] = vuelo.metodo_umbral
     resultado["metadata"]["mapeo_bandas"] = vuelo.mapeo_bandas
+    resultado["metadata"]["firma_datos"] = firma
     await guardar_diagnostico(db, vuelo_id, resultado, calculado_en, MOTOR_VERSION)
 
     return resultado
