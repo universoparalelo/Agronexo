@@ -79,7 +79,15 @@ export default function TendenciaIndice({ vueloA, vueloB, ndviRealA, ndviRealB }
   return (
     <div className="tendencia-indice">
       <div className="resumen-diferencia-encabezado">
-        <h3>Tendencia del índice</h3>
+        <h3 className="titulo-con-ayuda">
+          Tendencia del índice
+          <span className="ayuda-tip">
+            <button type="button" className="ayuda-tip-boton" aria-label="Sobre la curva de referencia">i</button>
+            <span role="tooltip" className="ayuda-tip-caja">
+              Curva de referencia genérica por estadio, todavía no ajustada con datos reales del cultivo — se refina a medida que se acumulan vuelos.
+            </span>
+          </span>
+        </h3>
         <span className="resumen-diferencia-fechas">
           Lo real del lote contra lo esperado para su etapa ({etiquetaTipoCultivo(cultivo)})
         </span>
@@ -139,9 +147,6 @@ export default function TendenciaIndice({ vueloA, vueloB, ndviRealA, ndviRealB }
         </div>
       </div>
 
-      <p className="tendencia-nota">
-        * Curva de referencia genérica por estadio, todavía no ajustada con datos reales del cultivo — se refina a medida que se acumulan vuelos.
-      </p>
     </div>
   )
 }

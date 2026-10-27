@@ -137,8 +137,8 @@ export default function CambioPorZona({ lote, featuresA = [], featuresB = [], di
                       </span>
                       <strong>{CAUSA_LABELS[diag.causa_indice] || diag.causa_indice}</strong>
                     </div>
-                    {diag.texto_explicativo && (
-                      <p className="cambio-zona-diagnostico-texto">{diag.texto_explicativo}</p>
+                    {diag.accion_recomendada && diag.regla_id !== 'R99' && (
+                      <p className="cambio-zona-diagnostico-texto">{diag.accion_recomendada.split('. ')[0].replace(/\.$/, '')}.</p>
                     )}
                   </>
                 )}

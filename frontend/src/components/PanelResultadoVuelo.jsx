@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import useResultadoVuelo from '../hooks/useResultadoVuelo'
-import { etiquetaTipoCultivo } from '../utils/cultivos'
 import MapaZonas from './MapaZonas'
 import TablaZonas from './TablaZonas'
 import TablaDiagnostico from './TablaDiagnostico'
 import ResumenDiagnostico from './ResumenDiagnostico'
+import SelectorVuelo from './SelectorVuelo'
 import TablaAhorroVuelo from './TablaAhorroVuelo'
 import ModalCargarPrecio from './ModalCargarPrecio'
 import ModalPreviewPdf from './ModalPreviewPdf'
@@ -18,7 +18,8 @@ const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 // instancia carga y maneja sus propios datos de forma independiente.
 export default function PanelResultadoVuelo({
   loteId, vueloId, vuelo, lote,
-  esComparacion = false, onCerrarComparacion, onZonasCargadas, ocultarEncabezado = false,
+  esComparacion = false, onZonasCargadas, ocultarEncabezado = false,
+  vuelosDisponibles, excluirVueloId, onCambiarVuelo,
 }) {
   const {
     zonas, loading, error,
@@ -175,31 +176,19 @@ export default function PanelResultadoVuelo({
     <div className="resultados-panel">
       {!ocultarEncabezado && (
       <div className="resultados-panel-encabezado">
-        {vuelo?.cultivo && (
-          <span className={`cultivo-badge cultivo-${vuelo.cultivo.tipo_cultivo}`}>
-            {etiquetaTipoCultivo(vuelo.cultivo.tipo_cultivo)}
-            {vuelo.cultivo.variedad ? ` · ${vuelo.cultivo.variedad}` : ''}
-          </span>
-        )}
         {vuelo && (
           <span className="pagina-encabezado-meta">
-            <span className="resultados-panel-fecha">
-              {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
-            </span>
+            {onCambiarVuelo
+              ? <SelectorVuelo vuelos={vuelosDisponibles} valor={vueloId} excluirId={excluirVueloId} onCambiar={onCambiarVuelo} />
+              : (
+                <span className="resultados-panel-fecha">
+                  {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                </span>
+              )}
             {' · '}
             {SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}
             {lote?.area_ha ? ` · ${lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha` : ''}
           </span>
-        )}
-        {esComparacion && (
-          <button
-            type="button"
-            className="resultados-panel-cerrar-comparacion"
-            onClick={onCerrarComparacion}
-            title="Cerrar comparación"
-          >
-            ✕ Comparación
-          </button>
         )}
       </div>
       )}

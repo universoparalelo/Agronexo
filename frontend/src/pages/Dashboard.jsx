@@ -170,9 +170,18 @@ function buildActivityFeed(loteRows, vueloRows, userName) {
 
 
 /* ──────── KPI Card ──────── */
-function KpiCard({ label, value, delta, deltaType, icon, highlight }) {
+function KpiCard({ label, value, delta, deltaType, icon, highlight, alerta, onClick }) {
+  const props = onClick
+    ? {
+        role: 'link',
+        tabIndex: 0,
+        title: 'Ver lotes',
+        onClick,
+        onKeyDown: (e) => { if (e.key === 'Enter') onClick() },
+      }
+    : {}
   return (
-    <div className={`kpi-card${highlight ? ' kpi-card--highlight' : ''}`}>
+    <div className={`kpi-card${highlight ? ' kpi-card--highlight' : ''}${onClick ? ' kpi-card--link' : ''}${alerta ? ' kpi-card--alerta' : ''}`} {...props}>
       <div className="kpi-card-top">
         <span className="kpi-label">{label}</span>
         <span className="kpi-icon">{icon}</span>
@@ -478,8 +487,19 @@ export default function Dashboard() {
     return () => clearInterval(id)
   }, [vueloRows, cargarDatos])
 
-  const vuelosCompletados = vueloRows.filter(v => v.estado === 'completado').length
   const vuelosEnProceso = vueloRows.filter(v => v.estado === 'pendiente' || v.estado === 'procesando').length
+  const vuelosConError = vueloRows.filter(v => v.estado === 'error').length
+  const pendientesDeAnalisis = [
+    vuelosEnProceso > 0 && `${vuelosEnProceso} en proceso`,
+    vuelosConError > 0 && `${vuelosConError} con error`,
+  ].filter(Boolean)
+
+  // Último vuelo completado de cada lote; `zonas_atencion` es null hasta que alguien abre ese vuelo y se genera su diagnóstico.
+  const ultimosVuelos = loteRows
+    .map(l => l.vuelos.filter(v => v.estado === 'completado').sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))[0])
+    .filter(Boolean)
+  const lotesConAtencion = ultimosVuelos.filter(v => v.zonas_atencion > 0).length
+  const lotesSinDiagnosticar = ultimosVuelos.filter(v => v.zonas_atencion == null).length
   const areaTotalHa = loteRows.reduce((suma, l) => suma + (l.area_ha || 0), 0)
   const lotesConLimite = loteRows.filter(l => l.area_ha > 0).length
 
@@ -542,13 +562,13 @@ export default function Dashboard() {
             </h1>
             <div className="hero-panel-acciones">
               <button type="button" className="hero-btn hero-btn--principal" onClick={() => setShowModal(true)}>
-                Cargar nuevo análisis
+                + Cargar Ortomosaico
               </button>
               <button type="button" className="hero-btn" onClick={() => setShowModalNuevoLote(true)}>
-                Nuevo lote
+                + Nuevo Lote
               </button>
               <button type="button" className="hero-btn" onClick={() => navigate('/lotes')}>
-                Ver lotes
+                Ver Lotes
               </button>
               <button
                 type="button"
@@ -556,7 +576,7 @@ export default function Dashboard() {
                 disabled={!vueloRows.some(v => v.estado === 'completado')}
                 onClick={handleVerDiagnosticos}
               >
-                Ver diagnósticos
+                Ver Diagnósticos
               </button>
             </div>
           </section>
@@ -569,20 +589,34 @@ export default function Dashboard() {
               delta={loteRows.length > 0 ? `${loteRows.length} activo${loteRows.length !== 1 ? 's' : ''}` : null}
               deltaType="up"
               icon={<IconLotes />}
+              onClick={() => navigate('/lotes')}
             />
             <KpiCard
               label="ANÁLISIS REALIZADOS"
               value={vueloRows.length || '—'}
-              delta={vuelosCompletados > 0 ? `${vuelosCompletados} completados` : null}
-              deltaType="up"
+              delta={
+                vueloRows.length === 0 ? null
+                  : pendientesDeAnalisis.length > 0 ? pendientesDeAnalisis.join(' · ')
+                  : 'Todos completados'
+              }
+              deltaType={vuelosConError > 0 ? 'warn' : (vuelosEnProceso > 0 ? 'neutral' : 'up')}
               icon={<IconDiagnostico />}
+              onClick={() => navigate('/lotes')}
             />
             <KpiCard
-              label="ANÁLISIS COMPLETADOS"
-              value={vuelosCompletados || '—'}
-              delta={vuelosCompletados > 0 ? 'Con diagnóstico disponible' : 'Sin análisis aún'}
-              deltaType={vuelosCompletados > 0 ? 'up' : 'neutral'}
+              label="REQUIEREN ATENCIÓN"
+              value={ultimosVuelos.length > 0 ? lotesConAtencion : '—'}
+              delta={
+                ultimosVuelos.length === 0 ? 'Sin análisis aún'
+                  : [
+                      lotesConAtencion > 0 ? `de ${loteRows.length} lote${loteRows.length !== 1 ? 's' : ''}` : 'Ningún lote con problemas',
+                      lotesSinDiagnosticar > 0 && `${lotesSinDiagnosticar} sin diagnóstico aún`,
+                    ].filter(Boolean).join(' · ')
+              }
+              deltaType={lotesConAtencion > 0 ? 'down' : 'up'}
+              alerta={lotesConAtencion > 0}
               icon={<IconInformes />}
+              onClick={() => navigate('/lotes')}
             />
             <KpiCard
               label="ÁREA MONITOREADA"
@@ -591,6 +625,7 @@ export default function Dashboard() {
               deltaType={areaTotalHa > 0 ? 'up' : 'neutral'}
               icon={<IconConfig />}
               highlight={areaTotalHa > 0}
+              onClick={() => navigate('/lotes')}
             />
           </div>
 

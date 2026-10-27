@@ -804,19 +804,32 @@
   gap: 0.5rem;
 }
 
-.resultados-panel-cerrar-comparacion {
-  margin-left: auto;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 999px;
-  cursor: pointer;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #6b7280;
+.detalle-titulo-fila:has(.lote-etiqueta) { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.lote-etiqueta {
+  font-size: 0.85rem; font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 999px;
+  background: #dcfce7; color: #166534; white-space: nowrap;
 }
 
-.resultados-panel-cerrar-comparacion:hover { border-color: #b91c1c; color: #b91c1c; }
+.selector-vuelo {
+  font: inherit;
+  font-weight: 700;
+  color: #166534;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.1rem 0.3rem;
+  max-width: 100%;
+  cursor: pointer;
+}
+.selector-vuelo:hover, .selector-vuelo:focus { border-color: #cbd5cf; background: #fff; outline: none; }
+
+.btn-cerrar-comparacion {
+  color: #b91c1c;
+  border-color: #fca5a5;
+  background: #fef2f2;
+  font-weight: 700;
+}
+.btn-cerrar-comparacion:hover { color: #991b1b; border-color: #b91c1c; background: #fee2e2; }
 
 .resumen-diferencia {
   background: #fff;
@@ -850,12 +863,14 @@
 
 .resumen-diferencia-tabla { font-size: 0.8rem; }
 
+/* El mismo relleno a cada lado de la línea, así queda en el centro y los dos contenidos miden lo mismo */
 .resumen-diferencia-fila {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
+  gap: 0;
 }
-.resumen-diferencia-col { min-width: 0; }
+.resumen-diferencia-col { min-width: 0; box-sizing: border-box; }
+.resumen-diferencia-col:first-child { padding-right: 1.5rem; }
 .resumen-diferencia-col:last-child {
   border-left: 1px solid #edf1ed;
   padding-left: 1.5rem;
@@ -863,6 +878,7 @@
 
 @media (max-width: 860px) {
   .resumen-diferencia-fila { grid-template-columns: 1fr; }
+  .resumen-diferencia-col:first-child { padding-right: 0; padding-bottom: 0.9rem; }
   .resumen-diferencia-col:last-child {
     border-left: none;
     padding-left: 0;
@@ -1035,19 +1051,18 @@
 
 .mapa-comparacion-lado-lado {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.8rem;
   align-items: start;
 }
 
 .mapa-comparacion-mini {
   position: relative;
-  height: 260px;
+  height: min(48vh, 440px);
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #e5e7eb;
 }
-.mapa-comparacion-mini--base { height: 200px; align-self: start; }
 
 .mapa-comparacion-pill {
   position: absolute;
@@ -1165,6 +1180,16 @@
 }
 .resultados-shell .resultados-main--dividida .resultados-sidebar {
   border-left: 0; overflow: visible; border-radius: 16px; box-shadow: 0 4px 24px rgba(15, 40, 25, 0.1);
+}
+
+/* Comparación: los dos mapas quedan lado a lado arriba y el panel de cada vuelo (zonas, diagnóstico, ahorro) debajo de su mapa */
+/* Cada columna mide lo que mide su contenido: si una se alarga (p. ej. al abrir Diagnóstico), la otra no se estira ni reparte el espacio sobrante entre su mapa y su panel */
+.resultados-comparacion--activa { align-items: flex-start; }
+.resultados-shell .resultados-comparacion--activa .resultados-main--dividida {
+  grid-template-columns: minmax(0, 1fr); flex: 0 0 auto; min-height: 0; align-content: start;
+}
+.resultados-shell .resultados-comparacion--activa .resultados-main--dividida .resultados-mapa {
+  position: relative; top: auto; align-self: stretch; height: min(48vh, 440px);
 }
 
 .modal-box.modal-box--mapa { width: 96vw; max-width: 1280px; height: 88vh; max-height: 88vh; overflow: hidden; }
@@ -1304,12 +1329,18 @@
 .diagnostico-header-info { margin-top: 0; }
 .diagnostico-resumen--corto { margin: 0.9rem 0 0; }
 .resumen-atencion { color: #b91c1c; }
+.vuelos-toolbar-acciones { display: flex; align-items: center; gap: 0.75rem; }
+.kpi-card--link { cursor: pointer; }
+.detalle-cabecera-acciones { display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+.dashboard--resumen .kpi-card--alerta .kpi-value { color: #b91c1c; }
+.dashboard--resumen .kpi-card--alerta .kpi-icon { background: #fee2e2; color: #b91c1c; }
 .tabla-vuelos-fecha-link {
   padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left;
 }
 .tabla-vuelos-fecha-link:hover { text-decoration: underline; }
 .titulo-con-ayuda { display: flex; align-items: center; gap: 0.45rem; }
 .titulo-con-ayuda .ayuda-tip-caja { font-size: 0.78rem; font-weight: 400; }
+.tendencia-indice .titulo-con-ayuda .ayuda-tip-caja { width: 280px; }
 .diagnostico-title-row { align-items: flex-start; }
 
 /* La tabla del diagnóstico toma el mismo estilo que la de zonas y la de ahorro */
