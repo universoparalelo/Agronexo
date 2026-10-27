@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import useSidebarPlegada from '../hooks/useSidebarPlegada'
 
 const IconDashboard = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
@@ -32,8 +33,10 @@ const IconConfig = () => (
   </svg>
 )
 
-export default function SidebarNav({ user, onVerDiagnosticos }) {
+export default function SidebarNav({ user, onVerDiagnosticos, plegable = false }) {
   const navigate = useNavigate()
+  const [plegadaGuardada, alternar] = useSidebarPlegada()
+  const plegada = plegable && plegadaGuardada
   const { pathname } = useLocation()
 
   const activeId = /^\/lotes\/[^/]+\/vuelos\//.test(pathname) ? 'diagnostico'
@@ -70,7 +73,7 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
     : 'U'
 
   return (
-    <aside className="sidebar-nav">
+    <aside className={`sidebar-nav${plegada ? ' sidebar-nav--plegada' : ''}`}>
       <div
         className="sidebar-logo-wrap sidebar-logo-wrap--link"
         role="link"
@@ -81,9 +84,28 @@ export default function SidebarNav({ user, onVerDiagnosticos }) {
       >
         <img src="/logo.png" alt="AgroNexo" className="sidebar-logo-img" />
         <span className="sidebar-beta">BETA</span>
+        <img src="/isotipo.svg" alt="AgroNexo" className="sidebar-isotipo" />
       </div>
 
       <nav className="sidebar-menu">
+        {plegable && (
+          <div className="sidebar-section">
+            <button
+              type="button"
+              className="sidebar-link"
+              onClick={alternar}
+              aria-label={plegada ? 'Abrir la barra lateral' : 'Cerrar la barra lateral'}
+              title={plegada ? 'Abrir la barra lateral' : 'Cerrar la barra lateral'}
+            >
+              <span className="sidebar-link-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </span>
+              <span className="sidebar-link-label">Cerrar barra</span>
+            </button>
+          </div>
+        )}
         {sections.map(({ label, items }) => (
           <div key={label} className="sidebar-section">
             <span className="sidebar-section-label">{label}</span>

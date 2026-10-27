@@ -116,7 +116,7 @@ function FitBounds({ geojson }) {
   return null
 }
 
-export default function MapaZonas({ geojson, diagnostico, sinDatos = null, interactivo = true }) {
+export default function MapaZonas({ geojson, diagnostico, sinDatos = null, interactivo = true, leyendaHorizontal = false }) {
   // El relleno siempre se colorea por clase (valor real del NDVI) — a
   // pedido: colorear por severidad (relativa al promedio del lote) dejaba
   // casi todo el mapa en "normal"/verde en lotes con variación moderada,
@@ -136,7 +136,7 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null, inter
   const onEach = diagnostico ? onEachZonaDiagnostico : onEachZona
 
   return (
-    <div className="mapa-zonas-wrapper">
+    <div className={`mapa-zonas-wrapper${leyendaHorizontal ? ' mapa-zonas-wrapper--con-leyenda' : ''}`}>
       <PatronSinDatos />
       <MapContainer
         center={[-27.47, -60.67]}
@@ -177,7 +177,26 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null, inter
         )}
       </MapContainer>
 
-      <div className="mapa-leyenda">
+      {leyendaHorizontal ? (
+        // Siempre los mismos ítems, en cualquier pestaña, para que la leyenda no cambie al navegar.
+        <div className="mapa-leyenda mapa-leyenda--horizontal">
+          {Object.entries(etiquetas).map(([key, label]) => (
+            <div key={key} className="leyenda-item">
+              <span className="leyenda-color" style={{ background: colores[key] }} />
+              <span>{label}</span>
+            </div>
+          ))}
+          <div className="leyenda-item">
+            <span className="leyenda-color leyenda-color--sin-datos" />
+            <span>Sin datos</span>
+          </div>
+          <div className="leyenda-item">
+            <span className="leyenda-color" style={{ background: 'transparent', border: '2px dashed #666' }} />
+            <span>Unidad de manejo</span>
+          </div>
+        </div>
+      ) : (
+        <div className="mapa-leyenda">
         {Object.entries(etiquetas).map(([key, label]) => (
           <div key={key} className="leyenda-item">
             <span className="leyenda-color" style={{ background: colores[key] }} />
@@ -200,6 +219,7 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null, inter
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

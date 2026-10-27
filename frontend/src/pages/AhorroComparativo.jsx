@@ -121,7 +121,6 @@ export default function AhorroComparativo() {
   return (
     <PanelLayout
       migas={[
-        { label: 'Dashboard', to: '/dashboard' },
         { label: 'Lotes', to: '/lotes' },
         { label: lote.nombre, to: `/lotes/${loteId}` },
         { label: 'Ahorro comparativo' },

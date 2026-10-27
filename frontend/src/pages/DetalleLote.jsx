@@ -12,6 +12,7 @@ import ModalEditarLote from '../components/ModalEditarLote'
 import ModalEditarVuelo from '../components/ModalEditarVuelo'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
+import { TIPOS_SUELO } from '../utils/suelos'
 
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
@@ -84,6 +85,59 @@ function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
         </button>
       </div>
     </div>
+  )
+}
+
+function VueloFila({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar }) {
+  const estadoStr = estadoActual.estado || vuelo.estado
+  const progreso = estadoActual.progreso ?? null
+
+  return (
+    <tr>
+      <td className="tabla-vuelos-fecha">
+        {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+      </td>
+      <td>{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</td>
+      <td>{vuelo.estadio_fenologico ? <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span> : '—'}</td>
+      <td>
+        <span className={`estado-badge estado-${estadoStr}`}>
+          {estadoStr === 'procesando' && <span className="estado-spinner" />}
+          {ESTADO_LABELS[estadoStr] || estadoStr}
+        </span>
+        {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
+          <div className="progreso-bar-wrapper">
+            <div className="progreso-bar" style={{ width: `${progreso}%` }} />
+            <span className="progreso-pct">{progreso}%</span>
+          </div>
+        )}
+        {estadoActual.mensaje && estadoStr === 'procesando' && (
+          <p className="vuelo-mensaje">{estadoActual.mensaje}</p>
+        )}
+        {estadoStr === 'error' && (estadoActual.error || vuelo.error_detalle) && (
+          <p className="vuelo-error">{estadoActual.error || vuelo.error_detalle}</p>
+        )}
+      </td>
+      <td className="tabla-vuelos-acciones">
+        <div>
+          {vuelo.estado === 'completado' && (
+            <button className="btn-primary btn-sm" onClick={onVerResultados}>
+              Ver resultados
+            </button>
+          )}
+          <button type="button" className="tbl-btn" title="Editar vuelo" aria-label="Editar vuelo" onClick={onEditar}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+          <button type="button" className="tbl-btn tbl-btn--danger" title="Eliminar vuelo" aria-label="Eliminar vuelo" onClick={onEliminar}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 }
 
@@ -167,9 +221,14 @@ export default function DetalleLote() {
     .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
 
   const contenido = (
-    <>
-      <div className="vuelos-header-row">
-        <h2 className="vuelos-title">Vuelos registrados</h2>
+    <section className="vuelos-tarjeta">
+      <div className="vuelos-toolbar">
+        <div>
+          <h2 className="vuelos-title">Vuelos registrados</h2>
+          <span className="vuelos-conteo">
+            {vuelos.length} vuelo{vuelos.length === 1 ? '' : 's'} registrado{vuelos.length === 1 ? '' : 's'}
+          </span>
+        </div>
         <div className="vuelos-vista-toggle">
           <button
             type="button"
@@ -193,26 +252,38 @@ export default function DetalleLote() {
       {vuelos.length === 0 && (
         <div className="empty-state">
           <p>No hay vuelos registrados para este lote.</p>
-          <p className="empty-hint">Usá "Cargar Ortomosaico" desde el Dashboard para subir un vuelo a este lote.</p>
+          <p className="empty-hint">Usá "Cargar ortomosaico" para subir un vuelo a este lote.</p>
         </div>
       )}
 
       {vuelos.length > 0 && vista === 'lista' && (
-        <div className="vuelos-lista">
-          {vuelos.map(vuelo => (
-            <VueloCard
-              key={vuelo.vuelo_id}
-              vuelo={vuelo}
-              estadoActual={estados[vuelo.vuelo_id] || vuelo}
-              onVerResultados={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
-              onEditar={() => setVueloParaEditar(vuelo)}
-              onEliminar={() => setVueloParaEliminar(vuelo)}
-            />
-          ))}
-        </div>
+        <table className="tabla-vuelos">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Sensor</th>
+              <th>Estadio</th>
+              <th>Estado</th>
+              <th className="tabla-vuelos-acciones">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vuelos.map(vuelo => (
+              <VueloFila
+                key={vuelo.vuelo_id}
+                vuelo={vuelo}
+                estadoActual={estados[vuelo.vuelo_id] || vuelo}
+                onVerResultados={() => navigate(`/lotes/${loteId}/vuelos/${vuelo.vuelo_id}`)}
+                onEditar={() => setVueloParaEditar(vuelo)}
+                onEliminar={() => setVueloParaEliminar(vuelo)}
+              />
+            ))}
+          </tbody>
+        </table>
       )}
 
       {vuelos.length > 0 && vista === 'calendario' && (
+        <div className="vuelos-tarjeta-cuerpo">
         <div className="vuelos-calendario-inline">
           <div className="vuelos-calendario-inline-calendario">
             <CalendarioMensual
@@ -251,55 +322,55 @@ export default function DetalleLote() {
             </div>
           </div>
         </div>
+        </div>
       )}
-    </>
+    </section>
+  )
+
+  const ultimoVuelo = vuelos.length > 0 ? new Date(vuelos[0].fecha_vuelo).toLocaleDateString('es-AR') : null
+  const suelo = TIPOS_SUELO.find((t) => t.value && t.value === lote.tipo_suelo)?.label
+
+  const cabecera = (
+    <div className="detalle-cabecera">
+      <div>
+        <div className="detalle-titulo-fila">
+          <h1>{lote.nombre}</h1>
+          <button
+            type="button"
+            className="detalle-editar-btn"
+            title="Editar lote"
+            aria-label="Editar lote"
+            onClick={() => setEditandoLote(true)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+        </div>
+        <div className="detalle-subtitulo">
+          {cultivoMasReciente(lote) && (
+            <span className={`cultivo-badge cultivo-${cultivoMasReciente(lote).tipo_cultivo}`}>
+              {etiquetaTipoCultivo(cultivoMasReciente(lote).tipo_cultivo)}
+            </span>
+          )}
+          {lote.area_ha && <span>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha</span>}
+          {suelo && <span>Suelo: {suelo}</span>}
+          {ultimoVuelo && <span>Último vuelo: {ultimoVuelo}</span>}
+        </div>
+      </div>
+      <button type="button" className="btn-primary" onClick={() => setNuevoAnalisisAbierto(true)}>
+        + Cargar Ortomosaico
+      </button>
+    </div>
   )
 
   return (
     <PanelLayout
-      migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Lotes', to: '/lotes' }, { label: lote.nombre }]}
+      migas={[{ label: 'Lotes', to: '/lotes' }, { label: lote.nombre }]}
       onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
       <main className={`detalle-main ${vista === 'calendario' ? 'detalle-main--calendario' : ''}`}>
-        <div className="pagina-encabezado">
-          <div className="detalle-titulo">
-            <div className="detalle-titulo-fila">
-              <h1>{lote.nombre}</h1>
-              <button
-                type="button"
-                className="detalle-editar-btn"
-                title="Editar lote"
-                aria-label="Editar lote"
-                onClick={() => setEditandoLote(true)}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-              </button>
-            </div>
-            <div className="detalle-titulo-meta">
-              {cultivoMasReciente(lote) && (
-                <span className={`cultivo-badge cultivo-${cultivoMasReciente(lote).tipo_cultivo}`}>
-                  {etiquetaTipoCultivo(cultivoMasReciente(lote).tipo_cultivo)}
-                </span>
-              )}
-              {lote.area_ha && (
-                <span className="pagina-encabezado-meta">
-                  {lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha
-                </span>
-              )}
-            </div>
-          </div>
-          {lote.cultivos?.length > 0 && (
-            <button
-              type="button"
-              className="btn-secondary pagina-encabezado-accion"
-              onClick={() => navigate(`/lotes/${loteId}/ahorro`)}
-            >
-              Ahorro comparativo
-            </button>
-          )}
-        </div>
+        {cabecera}
         {contenido}
       </main>
 

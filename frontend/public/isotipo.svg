@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="1196 314 258 264" role="img" aria-label="AgroNexo">
+<defs><linearGradient id="hoja" gradientUnits="userSpaceOnUse" x1="1350" y1="409.5" x2="1438" y2="354.5"><stop offset="0" stop-color="#4C953F"/><stop offset="1" stop-color="#C7D444"/></linearGradient></defs>
+<path fill="#FFFFFF" d="M1357.91 419.26 A85.5 83 0 1 1 1337.59 404.69 L1313.23 437.91 A40.5 43.5 0 1 0 1331.80 454.87 Z"/>
+<path d="M1297.50 480.50 L1352.50 405.50" stroke="#4C953F" stroke-width="8.5" stroke-linecap="round" fill="none"/><circle cx="1297.5" cy="480.5" r="19.5" fill="#4C953F"/>
+<path fill="#4C953F" fill-rule="evenodd" d="M1341.00 397.50 C1353.58 366.68 1318.09 335.59 1294.00 330.50 C1290.59 354.89 1307.74 398.84 1341.00 397.50 ZM1332.54 385.44 Q1320.99 361.55 1303.40 343.90 Q1319.51 362.59 1332.54 385.44 Z"/>
+<path fill="url(#hoja)" fill-rule="evenodd" d="M1350.00 409.50 C1388.97 428.78 1430.41 385.43 1438.00 354.50 C1406.87 347.77 1349.75 366.02 1350.00 409.50 ZM1365.84 399.60 Q1392.12 379.00 1420.40 365.50 Q1391.17 377.47 1365.84 399.60 Z"/>
+</svg>

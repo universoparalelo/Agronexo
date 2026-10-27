@@ -78,7 +78,7 @@ export const obtenerDiagnostico = (loteId, vueloId) =>
 export const recalcularDiagnostico = (loteId, vueloId) =>
   client.post(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/recalcular`).then(r => r.data)
 
-// { fecha_vuelo?, estadio_fenologico?, cultivo_id? } — devuelve diagnostico_desactualizado
-// en true si cambió el cultivo o el estadio (el diagnóstico guardado no se recalcula solo).
+// { fecha_vuelo?, estadio_fenologico?, cultivo_id? } — devuelve diagnostico_desactualizado en true si cambió
+// el cultivo o el estadio; el diagnóstico guardado se recalcula solo al abrirlo (firma de datos).
 export const actualizarVuelo = (loteId, vueloId, datos) =>
   client.put(`/lotes/${loteId}/vuelos/${vueloId}`, datos).then(r => r.data)

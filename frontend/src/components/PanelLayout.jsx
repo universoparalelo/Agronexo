@@ -9,7 +9,7 @@ export default function PanelLayout({ migas, onVerDiagnosticos, alto = false, ch
 
   return (
     <div className={`dashboard panel-shell${alto ? ' panel-shell--alto' : ''}`}>
-      <SidebarNav user={user} onVerDiagnosticos={onVerDiagnosticos} />
+      <SidebarNav user={user} onVerDiagnosticos={onVerDiagnosticos} plegable />
       <div className="dashboard-body">
         <TopbarPanel migas={migas} />
         {children}

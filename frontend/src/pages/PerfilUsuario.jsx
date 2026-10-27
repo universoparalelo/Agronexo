@@ -186,10 +186,16 @@ export default function PerfilUsuario() {
     : 'U'
 
   return (
-    <PanelLayout migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Mi perfil' }]}>
+    <PanelLayout migas={[{ label: 'Mi perfil' }]}>
       <main className="detalle-main perfil-main">
-        <div className="pagina-encabezado">
-          <h1>Mi perfil</h1>
+        <div className="detalle-cabecera">
+          <div>
+            <div className="detalle-titulo-fila"><h1>Mi perfil</h1></div>
+            <div className="detalle-subtitulo">
+              {user?.email && <span>{user.email}</span>}
+              {user?.nombre_empresa && <span>{user.nombre_empresa}</span>}
+            </div>
+          </div>
         </div>
 
         <div className="perfil-grid">

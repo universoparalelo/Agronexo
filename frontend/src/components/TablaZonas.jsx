@@ -15,7 +15,10 @@ export default function TablaZonas({ features }) {
 
   return (
     <div className="tabla-zonas-wrapper">
-      <h3 className="tabla-zonas-title">Distribución de zonas</h3>
+      <div className="seccion-encabezado">
+        <h3 className="tabla-zonas-title">Distribución de zonas</h3>
+        <p className="seccion-sub">Superficie y valor del índice de cada clase de vigor.</p>
+      </div>
       <table className="tabla-zonas">
         <thead>
           <tr>

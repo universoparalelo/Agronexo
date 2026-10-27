@@ -109,7 +109,7 @@ const CAUSA_LABELS = {
 }
 
 export default function TablaDiagnostico({
-  diagnostico, onRecalcular, recalculando, onGenerarOrdenTrabajo, generandoOrden,
+  diagnostico, onGenerarOrdenTrabajo, generandoOrden,
 }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
@@ -128,17 +128,27 @@ export default function TablaDiagnostico({
   return (
     <div className="tabla-diagnostico-wrapper">
       <div className="diagnostico-title-row">
-        <h3 className="tabla-zonas-title">Diagnóstico agronómico</h3>
+        <div className="seccion-encabezado">
+          <h3 className="tabla-zonas-title">Diagnóstico por zona</h3>
+          {metadata && (
+            <p className="seccion-sub">
+              {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
+              {metadata.lote_nombre && ' · '}
+              {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
+              {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
+              {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
+              {metadata.calculado_en && (
+                <span className="diagnostico-calculado-en">
+                  {' · '}calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              )}
+              {metadata.motor_version && ` · motor de reglas v${metadata.motor_version}`}
+            </p>
+          )}
+        </div>
         <div className="diagnostico-title-row-controles">
-          <button
-            type="button"
-            className="btn-recalcular-diagnostico"
-            onClick={onRecalcular}
-            disabled={recalculando}
-            title="Vuelve a calcular el diagnóstico desde cero y reemplaza el guardado"
-          >
-            {recalculando ? 'Recalculando...' : '↻ Recalcular'}
-          </button>
           {diagnostico?.unidades_manejo?.length > 0 && (
             <button
               type="button"
@@ -171,21 +181,6 @@ export default function TablaDiagnostico({
 
       {metadata && (
         <div className="diagnostico-header-info">
-          <p className="diagnostico-metadata">
-            {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
-            {metadata.lote_nombre && ' · '}
-            {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
-            {metadata.fecha_vuelo && ` · vuelo del ${new Date(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
-            {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
-            {metadata.calculado_en && (
-              <span className="diagnostico-calculado-en">
-                {' · '}calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
-                  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                })}
-              </span>
-            )}
-            {metadata.motor_version && ` · motor de reglas v${metadata.motor_version}`}
-          </p>
           {metadata.resumen_general && (
             <p className="diagnostico-resumen">{metadata.resumen_general}</p>
           )}
@@ -293,10 +288,10 @@ export default function TablaDiagnostico({
 
       {diagnostico?.unidades_manejo?.length > 0 && (
         <div className="unidades-manejo-section">
-          <h3 className="tabla-zonas-title">Unidades de manejo</h3>
-          <p className="unidades-manejo-desc">
-            Zonas agrupadas por causa y severidad para prescripción diferenciada.
-          </p>
+          <div className="seccion-encabezado">
+            <h3 className="tabla-zonas-title">Unidades de manejo</h3>
+            <p className="seccion-sub">Zonas agrupadas por causa y severidad para prescripción diferenciada.</p>
+          </div>
           <div className="unidades-manejo-lista">
             {diagnostico.unidades_manejo.map((u) => {
               const p = u.properties || {}

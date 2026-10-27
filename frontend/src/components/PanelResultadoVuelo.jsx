@@ -4,41 +4,12 @@ import { etiquetaTipoCultivo } from '../utils/cultivos'
 import MapaZonas from './MapaZonas'
 import TablaZonas from './TablaZonas'
 import TablaDiagnostico from './TablaDiagnostico'
+import TablaAhorroVuelo from './TablaAhorroVuelo'
+import ModalCargarPrecio from './ModalCargarPrecio'
 import ModalPreviewPdf from './ModalPreviewPdf'
+import ModalMapaAmpliado from './ModalMapaAmpliado'
 
 const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
-const BANDA_LABELS = { BLUE: 'Azul', GREEN: 'Verde', RED: 'Rojo', RE: 'Red Edge', NIR: 'NIR' }
-
-// Trazabilidad del análisis (HU-R4-02): qué archivo, quién lo subió y con qué
-// parámetros se calculó — solo lectura, para justificar una prescripción ante
-// el productor o un control según la Ley 6.312. metodo_umbral/mapeo_bandas
-// quedan en null hasta que el worker termina de procesar el vuelo.
-function PanelTrazabilidad({ vuelo }) {
-  const bandas = vuelo.mapeo_bandas
-    ? Object.entries(vuelo.mapeo_bandas)
-        .filter(([, num]) => num != null)
-        .map(([nombre, num]) => `${BANDA_LABELS[nombre] || nombre}: banda ${num}`)
-        .join(' · ')
-    : null
-
-  return (
-    <details className="trazabilidad-panel">
-      <summary>Trazabilidad del análisis</summary>
-      <dl className="trazabilidad-lista">
-        <dt>Archivo de origen</dt>
-        <dd>{vuelo.archivo_original || '—'}</dd>
-        <dt>Subido por</dt>
-        <dd>{vuelo.subido_por ? `${vuelo.subido_por.nombre} (${vuelo.subido_por.email})` : '—'}</dd>
-        <dt>Fecha de subida</dt>
-        <dd>{new Date(vuelo.created_at).toLocaleString('es-AR')}</dd>
-        <dt>Mapeo de bandas ({SENSOR_LABELS[vuelo.sensor] || vuelo.sensor})</dt>
-        <dd>{bandas || 'Sin calcular todavía'}</dd>
-        <dt>Método de umbral</dt>
-        <dd>{vuelo.metodo_umbral || 'Sin calcular todavía'}</dd>
-      </dl>
-    </details>
-  )
-}
 
 // Un mapa + panel de Zonas/Diagnóstico completo para UN vuelo. Se usa una vez
 // para el vuelo "principal" (el de la URL) y, en modo comparación, una
@@ -46,19 +17,20 @@ function PanelTrazabilidad({ vuelo }) {
 // instancia carga y maneja sus propios datos de forma independiente.
 export default function PanelResultadoVuelo({
   loteId, vueloId, vuelo, lote,
-  esComparacion = false, onCerrarComparacion, onZonasCargadas,
+  esComparacion = false, onCerrarComparacion, onZonasCargadas, ocultarEncabezado = false,
 }) {
   const {
     zonas, loading, error,
     tab, setTab,
     diagnostico, diagnosticoLoading, diagnosticoError,
-    recalculando, generandoOrden,
+    ahorro, ahorroLoading, ahorroError, recargarAhorro,
+    generandoOrden,
     previewPdf, cerrarPreviewPdf,
-    handleRecalcular, handleGenerarOrdenTrabajo,
+    handleGenerarOrdenTrabajo,
   } = useResultadoVuelo(loteId, vueloId, lote?.nombre)
 
-  const [panelAbierto, setPanelAbierto] = useState(true)
-
+  const [mapaAmpliado, setMapaAmpliado] = useState(false)
+  const [precioForm, setPrecioForm] = useState(null) // { productoId, nombre, unidad } | null
   // Avisa al padre (ResultadosVuelo) cada vez que cambian las zonas de este
   // panel — en modo comparación, cuando ambos paneles reportaron sus zonas
   // se puede calcular el resumen de diferencias entre los dos vuelos.
@@ -68,10 +40,117 @@ export default function PanelResultadoVuelo({
 
   const features = zonas?.features || []
 
-  const columnas = ['1fr', panelAbierto ? '340px' : '40px']
+  const renderMapa = ({ clase = '', agrandar = true } = {}) => (
+    <div className={`resultados-mapa ${clase}`.trim()}>
+      <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} sinDatos={zonas?.sin_datos} leyendaHorizontal />
+      {agrandar && (
+        <button
+          type="button"
+          className="resultados-mapa-agrandar"
+          onClick={() => setMapaAmpliado(true)}
+          title="Agrandar mapa"
+          aria-label="Agrandar mapa"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+            <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+          </svg>
+        </button>
+      )}
+      {loading && (
+        <div className="resultados-mapa-overlay">
+          <span className="diagnostico-spinner" />
+        </div>
+      )}
+    </div>
+  )
+
+  const panelZonasDiagnostico = (
+    <div className="resultados-sidebar">
+      <div className="resultados-tabs">
+        <button
+          className={`resultados-tab ${tab === 'zonas' ? 'resultados-tab--activo' : ''}`}
+          onClick={() => setTab('zonas')}
+        >
+          Zonas
+        </button>
+        <button
+          className={`resultados-tab ${tab === 'diagnostico' ? 'resultados-tab--activo' : ''}`}
+          onClick={() => setTab('diagnostico')}
+        >
+          Diagnóstico
+        </button>
+        <button
+          className={`resultados-tab ${tab === 'ahorro' ? 'resultados-tab--activo' : ''}`}
+          onClick={() => setTab('ahorro')}
+        >
+          Ahorro comparativo
+        </button>
+      </div>
+
+      {tab === 'zonas' && !loading && (
+        features.length > 0
+          ? <>
+              <TablaZonas features={features} />
+              <button className="link-diagnostico" onClick={() => setTab('diagnostico')}>
+                Ver diagnóstico agronómico →
+              </button>
+            </>
+          : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
+      )}
+
+      {tab === 'ahorro' && !loading && (
+        <>
+          {ahorroLoading && (
+            <div className="diagnostico-loading">
+              <span className="diagnostico-spinner" />
+              <p>Calculando el ahorro...</p>
+            </div>
+          )}
+          {ahorroError && <p className="empty-hint">{ahorroError}</p>}
+          {ahorro && (
+            <TablaAhorroVuelo
+              ahorro={ahorro}
+              onCargarPrecio={(productoId, nombre, unidad) => setPrecioForm({ productoId, nombre, unidad })}
+            />
+          )}
+        </>
+      )}
+
+      {tab === 'diagnostico' && !loading && (
+        <>
+          {diagnosticoLoading && (
+            <div className="diagnostico-loading">
+              <span className="diagnostico-spinner" />
+              <p>Analizando zonas y generando diagnóstico agronómico...</p>
+            </div>
+          )}
+          {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
+          {diagnostico && (
+            <TablaDiagnostico
+              diagnostico={diagnostico}
+              onGenerarOrdenTrabajo={handleGenerarOrdenTrabajo}
+              generandoOrden={generandoOrden}
+            />
+          )}
+        </>
+      )}
+
+    </div>
+  )
+
+  const cuerpo = error
+    ? <p className="empty-hint">{error}</p>
+    : (
+      <main className="resultados-main resultados-main--dividida">
+        {renderMapa({ clase: esComparacion ? 'es-comparacion' : '' })}
+        {panelZonasDiagnostico}
+      </main>
+    )
 
   return (
     <div className="resultados-panel">
+      {!ocultarEncabezado && (
       <div className="resultados-panel-encabezado">
         {vuelo?.cultivo && (
           <span className={`cultivo-badge cultivo-${vuelo.cultivo.tipo_cultivo}`}>
@@ -100,93 +179,25 @@ export default function PanelResultadoVuelo({
           </button>
         )}
       </div>
-
-      {error ? (
-        <p className="empty-hint">{error}</p>
-      ) : (
-        <main className="resultados-main" style={{ gridTemplateColumns: columnas.join(' ') }}>
-          <div className="resultados-mapa">
-            <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} sinDatos={zonas?.sin_datos} />
-            {loading && (
-              <div className="resultados-mapa-overlay">
-                <span className="diagnostico-spinner" />
-              </div>
-            )}
-          </div>
-
-          {panelAbierto ? (
-            <div className="resultados-sidebar">
-              <div className="resultados-tabs">
-                <button
-                  className={`resultados-tab ${tab === 'zonas' ? 'resultados-tab--activo' : ''}`}
-                  onClick={() => setTab('zonas')}
-                >
-                  Zonas
-                </button>
-                <button
-                  className={`resultados-tab ${tab === 'diagnostico' ? 'resultados-tab--activo' : ''}`}
-                  onClick={() => setTab('diagnostico')}
-                >
-                  Diagnóstico
-                </button>
-                <div className="resultados-tabs-acciones">
-                  <button
-                    className="resultados-sidebar-cerrar"
-                    onClick={() => setPanelAbierto(false)}
-                    aria-label="Cerrar panel de zonas y diagnóstico"
-                    title="Cerrar"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              {tab === 'zonas' && !loading && (
-                features.length > 0
-                  ? <>
-                      <TablaZonas features={features} />
-                      <button className="link-diagnostico" onClick={() => setTab('diagnostico')}>
-                        Ver diagnóstico agronómico →
-                      </button>
-                    </>
-                  : <p className="empty-hint">Sin zonas clasificadas para este análisis.</p>
-              )}
-
-              {tab === 'diagnostico' && !loading && (
-                <>
-                  {diagnosticoLoading && (
-                    <div className="diagnostico-loading">
-                      <span className="diagnostico-spinner" />
-                      <p>Analizando zonas y generando diagnóstico agronómico...</p>
-                    </div>
-                  )}
-                  {diagnosticoError && <p className="empty-hint">{diagnosticoError}</p>}
-                  {diagnostico && (
-                    <TablaDiagnostico
-                      diagnostico={diagnostico}
-                      onRecalcular={handleRecalcular}
-                      recalculando={recalculando}
-                      onGenerarOrdenTrabajo={handleGenerarOrdenTrabajo}
-                      generandoOrden={generandoOrden}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="resultados-sidebar-pestania"
-              onClick={() => setPanelAbierto(true)}
-              title="Ver zonas y diagnóstico"
-            >
-              Zonas y diagnóstico
-            </button>
-          )}
-        </main>
       )}
 
-      {vuelo && <PanelTrazabilidad vuelo={vuelo} />}
+      {cuerpo}
+
+      {mapaAmpliado && (
+        <ModalMapaAmpliado titulo={lote?.nombre ? `Mapa — ${lote.nombre}` : 'Mapa del lote'} onClose={() => setMapaAmpliado(false)}>
+          <MapaZonas geojson={zonas} diagnostico={tab === 'diagnostico' ? diagnostico : null} sinDatos={zonas?.sin_datos} leyendaHorizontal />
+        </ModalMapaAmpliado>
+      )}
+
+      {precioForm && (
+        <ModalCargarPrecio
+          productoId={precioForm.productoId}
+          productoNombre={precioForm.nombre}
+          unidadSugerida={precioForm.unidad}
+          onClose={() => setPrecioForm(null)}
+          onGuardado={() => { setPrecioForm(null); recargarAhorro() }}
+        />
+      )}
 
       {previewPdf && (
         <ModalPreviewPdf

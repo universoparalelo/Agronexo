@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { actualizarVuelo, listarEstadiosFenologicos } from '../api/analisis'
 import { etiquetaTipoCultivo } from '../utils/cultivos'
 import { fechaISOLocal } from '../utils/fechas'
-import IconoAdvertencia from './IconoAdvertencia'
 
 export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, onClose }) {
   const [form, setForm] = useState({
@@ -13,7 +12,6 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
   const [estadiosPorCultivo, setEstadiosPorCultivo] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [aviso, setAviso] = useState(false)
 
   useEffect(() => {
     listarEstadiosFenologicos().then(setEstadiosPorCultivo).catch(() => {})
@@ -48,12 +46,8 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
         estadio_fenologico: form.estadio.trim(),
       }
       if (form.cultivoId) datos.cultivo_id = form.cultivoId
-      const resultado = await actualizarVuelo(loteId, vuelo.vuelo_id, datos)
-      if (resultado.diagnostico_desactualizado) {
-        setAviso(true)
-        setLoading(false)
-        return
-      }
+      // El diagnóstico se actualiza solo al abrirlo si cambió algo de lo que usa.
+      await actualizarVuelo(loteId, vuelo.vuelo_id, datos)
       onSuccess()
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -64,29 +58,6 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
       )
       setLoading(false)
     }
-  }
-
-  if (aviso) {
-    return (
-      <div className="modal-overlay" onClick={onSuccess}>
-        <div className="modal-box modal-box--confirmar modal-box--aviso" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header modal-header--titulo">
-            <div className="modal-titulo-con-icono">
-              <IconoAdvertencia />
-              <h2>Vuelo actualizado</h2>
-            </div>
-          </div>
-          <div className="modal-form">
-            <p className="aviso-recalcular">
-              <strong>Se necesita una acción:</strong> abrí el diagnóstico y apretá <strong>“Recalcular”</strong> para actualizarlo.
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="btn-primary" onClick={onSuccess}>Entendido</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   return (
