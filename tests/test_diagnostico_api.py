@@ -291,3 +291,103 @@ if __name__ == "__main__":
         print("\nTodos los tests de diagnóstico pasaron.\n")
     finally:
         teardown_module(None)
+
+
+# ── Recálculo automático (firma de datos) ────────────────────────────
+
+def _calculado_en(vuelo_id: str) -> str:
+    r = _tc.get(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}/diagnostico", headers=_auth())
+    assert r.status_code == 200, r.text
+    return r.json()["metadata"]["calculado_en"], r.json()["metadata"]
+
+
+def test_diagnostico_guardado_se_reutiliza_si_nada_cambio(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+    cultivo = _crear_cultivo("soja", None)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo, estadio_fenologico="R2")
+
+    primero, meta = _calculado_en(vuelo_id)
+    segundo, _ = _calculado_en(vuelo_id)
+    assert meta["firma_datos"]
+    assert primero == segundo
+
+
+def test_diagnostico_se_recalcula_solo_al_cambiar_el_estadio(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+    cultivo = _crear_cultivo("soja", None)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo, estadio_fenologico="R2")
+
+    primero, _ = _calculado_en(vuelo_id)
+    r = _tc.put(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}", json={"estadio_fenologico": "R3"}, headers=_auth())
+    assert r.status_code == 200, r.text
+
+    segundo, meta = _calculado_en(vuelo_id)
+    assert segundo != primero
+    assert meta["estadio_fenologico"] == "R3"
+
+
+def test_diagnostico_se_recalcula_solo_al_cambiar_el_cultivo(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+    soja = _crear_cultivo("soja", None)
+    maiz = _crear_cultivo("maiz", None)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=soja, estadio_fenologico="R2")
+
+    _, meta = _calculado_en(vuelo_id)
+    assert meta["cultivo"] == "soja"
+    r = _tc.put(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}", json={"cultivo_id": maiz}, headers=_auth())
+    assert r.status_code == 200, r.text
+    _, meta = _calculado_en(vuelo_id)
+    assert meta["cultivo"] == "maiz"
+
+
+def test_diagnostico_se_recalcula_solo_al_cambiar_la_fecha(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+    cultivo = _crear_cultivo("soja", None)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo, estadio_fenologico="R2")
+
+    primero, _ = _calculado_en(vuelo_id)
+    r = _tc.put(f"/api/v1/lotes/{_lote_id}/vuelos/{vuelo_id}", json={"fecha_vuelo": "2026-03-15T12:00:00Z"}, headers=_auth())
+    assert r.status_code == 200, r.text
+    segundo, meta = _calculado_en(vuelo_id)
+    assert segundo != primero
+    assert meta["fecha_vuelo"].startswith("2026-03-15")
+
+
+def test_diagnostico_se_recalcula_solo_si_cambia_el_catalogo(monkeypatch):
+    from app.diagnostico import service as diag_service
+
+    async def _fake_geojson(db, lote_id, vuelo_id):
+        return _geojson_ndvi_fixture()
+
+    monkeypatch.setattr(diag_service, "obtener_resultado_geojson", _fake_geojson)
+    cultivo = _crear_cultivo("soja", None)
+    vuelo_id = _insertar_vuelo(_lote_id, "completado", geojson_key="x.geojson", cultivo_id=cultivo, estadio_fenologico="R2")
+
+    primero, _ = _calculado_en(vuelo_id)
+
+    async def _catalogo_distinto(db, cultivo=None):
+        return {"interferencia_vegetacion": [{"nombre": "Producto Nuevo", "tipo": "herbicida"}]}
+
+    monkeypatch.setattr(diag_service, "_cargar_catalogo_productos", _catalogo_distinto)
+    segundo, _ = _calculado_en(vuelo_id)
+    assert segundo != primero

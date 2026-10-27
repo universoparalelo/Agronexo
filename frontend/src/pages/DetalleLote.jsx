@@ -10,6 +10,7 @@ import CalendarioMensual from '../components/CalendarioMensual'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalEditarLote from '../components/ModalEditarLote'
 import ModalEditarVuelo from '../components/ModalEditarVuelo'
+import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 
 const ESTADO_LABELS = {
@@ -101,6 +102,7 @@ export default function DetalleLote() {
   const [nuevoAnalisisAbierto, setNuevoAnalisisAbierto] = useState(false)
   const [editandoLote, setEditandoLote] = useState(false)
   const [vueloParaEditar, setVueloParaEditar] = useState(null)
+  const { avisar } = useAvisos()
   const [vueloParaEliminar, setVueloParaEliminar] = useState(null)
 
   const cargarLote = useCallback(() => {
@@ -304,7 +306,7 @@ export default function DetalleLote() {
       {editandoLote && (
         <ModalEditarLote
           lote={lote}
-          onSuccess={() => { setEditandoLote(false); cargarLote() }}
+          onSuccess={() => { setEditandoLote(false); cargarLote(); avisar('Lote actualizado') }}
           onClose={() => setEditandoLote(false)}
         />
       )}
@@ -314,7 +316,7 @@ export default function DetalleLote() {
           loteId={loteId}
           vuelo={vueloParaEditar}
           cultivos={lote.cultivos || []}
-          onSuccess={() => { setVueloParaEditar(null); cargarLote() }}
+          onSuccess={() => { setVueloParaEditar(null); cargarLote(); avisar('Vuelo actualizado') }}
           onClose={() => setVueloParaEditar(null)}
         />
       )}

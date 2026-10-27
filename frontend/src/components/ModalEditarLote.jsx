@@ -18,6 +18,11 @@ export default function ModalEditarLote({ lote, onSuccess, onClose }) {
     e.preventDefault()
     if (!form.nombre.trim()) { setError('El nombre del lote es requerido.'); return }
 
+    // "Seleccionar..." no cambia el tipo de suelo (el servidor ignora el null).
+    const cambioNombre = form.nombre.trim() !== lote.nombre
+    const cambioSuelo = form.tipo_suelo !== '' && form.tipo_suelo !== (lote.tipo_suelo || '')
+    if (!cambioNombre && !cambioSuelo) { onClose(); return }
+
     setLoading(true)
     setError('')
     try {

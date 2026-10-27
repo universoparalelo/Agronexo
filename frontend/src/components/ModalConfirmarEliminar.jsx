@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import IconoAdvertencia from './IconoAdvertencia'
 
 export default function ModalConfirmarEliminar({ titulo, mensaje, onConfirmar, onClose }) {
   const [loading, setLoading] = useState(false)
@@ -24,7 +25,10 @@ export default function ModalConfirmarEliminar({ titulo, mensaje, onConfirmar, o
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-box--confirmar" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{titulo}</h2>
+          <div className="modal-titulo-con-icono">
+            <IconoAdvertencia />
+            <h2>{titulo}</h2>
+          </div>
           <button className="modal-close" onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
 

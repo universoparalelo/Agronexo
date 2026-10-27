@@ -8,6 +8,7 @@ import TopbarPanel from '../components/TopbarPanel'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalEditarLote from '../components/ModalEditarLote'
+import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
 
@@ -86,6 +87,7 @@ export default function Lotes() {
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
   const [loteParaEditar, setLoteParaEditar] = useState(null)
+  const { avisar } = useAvisos()
 
   // Filtros de la grilla — búsqueda con debounce para no pegarle a la API en cada tecla.
   const [busqueda, setBusqueda] = useState('')
@@ -175,7 +177,7 @@ export default function Lotes() {
       {loteParaEditar && (
         <ModalEditarLote
           lote={loteParaEditar}
-          onSuccess={() => { setLoteParaEditar(null); recargarTodo() }}
+          onSuccess={() => { setLoteParaEditar(null); recargarTodo(); avisar('Lote actualizado') }}
           onClose={() => setLoteParaEditar(null)}
         />
       )}

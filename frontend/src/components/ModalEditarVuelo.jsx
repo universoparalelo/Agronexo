@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { actualizarVuelo, listarEstadiosFenologicos } from '../api/analisis'
 import { etiquetaTipoCultivo } from '../utils/cultivos'
 import { fechaISOLocal } from '../utils/fechas'
+import IconoAdvertencia from './IconoAdvertencia'
 
 export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, onClose }) {
   const [form, setForm] = useState({
@@ -12,7 +13,7 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
   const [estadiosPorCultivo, setEstadiosPorCultivo] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [aviso, setAviso] = useState('')
+  const [aviso, setAviso] = useState(false)
 
   useEffect(() => {
     listarEstadiosFenologicos().then(setEstadiosPorCultivo).catch(() => {})
@@ -32,6 +33,12 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
     if (!form.fecha) { setError('La fecha del vuelo es requerida.'); return }
     if (!form.estadio.trim()) { setError('El estadio fenológico es requerido.'); return }
 
+    const sinCambios =
+      form.fecha === fechaISOLocal(new Date(vuelo.fecha_vuelo)) &&
+      form.estadio.trim() === (vuelo.estadio_fenologico || '') &&
+      form.cultivoId === (vuelo.cultivo_id || '')
+    if (sinCambios) { onClose(); return }
+
     setLoading(true)
     setError('')
     try {
@@ -43,7 +50,7 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
       if (form.cultivoId) datos.cultivo_id = form.cultivoId
       const resultado = await actualizarVuelo(loteId, vuelo.vuelo_id, datos)
       if (resultado.diagnostico_desactualizado) {
-        setAviso('Como cambió el cultivo o el estadio, el diagnóstico ya calculado quedó desactualizado: abrilo y apretá "Recalcular".')
+        setAviso(true)
         setLoading(false)
         return
       }
@@ -62,13 +69,20 @@ export default function ModalEditarVuelo({ loteId, vuelo, cultivos, onSuccess, o
   if (aviso) {
     return (
       <div className="modal-overlay" onClick={onSuccess}>
-        <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-box modal-box--confirmar modal-box--aviso" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header modal-header--titulo">
-            <h2>Vuelo actualizado</h2>
+            <div className="modal-titulo-con-icono">
+              <IconoAdvertencia />
+              <h2>Vuelo actualizado</h2>
+            </div>
           </div>
-          <p>{aviso}</p>
-          <div className="modal-actions">
-            <button type="button" className="btn-primary" onClick={onSuccess}>Entendido</button>
+          <div className="modal-form">
+            <p className="aviso-recalcular">
+              <strong>Se necesita una acción:</strong> abrí el diagnóstico y apretá <strong>“Recalcular”</strong> para actualizarlo.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn-primary" onClick={onSuccess}>Entendido</button>
+            </div>
           </div>
         </div>
       </div>
