@@ -3014,6 +3014,7 @@ body {
 .estado-procesando { background: #dbeafe; color: #1d4ed8; }
 .estado-completado { background: #dcfce7; color: #166534; }
 .estado-error      { background: #fee2e2; color: #b91c1c; }
+.estado-atencion   { background: #fee2e2; color: #b91c1c; }
 
 .estado-spinner {
   display: inline-block;
@@ -3279,7 +3280,7 @@ body {
   padding: 2px;
 }
 
-.btn-recalcular-diagnostico {
+.btn-orden-trabajo {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -3294,12 +3295,12 @@ body {
   white-space: nowrap;
 }
 
-.btn-recalcular-diagnostico:hover:not(:disabled) {
+.btn-orden-trabajo:hover:not(:disabled) {
   background: #f0f4f0;
   border-color: #27500a;
 }
 
-.btn-recalcular-diagnostico:disabled {
+.btn-orden-trabajo:disabled {
   color: #9ca3af;
   cursor: not-allowed;
 }
@@ -3466,6 +3467,23 @@ body {
   margin: 0.2rem 0;
   overflow-wrap: break-word;
 }
+
+.unidad-card-cuerpo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.unidad-card-cuerpo .unidad-card-causa { margin-top: 0; font-size: 0.9rem; }
+.unidad-card-cuerpo .unidad-card-meta { margin-bottom: 0.2rem; }
+.unidad-card-area {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #12261a;
+  white-space: nowrap;
+}
+.unidad-card .producto-alternativas:not([open]) { flex-basis: auto; }
 
 /* Diagnostico loading spinner */
 .diagnostico-loading {

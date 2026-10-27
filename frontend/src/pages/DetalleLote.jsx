@@ -13,7 +13,6 @@ import ModalEditarVuelo from '../components/ModalEditarVuelo'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import { TIPOS_SUELO } from '../utils/suelos'
-
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
   procesando: 'Procesando',
@@ -24,6 +23,21 @@ const ESTADO_LABELS = {
 const SENSOR_LABELS = {
   sentinel2:  'Sentinel-2',
   dji_mavic3: 'DJI Mavic 3',
+}
+
+function EstadoVuelo({ vuelo, estadoStr }) {
+  const n = vuelo.zonas_atencion
+  if (estadoStr === 'completado' && n != null) {
+    return n > 0
+      ? <span className="estado-badge estado-atencion">{n} zona{n === 1 ? '' : 's'} requiere{n === 1 ? '' : 'n'} atención</span>
+      : <span className="estado-badge estado-completado">Sin problemas</span>
+  }
+  return (
+    <span className={`estado-badge estado-${estadoStr}`}>
+      {estadoStr === 'procesando' && <span className="estado-spinner" />}
+      {ESTADO_LABELS[estadoStr] || estadoStr}
+    </span>
+  )
 }
 
 function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar }) {
@@ -45,10 +59,7 @@ function VueloCard({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
       </div>
 
       <div className="vuelo-card-estado">
-        <span className={`estado-badge estado-${estadoStr}`}>
-          {estadoStr === 'procesando' && <span className="estado-spinner" />}
-          {ESTADO_LABELS[estadoStr] || estadoStr}
-        </span>
+        <EstadoVuelo vuelo={vuelo} estadoStr={estadoStr} />
 
         {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
           <div className="progreso-bar-wrapper">
@@ -95,15 +106,17 @@ function VueloFila({ vuelo, estadoActual, onVerResultados, onEditar, onEliminar 
   return (
     <tr>
       <td className="tabla-vuelos-fecha">
-        {new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+        {(() => {
+          const fecha = new Date(vuelo.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+          return vuelo.estado === 'completado'
+            ? <button type="button" className="tabla-vuelos-fecha-link" onClick={onVerResultados}>{fecha}</button>
+            : fecha
+        })()}
       </td>
       <td>{SENSOR_LABELS[vuelo.sensor] || vuelo.sensor}</td>
       <td>{vuelo.estadio_fenologico ? <span className="vuelo-estadio-tag">{vuelo.estadio_fenologico}</span> : '—'}</td>
       <td>
-        <span className={`estado-badge estado-${estadoStr}`}>
-          {estadoStr === 'procesando' && <span className="estado-spinner" />}
-          {ESTADO_LABELS[estadoStr] || estadoStr}
-        </span>
+        <EstadoVuelo vuelo={vuelo} estadoStr={estadoStr} />
         {(estadoStr === 'procesando' || estadoStr === 'pendiente') && progreso != null && (
           <div className="progreso-bar-wrapper">
             <div className="progreso-bar" style={{ width: `${progreso}%` }} />
@@ -367,7 +380,6 @@ export default function DetalleLote() {
   return (
     <PanelLayout
       migas={[{ label: 'Lotes', to: '/lotes' }, { label: lote.nombre }]}
-      onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
       <main className={`detalle-main ${vista === 'calendario' ? 'detalle-main--calendario' : ''}`}>
         {cabecera}

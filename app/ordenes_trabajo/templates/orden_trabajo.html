@@ -31,14 +31,19 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    border-bottom: 2pt solid #16a34a;
-    padding-bottom: 4mm;
+    gap: 8mm;
+    border-bottom: 1.5pt solid #2d6a4f;
+    padding-bottom: 5mm;
     margin-bottom: 6mm;
   }
-  .header .marca { font-size: 9pt; letter-spacing: 1pt; text-transform: uppercase; color: #16a34a; font-weight: bold; }
-  .header .meta { text-align: right; font-size: 9pt; color: #4b5563; }
-  .header .meta div { margin-bottom: 1mm; }
-  .header .logo-empresa { max-height: 14mm; max-width: 40mm; margin-bottom: 2mm; display: block; }
+  .header .logo-agronexo { height: 10mm; display: block; margin-bottom: 5mm; }
+  .header .logo-empresa { max-height: 12mm; max-width: 40mm; margin-bottom: 3mm; display: block; }
+  .header .marca { font-size: 8pt; letter-spacing: 1.2pt; text-transform: uppercase; color: #2d6a4f; font-weight: bold; margin-bottom: 1.5mm; }
+  .header h1 { font-size: 20pt; line-height: 1.15; color: #1F3A2A; }
+  /* La hoja del logo sobresale por arriba: los datos arrancan a la altura de las letras. */
+  .header .meta { text-align: right; font-size: 8.5pt; color: #1f2937; padding-top: 3mm; }
+  .header .meta div { margin-bottom: 1.2mm; }
+  .header .meta strong { color: #6b7a70; font-weight: normal; }
 
   .resumen {
     background: #f0fdf4;
@@ -50,7 +55,7 @@
   }
   .resumen table { width: 100%; border-collapse: collapse; }
   .resumen td { padding: 1mm 2mm; }
-  .resumen .valor { font-weight: bold; font-size: 12pt; color: #16a34a; }
+  .resumen .valor { font-weight: bold; font-size: 12pt; color: #2d6a4f; }
   .resumen .etiqueta { color: #4b5563; font-size: 8.5pt; }
 
   table.dosis, table.totales, table.legal-ley {
@@ -60,7 +65,7 @@
     margin-top: 2mm;
   }
   table.dosis th, table.totales th, table.legal-ley th {
-    background: #16a34a;
+    background: #2d6a4f;
     color: #fff;
     text-align: left;
     padding: 2mm;
@@ -132,8 +137,9 @@
 
   <div class="header">
     <div>
+      <img class="logo-agronexo" src="agronexo-logo.svg" alt="AgroNexo">
       {% if logo_empresa_base64 %}<img class="logo-empresa" src="{{ logo_empresa_base64 }}" alt="Logo empresa">{% endif %}
-      <div class="marca">AgroNexo · Orden de trabajo</div>
+      <div class="marca">Orden de trabajo</div>
       <h1>{{ lote_nombre }}</h1>
     </div>
     <div class="meta">
@@ -193,11 +199,18 @@
         <td>{{ item.zona_ids_texto }}</td>
         <td>{{ item.producto }}</td>
         <td>{{ ("%.2f"|format(item.dosis_por_ha) + " " + item.unidad_dosis) if item.dosis_por_ha is not none else "— (completar a mano)" }}</td>
-        <td>{{ ("%.2f"|format(item.volumen_total) + " " + item.unidad_dosis) if item.volumen_total is not none else "—" }}</td>
+        <td>{{ ("%.2f"|format(item.volumen_total) + " " + item.unidad_volumen) if item.volumen_total is not none else "—" }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  {% if items | selectattr("como_confirmar_campo") | list %}
+  <h2>Cómo confirmar en campo</h2>
+  {% for texto, grupo in items | selectattr("como_confirmar_campo") | groupby("como_confirmar_campo") %}
+  <p><strong>{{ "Unidades" if grupo | length > 1 else "Unidad" }} {% for item in grupo %}#{{ item.unidad_id }}{{ ", " if not loop.last }}{% endfor %} ({{ grupo[0].causa_label }}):</strong> {{ texto }}</p>
+  {% endfor %}
+  {% endif %}
 
   <h2>Totales por producto</h2>
   <table class="totales">
@@ -213,7 +226,7 @@
       <tr>
         <td>{{ total.producto }}</td>
         <td>{{ "%.2f"|format(total.area_ha) }}</td>
-        <td>{{ ("%.2f"|format(total.volumen_total) + " " + total.unidad_dosis) if total.unidad_dosis else "— (completar a mano)" }}</td>
+        <td>{{ ("%.2f"|format(total.volumen_total) + " " + total.unidad_volumen) if total.unidad_dosis else "— (completar a mano)" }}</td>
       </tr>
       {% endfor %}
       {% if not totales %}

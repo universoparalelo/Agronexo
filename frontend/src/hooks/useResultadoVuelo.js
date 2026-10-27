@@ -21,6 +21,7 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   const [ahorroLoading, setAhorroLoading] = useState(false)
   const [ahorroError, setAhorroError] = useState('')
   const [generandoOrden, setGenerandoOrden] = useState(false)
+  const [ordenError, setOrdenError] = useState('')
   const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
 
   useEffect(() => {
@@ -39,14 +40,14 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   }, [loteId, vueloId])
 
   useEffect(() => {
-    if (!loteId || !vueloId || tab !== 'diagnostico' || diagnostico || diagnosticoLoading) return
+    if (!loteId || !vueloId || diagnostico || diagnosticoLoading || diagnosticoError) return
     setDiagnosticoLoading(true)
     setDiagnosticoError('')
     obtenerDiagnostico(loteId, vueloId)
       .then(setDiagnostico)
       .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
       .finally(() => setDiagnosticoLoading(false))
-  }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
+  }, [loteId, vueloId, diagnostico, diagnosticoLoading, diagnosticoError])
 
   // El ahorro sale del diagnóstico: se pide al abrir la pestaña y se vuelve a pedir si se recalcula.
   useEffect(() => {
@@ -65,14 +66,14 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
 
   function handleGenerarOrdenTrabajo() {
     setGenerandoOrden(true)
-    setDiagnosticoError('')
+    setOrdenError('')
     descargarOrdenTrabajoPdf(loteId, vueloId)
       .then((blob) => setPreviewPdf({
         titulo: `Orden de trabajo — ${nombreLote ?? ''}`,
         blob,
         filename: `orden_trabajo_${vueloId}.pdf`,
       }))
-      .catch(async (err) => setDiagnosticoError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
+      .catch(async (err) => setOrdenError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
       .finally(() => setGenerandoOrden(false))
   }
 
@@ -81,7 +82,7 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
     tab, setTab,
     diagnostico, diagnosticoLoading, diagnosticoError,
     ahorro, ahorroLoading, ahorroError, recargarAhorro,
-    generandoOrden,
+    generandoOrden, ordenError,
     previewPdf, cerrarPreviewPdf: () => setPreviewPdf(null),
     handleGenerarOrdenTrabajo,
   }

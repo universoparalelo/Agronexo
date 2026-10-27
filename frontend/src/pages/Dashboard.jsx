@@ -16,6 +16,7 @@ import ModalLimites from '../components/ModalLimites'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import { irAlUltimoDiagnostico } from '../utils/diagnosticos'
 import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import SidebarNav from '../components/SidebarNav'
 import TopbarPanel from '../components/TopbarPanel'
@@ -392,7 +393,7 @@ export default function Dashboard() {
   function handleVerDiagnosticos() {
     // con un solo lote no tiene sentido preguntar — vamos directo a sus vuelos
     if (loteRows.length === 1) {
-      navigate(`/lotes/${loteRows[0].id}`)
+      irAlUltimoDiagnostico(navigate, loteRows[0].id)
       return
     }
     setShowModalElegirLote(true)
@@ -454,7 +455,7 @@ export default function Dashboard() {
 
   const vueloRows = loteRows
     .flatMap(l => l.vuelos.map(v => ({ ...v, vueloId: v.vuelo_id ?? v.id, lote: l })))
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
   const totalPages = Math.max(1, Math.ceil(vueloRows.length / PAGE_SIZE))
   const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
@@ -514,7 +515,7 @@ export default function Dashboard() {
       {showModalElegirLote && (
         <ModalElegirLote
           lotes={loteRows}
-          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onElegir={(loteId) => { setShowModalElegirLote(false); irAlUltimoDiagnostico(navigate, loteId) }}
           onClose={() => setShowModalElegirLote(false)}
         />
       )}
@@ -648,7 +649,7 @@ export default function Dashboard() {
                                     {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>
-                                <td className="td-fecha">{fmtFecha(v.created_at)}</td>
+                                <td className="td-fecha">{fmtFecha(v.fecha_vuelo)}</td>
                                 <td>
                                   {v.estadio_fenologico
                                     ? <span className="vuelo-estadio-tag">{v.estadio_fenologico}</span>
@@ -766,7 +767,7 @@ export default function Dashboard() {
                                       onClick={() => setAnalisisParaEliminar({
                                         loteId: v.lote.id,
                                         vueloId: v.vueloId,
-                                        etiqueta: `${v.lote.nombre} · ${fmtFecha(v.created_at)}`,
+                                        etiqueta: `${v.lote.nombre} · ${fmtFecha(v.fecha_vuelo)}`,
                                       })}
                                     >
                                       <IconTrash />
@@ -800,7 +801,7 @@ export default function Dashboard() {
                     <p className="card-sub">
                       {selectedVuelo
                         ? (selectedVueloRow
-                            ? `Análisis — ${selectedVueloRow.lote.nombre} · ${fmtFecha(selectedVueloRow.created_at)}`
+                            ? `Análisis — ${selectedVueloRow.lote.nombre} · ${fmtFecha(selectedVueloRow.fecha_vuelo)}`
                             : 'Análisis en curso')
                         : 'Mapa de lotes registrados en la zona norte'}
                     </p>

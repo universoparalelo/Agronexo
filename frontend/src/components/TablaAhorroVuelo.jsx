@@ -3,6 +3,11 @@ function fmtNum(valor, decimales = 2) {
   return valor.toLocaleString('es-AR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales })
 }
 
+// La dosis viene por hectárea ("L/ha"); las cantidades totales van sin "/ha".
+function unidadTotal(unidadDosis) {
+  return (unidadDosis ?? '').split('/')[0]
+}
+
 function fmtUsd(valor) {
   return valor == null ? '—' : `US$ ${fmtNum(valor, 2)}`
 }
@@ -15,11 +20,16 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
   return (
     <div className="ahorro-vuelo">
       <div className="seccion-encabezado">
-        <h3 className="tabla-zonas-title">Ahorro por aplicación selectiva</h3>
-        <p className="seccion-sub">
-          Cuánto producto y cuánto dinero se ahorra aplicando solo donde hace falta, según nuestra orden de trabajo,
-          en lugar de aplicarlo en todo el lote.
-        </p>
+        <h3 className="tabla-zonas-title titulo-con-ayuda">
+          Ahorro por aplicación selectiva
+          <span className="ayuda-tip">
+            <button type="button" className="ayuda-tip-boton" aria-label="¿Qué es el ahorro por aplicación selectiva?">i</button>
+            <span role="tooltip" className="ayuda-tip-caja">
+              Cuánto producto y cuánto dinero se ahorra aplicando solo donde hace falta, según nuestra orden de trabajo,
+              en lugar de aplicarlo en todo el lote.
+            </span>
+          </span>
+        </h3>
       </div>
 
       {productos.length === 0 ? (
@@ -62,9 +72,9 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
               {productos.map((p) => (
                 <tr key={p.producto}>
                   <td>{p.producto}</td>
-                  <td>{fmtNum(p.cantidad_variable)} {p.unidad_dosis}</td>
-                  <td>{p.cantidad_uniforme == null ? '—' : `${fmtNum(p.cantidad_uniforme)} ${p.unidad_dosis ?? ''}`}</td>
-                  <td>{fmtNum(p.ahorro_cantidad)}</td>
+                  <td>{fmtNum(p.cantidad_variable)} {unidadTotal(p.unidad_dosis)}</td>
+                  <td>{p.cantidad_uniforme == null ? '—' : `${fmtNum(p.cantidad_uniforme)} ${unidadTotal(p.unidad_dosis)}`}</td>
+                  <td>{p.ahorro_cantidad == null ? '—' : `${fmtNum(p.ahorro_cantidad)} ${unidadTotal(p.unidad_dosis)}`}</td>
                   <td>{p.ahorro_pct != null ? `${fmtNum(p.ahorro_pct, 0)}%` : '—'}</td>
                   <td>
                     {p.ahorro_pesos != null
