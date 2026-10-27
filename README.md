@@ -145,12 +145,13 @@ agronexo/
 │   ├── ingesta/            # Upload GeoTIFF, validación, encolado Celery
 │   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
+│   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
 │   ├── core/               # Config (pydantic-settings), BD, cliente MinIO
 │   └── main.py             # Punto de entrada FastAPI
 ├── workers/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
-├── migrations/versions/    # Migraciones Alembic versionadas (0001 → 0020)
+├── migrations/versions/    # Migraciones Alembic versionadas (0001 → 0027)
 ├── tests/                  # Pipeline GIS, motor diagnóstico, API
 ├── frontend/               # React + Vite
 ├── docker/

@@ -13,8 +13,10 @@ import { cultivoMasReciente, etiquetaTipoCultivo } from '../utils/cultivos'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
 import ModalLimites from '../components/ModalLimites'
+import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import { irAlUltimoDiagnostico } from '../utils/diagnosticos'
 import ModalPreviewPdf from '../components/ModalPreviewPdf'
 import SidebarNav from '../components/SidebarNav'
 import TopbarPanel from '../components/TopbarPanel'
@@ -302,6 +304,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
+  const { avisar } = useAvisos()
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaLimites, setLoteParaLimites] = useState(null)
   const [analisisParaEliminar, setAnalisisParaEliminar] = useState(null)
@@ -397,7 +400,7 @@ export default function Dashboard() {
   function handleVerDiagnosticos() {
     // con un solo lote no tiene sentido preguntar — vamos directo a sus vuelos
     if (loteRows.length === 1) {
-      navigate(`/lotes/${loteRows[0].id}`)
+      irAlUltimoDiagnostico(navigate, loteRows[0].id)
       return
     }
     setShowModalElegirLote(true)
@@ -459,7 +462,7 @@ export default function Dashboard() {
 
   const vueloRows = loteRows
     .flatMap(l => l.vuelos.map(v => ({ ...v, vueloId: v.vuelo_id ?? v.id, lote: l })))
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
   const totalPages = Math.max(1, Math.ceil(vueloRows.length / PAGE_SIZE))
   const pageRows    = vueloRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const selectedVueloRow = vueloRows.find(v => v.vueloId === selectedVuelo?.vueloId)
@@ -504,7 +507,7 @@ export default function Dashboard() {
       {loteParaLimites && (
         <ModalLimites
           lote={loteParaLimites}
-          onSuccess={() => { setLoteParaLimites(null); cargarDatos() }}
+          onSuccess={() => { setLoteParaLimites(null); cargarDatos(); avisar('Límites del lote actualizados') }}
           onClose={() => setLoteParaLimites(null)}
         />
       )}
@@ -519,7 +522,7 @@ export default function Dashboard() {
       {showModalElegirLote && (
         <ModalElegirLote
           lotes={loteRows}
-          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onElegir={(loteId) => { setShowModalElegirLote(false); irAlUltimoDiagnostico(navigate, loteId) }}
           onClose={() => setShowModalElegirLote(false)}
         />
       )}
@@ -536,7 +539,7 @@ export default function Dashboard() {
 
       <div className="dashboard-body">
         {/* Topbar */}
-        <TopbarPanel migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Resumen' }]} />
+        <TopbarPanel migas={[{ label: 'Dashboard' }]} />
 
         <main className="dashboard-main">
           {/* Portada */}
@@ -546,10 +549,13 @@ export default function Dashboard() {
             </h1>
             <div className="hero-panel-acciones">
               <button type="button" className="hero-btn hero-btn--principal" onClick={() => setShowModal(true)}>
-                Cargar nuevo análisis <IconArrow />
+                Cargar nuevo análisis
               </button>
               <button type="button" className="hero-btn" onClick={() => setShowModalNuevoLote(true)}>
                 Nuevo lote
+              </button>
+              <button type="button" className="hero-btn" onClick={() => navigate('/lotes')}>
+                Ver lotes
               </button>
               <button
                 type="button"

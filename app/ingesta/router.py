@@ -3,12 +3,14 @@ from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from geoalchemy2.shape import to_shape
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import Usuario
 from app.core.database import get_db
+from app.diagnostico.models import Diagnostico
 from app.ingesta import service
 from app.ingesta.absorcion import absorber_huecos
 from app.ingesta.schemas import (
@@ -22,9 +24,11 @@ from app.ingesta.schemas import (
     IndicesBatchRequest,
     InspeccionGeotiffResponse,
     LoteDesdeGeotiffResponse,
+    VueloActualizadoResponse,
     VueloDesdeSateliteRequest,
     VueloListItem,
     VueloReintentoResponse,
+    VueloUpdate,
     VueloUploadResponse,
 )
 from app.ingesta.tiff_inspector import contar_bandas_geotiff
@@ -309,6 +313,18 @@ async def listar_vuelos_lote(
     if not lote:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
     vuelos = await service.listar_vuelos(db, lote_id)
+    guardados = (await db.execute(
+        select(Diagnostico.vuelo_id, Diagnostico.resultado).where(
+            Diagnostico.vuelo_id.in_([v.id for v in vuelos])
+        )
+    )).all()
+    zonas_atencion = {
+        vuelo_id: sum(
+            1 for f in resultado.get("features", [])
+            if f.get("properties", {}).get("regla_id") not in ("R99", "R00")
+        )
+        for vuelo_id, resultado in guardados
+    }
     return [
         VueloListItem(
             vuelo_id=v.id,
@@ -324,6 +340,7 @@ async def listar_vuelos_lote(
             cultivo_id=v.cultivo_id,
             cultivo=v.cultivo,
             indices=await service.listar_analisis_indices(db, v),
+            zonas_atencion=zonas_atencion.get(v.id),
             archivo_original=v.archivo_original,
             subido_por=v.subido_por,
             metodo_umbral=v.metodo_umbral,
@@ -375,6 +392,39 @@ async def estado_vuelo(
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
     return estado
+
+
+@router.put(
+    "/{lote_id}/vuelos/{vuelo_id}",
+    response_model=VueloActualizadoResponse,
+    summary="Editar fecha, estadio fenológico o cultivo de un vuelo",
+)
+async def actualizar_vuelo(
+    lote_id: uuid.UUID,
+    vuelo_id: uuid.UUID,
+    data: VueloUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user),
+):
+    lote = await obtener_lote(db, lote_id, usuario_id=uuid.UUID(str(current_user.id)))
+    if not lote:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lote no encontrado.")
+
+    vuelo = await service.obtener_vuelo(db, lote_id, vuelo_id)
+    if not vuelo:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vuelo no encontrado.")
+
+    vuelo, diagnostico_desactualizado = await service.actualizar_vuelo(db, vuelo, data)
+    await db.commit()
+    return VueloActualizadoResponse(
+        vuelo_id=vuelo.id,
+        lote_id=vuelo.lote_id,
+        fecha_vuelo=vuelo.fecha_vuelo,
+        estadio_fenologico=vuelo.estadio_fenologico,
+        cultivo_id=vuelo.cultivo_id,
+        cultivo=vuelo.cultivo,
+        diagnostico_desactualizado=diagnostico_desactualizado,
+    )
 
 
 @router.delete(

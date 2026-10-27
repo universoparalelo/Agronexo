@@ -20,8 +20,11 @@ ver docs/release-v1.0.0.md "Problemas abiertos").
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 
@@ -41,7 +44,8 @@ from app.diagnostico.revisiones import cargar_casos_entrenamiento
 from app.diagnostico.estadios import normalizar_estadio
 from app.diagnostico.forma import ZonaInput, clasificar_patrones, proyectar_a_metros_locales
 from app.diagnostico.models import (
-    CausaIndiceEnum, Diagnostico, NdviEsperadoEstadio, ProductoFitosanitario, TipoProductoEnum,
+    CausaIndiceEnum, Diagnostico, NdviEsperadoEstadio, PresentacionProducto, ProductoFitosanitario,
+    TipoProductoEnum,
 )
 from app.diagnostico.reglas import MOTOR_VERSION
 from app.diagnostico.texto import calcular_severidad, generar_resumen_general, generar_texto_zona
@@ -87,17 +91,102 @@ async def listar_ndvi_esperado(db: AsyncSession, cultivo: CultivoEnum) -> list[N
     return list(result.scalars().all())
 
 
-async def _cargar_catalogo_productos(db: AsyncSession) -> dict[str, list[dict[str, str]]]:
-    result = await db.execute(
-        select(ProductoFitosanitario).order_by(ProductoFitosanitario.causa_indice)
+def _normalizar_cultivo(texto: str) -> str:
+    sin_tildes = unicodedata.normalize("NFD", texto)
+    return "".join(c for c in sin_tildes if unicodedata.category(c) != "Mn").strip().lower()
+
+
+def _marcas_aptas(cultivos_por_marca: list[str | None], cultivo: CultivoEnum) -> int:
+    objetivo = cultivo.value
+    return sum(
+        1 for texto in cultivos_por_marca
+        if texto and objetivo in {_normalizar_cultivo(c) for c in texto.split(",")}
     )
-    catalogo: dict[str, list[dict[str, str]]] = {}
-    for prod in result.scalars().all():
-        catalogo.setdefault(prod.causa_indice.value, []).append({
-            "nombre": prod.nombre,
-            "tipo": prod.tipo.value,
+
+
+def armar_catalogo_productos(
+    productos: list[ProductoFitosanitario],
+    cultivos_por_producto: dict[uuid.UUID, list[str | None]],
+    cultivo: CultivoEnum | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """
+    Sin cultivo devuelve todos los productos. Con cultivo, solo los que tienen
+    al menos una marca apta (presentaciones_productos.cultivos) — un producto
+    sin marcas cargadas no se sugiere, porque no hay forma de saber si sirve.
+    Orden dentro de cada causa: más marcas aptas primero, después por nombre.
+    La orden de trabajo toma siempre el primero, así que el orden tiene que
+    ser estable.
+    """
+    aptos: dict[str, list[tuple[int, str, ProductoFitosanitario]]] = {}
+    for prod in productos:
+        n_aptas = 0
+        if cultivo is not None:
+            n_aptas = _marcas_aptas(cultivos_por_producto.get(prod.id, []), cultivo)
+            if n_aptas == 0:
+                continue
+        aptos.setdefault(prod.causa_indice.value, []).append((n_aptas, prod.nombre, prod))
+
+    return {
+        causa: [
+            {"nombre": prod.nombre, "tipo": prod.tipo.value}
+            for _, _, prod in sorted(items, key=lambda i: (-i[0], i[1]))
+        ]
+        for causa, items in aptos.items()
+    }
+
+
+def armar_alternativas_marca(
+    productos: list[ProductoFitosanitario],
+    presentaciones: list[PresentacionProducto],
+    cultivo: CultivoEnum,
+) -> dict[str, list[dict]]:
+    """
+    Marcas aptas para el cultivo de cada activo, de menor a mayor costo por
+    hectárea (dosis × precio de la misma marca: la concentración cambia la
+    dosis, así que no se puede mezclar dosis de una con precio de otra).
+    Va una sola vez por diagnóstico y no dentro de cada zona, para no
+    repetir la lista de marcas en cada feature del GeoJSON guardado.
+    """
+    nombre_por_id = {p.id: p.nombre for p in productos}
+    alternativas: dict[str, list[dict]] = {}
+    for pres in presentaciones:
+        nombre = nombre_por_id.get(pres.producto_id)
+        if nombre is None or _marcas_aptas([pres.cultivos], cultivo) == 0:
+            continue
+        alternativas.setdefault(nombre, []).append({
+            "marca": pres.marca,
+            "concentracion": pres.concentracion or None,
+            "variante": pres.variante or None,
+            "dosis_por_ha": pres.dosis_referencia,
+            "unidad_dosis": pres.unidad,
+            "confiabilidad_dosis": pres.confiabilidad_dosis,
+            "precio_usd": pres.precio_usd,
+            "unidad_precio": pres.unidad_precio,
+            "costo_por_ha_usd": round(pres.dosis_referencia * pres.precio_usd, 2),
         })
-    return catalogo
+    for marcas in alternativas.values():
+        marcas.sort(key=lambda m: (m["costo_por_ha_usd"], m["marca"]))
+    return alternativas
+
+
+async def _cargar_alternativas_marca(db: AsyncSession, cultivo: CultivoEnum) -> dict[str, list[dict]]:
+    productos = list((await db.execute(select(ProductoFitosanitario))).scalars().all())
+    presentaciones = list((await db.execute(select(PresentacionProducto))).scalars().all())
+    return armar_alternativas_marca(productos, presentaciones, cultivo)
+
+
+async def _cargar_catalogo_productos(
+    db: AsyncSession, cultivo: CultivoEnum | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    productos = list((await db.execute(select(ProductoFitosanitario))).scalars().all())
+    cultivos_por_producto: dict[uuid.UUID, list[str | None]] = {}
+    if cultivo is not None:
+        filas = await db.execute(
+            select(PresentacionProducto.producto_id, PresentacionProducto.cultivos)
+        )
+        for producto_id, cultivos in filas.all():
+            cultivos_por_producto.setdefault(producto_id, []).append(cultivos)
+    return armar_catalogo_productos(productos, cultivos_por_producto, cultivo)
 
 
 def _resolver_estadio(vuelo: Vuelo) -> str | None:
@@ -202,6 +291,51 @@ async def guardar_diagnostico(
     await db.flush()
 
 
+def calcular_firma_datos(
+    *,
+    motor_version: str,
+    lote: dict,
+    vuelo: dict,
+    cultivo: dict,
+    catalogo: dict,
+    alternativas_marca: dict,
+    indices: dict[str, str | None],
+    ndvi_esperado: dict | None = None,
+    bayes: dict | None = None,
+) -> str:
+    """
+    Firma de todo lo que usa el diagnóstico para calcularse. Se guarda junto al
+    resultado; al abrirlo de nuevo se arma otra con los datos de hoy y, si
+    difiere, se recalcula solo. Así no hace falta que nadie apriete "Recalcular".
+    """
+    datos = {
+        "motor_version": motor_version,
+        "lote": lote,
+        "vuelo": vuelo,
+        "cultivo": cultivo,
+        "catalogo": catalogo,
+        "alternativas_marca": alternativas_marca,
+        "indices": indices,
+        "ndvi_esperado": ndvi_esperado,
+        "bayes": bayes,
+    }
+    return hashlib.sha256(json.dumps(datos, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+async def _indices_completados(db: AsyncSession, lote_id: uuid.UUID, vuelo_id: uuid.UUID) -> dict[str, str | None]:
+    """Índices adicionales ya calculados, con una marca que cambia si se reprocesan."""
+    listos: dict[str, str | None] = {}
+    for indice in _INDICES_ADICIONALES:
+        try:
+            analisis = await obtener_analisis_indice(db, lote_id, vuelo_id, indice)
+        except Exception:
+            logger.exception("No se pudo leer el índice %s del vuelo %s", indice.value, vuelo_id)
+            continue
+        if analisis is not None and analisis.estado == EstadoVueloEnum.completado and analisis.geojson_key:
+            listos[indice.value] = f"{analisis.geojson_key}:{analisis.task_id}"
+    return listos
+
+
 async def generar_diagnostico(
     db: AsyncSession, lote: Lote, vuelo_id: uuid.UUID, *, forzar_recalculo: bool = False,
 ) -> dict | None:
@@ -214,9 +348,10 @@ async def generar_diagnostico(
     NDVI calculado — el router lo traduce a 404.
 
     Primera llamada para un vuelo: calcula y guarda en `diagnosticos`. Las
-    siguientes devuelven lo guardado sin recalcular, salvo
-    forzar_recalculo=True (botón "Recalcular" del frontend), que vuelve a
-    calcular todo y sobrescribe la fila guardada.
+    siguientes devuelven lo guardado mientras la firma de datos (cultivo,
+    estadio, fecha, motor de reglas, catálogo de productos y marcas, zonas e
+    índices del vuelo) no haya cambiado; si cambió, recalculan solas y
+    sobrescriben la fila. forzar_recalculo=True recalcula siempre.
 
     Solo la parte async (DB + descarga de GeoJSON de MinIO, esta última ya
     corre en threadpool dentro de obtener_resultado_geojson*) toca el event
@@ -231,10 +366,44 @@ async def generar_diagnostico(
     if vuelo is None or vuelo.estado != EstadoVueloEnum.completado:
         return None
 
-    if not forzar_recalculo:
-        guardado = await obtener_diagnostico_guardado(db, vuelo_id)
-        if guardado is not None:
+    cultivo = vuelo.cultivo
+    guardado = None if forzar_recalculo else await obtener_diagnostico_guardado(db, vuelo_id)
+
+    firma = None
+    catalogo = alternativas_marca = esperado = modelo_bayes = None
+    if cultivo is not None:
+        catalogo = await _cargar_catalogo_productos(db, cultivo.tipo_cultivo)
+        alternativas_marca = await _cargar_alternativas_marca(db, cultivo.tipo_cultivo)
+        esperado = await obtener_ndvi_esperado_estadio(db, cultivo.tipo_cultivo, _resolver_estadio(vuelo))
+        modelo_bayes = construir_modelo(await cargar_casos_entrenamiento(db))
+        firma = calcular_firma_datos(
+            motor_version=MOTOR_VERSION,
+            lote={"nombre": lote.nombre, "actualizado": lote.updated_at.isoformat() if lote.updated_at else None},
+            vuelo={
+                "fecha": vuelo.fecha_vuelo.isoformat() if vuelo.fecha_vuelo else None,
+                "estadio": vuelo.estadio_fenologico,
+                "geojson_key": vuelo.geojson_key,
+                "task_id": vuelo.task_id,
+                "metodo_umbral": vuelo.metodo_umbral,
+                "mapeo_bandas": vuelo.mapeo_bandas,
+            },
+            cultivo={
+                "id": str(cultivo.id),
+                "tipo": cultivo.tipo_cultivo.value,
+                "variedad": cultivo.variedad,
+                "siembra": cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
+                "cosecha": cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
+            },
+            catalogo=catalogo,
+            alternativas_marca=alternativas_marca,
+            indices=await _indices_completados(db, lote.id, vuelo_id),
+            ndvi_esperado={"esperado": esperado.ndvi_esperado, "min": esperado.ndvi_min} if esperado else None,
+            bayes={"version": BAYES_VERSION, "n_casos": modelo_bayes.n_casos},
+        )
+        if guardado is not None and (guardado.resultado.get("metadata") or {}).get("firma_datos") == firma:
             return guardado.resultado
+    elif guardado is not None:
+        return guardado.resultado  # datos viejos sin cultivo: se conserva lo guardado
 
     ndvi_geojson = await obtener_resultado_geojson(db, lote.id, vuelo_id)
     if ndvi_geojson is None:
@@ -258,7 +427,6 @@ async def generar_diagnostico(
             logger.exception("No se pudo resolver el índice %s para el vuelo %s", indice.value, vuelo_id)
             continue
 
-    cultivo = vuelo.cultivo
     if cultivo is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -266,10 +434,6 @@ async def generar_diagnostico(
         )
 
     lote_geom_4326: BaseGeometry | None = to_shape(lote.geometry) if lote.geometry is not None else None
-
-    catalogo = await _cargar_catalogo_productos(db)
-    esperado = await obtener_ndvi_esperado_estadio(db, cultivo.tipo_cultivo, _resolver_estadio(vuelo))
-    modelo_bayes = construir_modelo(await cargar_casos_entrenamiento(db))
 
     resultado = await run_in_threadpool(
         _calcular_diagnostico,
@@ -280,6 +444,7 @@ async def generar_diagnostico(
         vuelo_id=str(vuelo_id),
         fecha_vuelo=str(vuelo.fecha_vuelo) if vuelo.fecha_vuelo else None,
         cultivo_id=str(cultivo.id),
+        alternativas_marca=alternativas_marca,
         variedad=cultivo.variedad,
         fecha_siembra=cultivo.fecha_siembra.isoformat() if cultivo.fecha_siembra else None,
         fecha_cosecha=cultivo.fecha_cosecha.isoformat() if cultivo.fecha_cosecha else None,
@@ -299,6 +464,7 @@ async def generar_diagnostico(
     )
     resultado["metadata"]["metodo_umbral"] = vuelo.metodo_umbral
     resultado["metadata"]["mapeo_bandas"] = vuelo.mapeo_bandas
+    resultado["metadata"]["firma_datos"] = firma
     await guardar_diagnostico(db, vuelo_id, resultado, calculado_en, MOTOR_VERSION)
 
     return resultado
@@ -317,6 +483,7 @@ def _calcular_diagnostico(
     vuelo_id: str | None = None,
     fecha_vuelo: str | None = None,
     cultivo_id: str | None = None,
+    alternativas_marca: dict[str, list[dict]] | None = None,
     variedad: str | None = None,
     fecha_siembra: str | None = None,
     fecha_cosecha: str | None = None,
@@ -411,10 +578,18 @@ def _calcular_diagnostico(
     resumen = generar_resumen_general(features_salida)
     unidades = generar_unidades_manejo(features_salida, lon0, lat0)
 
+    nombres_sugeridos = {
+        prod["nombre"]
+        for feat in features_salida
+        for prod in feat["properties"].get("productos_sugeridos", [])
+    }
     return {
         "type": "FeatureCollection",
         "features": features_salida,
         "unidades_manejo": unidades,
+        "alternativas_marca": {
+            n: m for n, m in (alternativas_marca or {}).items() if n in nombres_sugeridos
+        },
         "metadata": {
             "lote_id": lote_id,
             "lote_nombre": lote_nombre,

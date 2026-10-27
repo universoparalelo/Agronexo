@@ -5,12 +5,13 @@ import Dashboard from './pages/Dashboard'
 import Lotes from './pages/Lotes'
 import DetalleLote from './pages/DetalleLote'
 import ResultadosVuelo from './pages/ResultadosVuelo'
-import AhorroComparativo from './pages/AhorroComparativo'
 import PerfilUsuario from './pages/PerfilUsuario'
 import PrivateRoute from './components/PrivateRoute'
+import { AvisosProvider } from './components/AvisosProvider'
 
 export default function App() {
   return (
+    <AvisosProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingOriginal />} />
@@ -48,14 +49,6 @@ export default function App() {
           }
         />
         <Route
-          path="/lotes/:loteId/ahorro"
-          element={
-            <PrivateRoute>
-              <AhorroComparativo />
-            </PrivateRoute>
-          }
-        />
-        <Route
           path="/perfil"
           element={
             <PrivateRoute>
@@ -66,5 +59,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </AvisosProvider>
   )
 }

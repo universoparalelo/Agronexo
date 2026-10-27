@@ -112,6 +112,16 @@ def _auth() -> dict:
     return {"Authorization": f"Bearer {_token}"}
 
 
+def _precio_referencia_de_bd(nombre_producto: str) -> float:
+    engine = create_engine(settings.database_url_sync)
+    with engine.connect() as conn:
+        return conn.execute(text(
+            "SELECT pr.precio_usd FROM precios_productos pr "
+            "JOIN productos_fitosanitarios p ON p.id = pr.producto_id "
+            "WHERE p.nombre = :nombre AND pr.tipo = 'referencia' ORDER BY pr.fecha DESC LIMIT 1"
+        ), {"nombre": nombre_producto}).scalar_one()
+
+
 def _insertar_vuelo(cultivo_id: str, estado: str = "completado") -> str:
     vuelo_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -189,10 +199,12 @@ def test_ahorro_vuelo_variable_vs_uniforme():
     assert atrazina["cantidad_variable"] == area_tratada * 3.0
     assert atrazina["cantidad_uniforme"] == round(_area_ha * 3.0, 3)
     assert atrazina["ahorro_cantidad"] == round(atrazina["cantidad_uniforme"] - atrazina["cantidad_variable"], 3)
-    # Precio de referencia sembrado por la migración 0023 (nadie cargó un "usuario" para Atrazina en estos tests)
+    # Se lee de la BD y no se fija en 5.2: el importador del catálogo (app/catalogo)
+    # puede haber actualizado el precio de referencia sembrado por la migración 0023.
+    precio_referencia = _precio_referencia_de_bd("Atrazina")
     assert atrazina["precio_tipo"] == "referencia"
-    assert atrazina["precio_usd"] == 5.2
-    assert data["ahorro_total_pesos"] == round(atrazina["ahorro_cantidad"] * 5.2, 2)
+    assert atrazina["precio_usd"] == precio_referencia
+    assert data["ahorro_total_pesos"] == round(atrazina["ahorro_cantidad"] * precio_referencia, 2)
     print("✓ GET .../ahorro calcula variable vs. uniforme y resuelve el precio real de BD")
 
 

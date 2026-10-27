@@ -130,9 +130,16 @@ def _item_a_contexto(item: dict) -> dict:
         "producto": item.get("producto") or "— (sin producto sugerido)",
         "dosis_por_ha": item.get("dosis_por_ha"),
         "unidad_dosis": item.get("unidad_dosis") or "",
+        "unidad_volumen": _unidad_volumen(item.get("unidad_dosis")),
+        "como_confirmar_campo": item.get("como_confirmar_campo", ""),
         "volumen_total": item.get("volumen_total"),
         "sin_dosis_referencia": bool(item.get("sin_dosis_referencia", False)),
     }
+
+
+def _unidad_volumen(unidad_dosis: str | None) -> str:
+    # La dosis viene por hectárea ("L/ha"); el volumen total es la cantidad, sin "/ha".
+    return (unidad_dosis or "").split("/")[0]
 
 
 def _total_a_contexto(total: dict) -> dict:
@@ -141,6 +148,7 @@ def _total_a_contexto(total: dict) -> dict:
         "area_ha": total.get("area_ha", 0.0),
         "volumen_total": total.get("volumen_total", 0.0),
         "unidad_dosis": total.get("unidad_dosis") or "",
+        "unidad_volumen": _unidad_volumen(total.get("unidad_dosis")),
     }
 
 

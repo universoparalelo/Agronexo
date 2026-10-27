@@ -12,7 +12,7 @@
 |---|---|---|
 | Docker Compose (stack completo) | ✅ | db, redis, minio, api, worker, frontend |
 | FastAPI + SQLAlchemy async + PostGIS | ✅ | |
-| Migraciones Alembic (0001 → 0026) | ✅ | Correr `alembic upgrade head` al arrancar |
+| Migraciones Alembic (0001 → 0028) | ✅ | Correr `alembic upgrade head` al arrancar |
 | Auth JWT (registro, login, refresh) | ✅ | access 30 min, refresh 7 días |
 | CRUD lotes con geometría PostGIS | ✅ | Soft delete, área calculada en PostGIS |
 | Upload GeoTIFF → MinIO + Celery | ✅ | `POST /lotes/desde-geotiff` (lote + vuelo en un paso) |
@@ -33,7 +33,7 @@
 | Multi-índice real (NDVI + NDRE/SAVI/ExG en paralelo) | ✅ | Tabla `analisis_indices`, tarea Celery `analizar_indice`, endpoints `.../vuelos/{id}/indices/*`. Selector de pastillas en "Vista geoespacial" del Dashboard |
 | Motor de diagnóstico (RFDR-01) | ✅ | `GET /lotes/{id}/vuelos/{id}/diagnostico` (se guarda en `diagnosticos`, "Recalcular" lo sobrescribe). 22 reglas en `app/diagnostico/reglas.py` (v1.1.0): "NDVI bajo" es relativo al rango esperado del estadio (`ndvi_esperado_estadio`) y solo cae al corte fijo 0.50 sin curva |
 | Motor probabilístico (Naive Bayes) | 🧪 | `app/diagnostico/bayes.py`, en paralelo a las reglas (`props.bayes` por zona). Tablas expertas BORRADOR sin validar por agrónomo; se ajustan con las revisiones RFDR-04 |
-| Criterio técnico del agrónomo (RFDR-04) | ✅ | Tabla `revisiones_diagnostico` (migración 0026), `PUT/DELETE .../diagnostico/zonas/{zona_id}/revision`. Cada revisión con causa es un caso de entrenamiento del motor probabilístico — los tests que crean revisiones tienen que borrarlas |
+| Criterio técnico del agrónomo (RFDR-04) | ✅ | Tabla `revisiones_diagnostico` (migración 0028), `PUT/DELETE .../diagnostico/zonas/{zona_id}/revision`. Cada revisión con causa es un caso de entrenamiento del motor probabilístico — los tests que crean revisiones tienen que borrarlas |
 | Atributos del lote | ✅ | `tipo_suelo` (enum 7 valores NEA). Cultivo, variedad y fechas ya NO son del lote — viven en `cultivos` (migración 0020, ver fila siguiente) |
 | Cultivos por lote | ✅ | Tabla `cultivos` (`tipo_cultivo`, `variedad`, `fecha_siembra`, `fecha_cosecha`, soft delete). `GET/POST/PUT/DELETE /lotes/{id}/cultivos`. Todo análisis (`vuelos.cultivo_id`) se hace sobre un cultivo existente del lote o uno nuevo creado en el momento (`cultivo_id` o `cultivo_tipo…` en el upload; `cultivo_id` o `cultivo{…}` en `desde-satelite`). El diagnóstico toma tipo/variedad del cultivo del vuelo; el estadio fenológico es solo del vuelo |
 | Tabla productos fitosanitarios en BD | ✅ | 21 productos seed, `GET /api/v1/productos-fitosanitarios` con filtros por `causa` y `tipo`. Migración 0015. El diagnóstico consulta productos desde BD |

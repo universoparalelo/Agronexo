@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import client from '../api/client'
 import { obtenerDiagnostico } from '../api/analisis'
+import { etiquetaTipoCultivo } from '../utils/cultivos'
 import BotonVolver from '../components/BotonVolver'
 import PanelLayout from '../components/PanelLayout'
 import PanelResultadoVuelo from '../components/PanelResultadoVuelo'
@@ -9,6 +10,8 @@ import ResumenDiferenciaVuelos from '../components/ResumenDiferenciaVuelos'
 import MapaComparacionLote from '../components/MapaComparacionLote'
 import VuelosCalendario from '../components/VuelosCalendario'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
+
+const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 
 function idDe(vuelo) {
   return vuelo.vuelo_id ?? vuelo.id
@@ -103,23 +106,44 @@ export default function ResultadosVuelo() {
     <PanelLayout
       alto
       migas={[
-        { label: 'Dashboard', to: '/dashboard' },
         { label: 'Lotes', to: '/lotes' },
         { label: lote?.nombre ?? 'Lote', to: `/lotes/${loteId}` },
         { label: 'Resultados' },
       ]}
-      onVerDiagnosticos={() => navigate(`/lotes/${loteId}`)}
     >
-      <div className="resultados-shell">
-        <div className="pagina-encabezado">
-          <h1>{lote?.nombre}</h1>
+      <div className={`resultados-shell${!vueloComparacionId ? ' resultados-shell--fija' : ''}`}>
+        <div className="detalle-cabecera">
+          <div>
+            <div className="detalle-titulo-fila"><h1>{lote?.nombre}</h1></div>
+            {!vueloComparacionId && vueloPrincipal && (
+              <div className="detalle-subtitulo">
+                {vueloPrincipal.cultivo && (
+                  <span className={`cultivo-badge cultivo-${vueloPrincipal.cultivo.tipo_cultivo}`}>
+                    {etiquetaTipoCultivo(vueloPrincipal.cultivo.tipo_cultivo)}
+                    {vueloPrincipal.cultivo.variedad ? ` · ${vueloPrincipal.cultivo.variedad}` : ''}
+                  </span>
+                )}
+                <span>
+                  {new Date(vueloPrincipal.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                </span>
+                <span>{SENSOR_LABELS[vueloPrincipal.sensor] || vueloPrincipal.sensor}</span>
+                {lote?.area_ha ? <span>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha</span> : null}
+                {vueloPrincipal.estadio_fenologico && <span className="vuelo-estadio-tag" title="Estadio fenológico">{vueloPrincipal.estadio_fenologico}</span>}
+                <span className="indices-usados">
+                  {(vueloPrincipal.indices || []).filter((i) => i.estado === 'completado').map((i) => (
+                    <span key={i.indice} className="vuelo-estadio-tag" title="Índice usado en el diagnóstico">{i.indice.toUpperCase()}</span>
+                  ))}
+                </span>
+              </div>
+            )}
+          </div>
           <button
             type="button"
-            className="resultados-vuelos-boton"
+            className="btn-secondary"
             onClick={() => setCalendarioAbierto(true)}
             title="Ver vuelos del lote en un calendario"
           >
-            📅 Vuelos
+            Vuelos
           </button>
         </div>
 
@@ -162,6 +186,7 @@ export default function ResultadosVuelo() {
             vueloId={vueloId}
             vuelo={vueloPrincipal}
             lote={lote}
+            ocultarEncabezado={!vueloComparacionId}
             onZonasCargadas={setZonasPrincipal}
           />
 
@@ -173,7 +198,7 @@ export default function ResultadosVuelo() {
               vuelo={vueloComparacion}
               lote={lote}
               esComparacion
-              onCerrarComparacion={() => setVueloComparacionId(null)}
+                onCerrarComparacion={() => setVueloComparacionId(null)}
               onZonasCargadas={setZonasComparacion}
             />
           )}

@@ -7,8 +7,11 @@ import SidebarNav from '../components/SidebarNav'
 import TopbarPanel from '../components/TopbarPanel'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalNuevoLote from '../components/ModalNuevoLote'
+import ModalEditarLote from '../components/ModalEditarLote'
+import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import ModalElegirLote from '../components/ModalElegirLote'
+import { irAlUltimoDiagnostico } from '../utils/diagnosticos'
 
 const ESTADO_LABELS = {
   pendiente:  'Pendiente',
@@ -26,9 +29,9 @@ const IconCalendar = () => (
     <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
   </svg>
 )
-const IconZoom = () => (
+const IconPencil = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
   </svg>
 )
 const IconTrash = () => (
@@ -49,11 +52,6 @@ const IconArea = () => (
     <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
     <line x1="9" y1="3" x2="9" y2="18"/>
     <line x1="15" y1="6" x2="15" y2="21"/>
-  </svg>
-)
-const IconFlight = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
   </svg>
 )
 const IconCalendarMini = () => (
@@ -84,6 +82,8 @@ export default function Lotes() {
   const [showModalNuevoLote, setShowModalNuevoLote] = useState(false)
   const [showModalElegirLote, setShowModalElegirLote] = useState(false)
   const [loteParaEliminar, setLoteParaEliminar] = useState(null)
+  const [loteParaEditar, setLoteParaEditar] = useState(null)
+  const { avisar } = useAvisos()
 
   // Filtros de la grilla — búsqueda con debounce para no pegarle a la API en cada tecla.
   const [busqueda, setBusqueda] = useState('')
@@ -146,7 +146,7 @@ export default function Lotes() {
 
   function handleVerDiagnosticos() {
     if (lotesTodos.length === 1) {
-      navigate(`/lotes/${lotesTodos[0].id}`)
+      irAlUltimoDiagnostico(navigate, lotesTodos[0].id)
       return
     }
     setShowModalElegirLote(true)
@@ -170,6 +170,13 @@ export default function Lotes() {
           onClose={() => setShowModalNuevoLote(false)}
         />
       )}
+      {loteParaEditar && (
+        <ModalEditarLote
+          lote={loteParaEditar}
+          onSuccess={() => { setLoteParaEditar(null); recargarTodo(); avisar('Lote actualizado') }}
+          onClose={() => setLoteParaEditar(null)}
+        />
+      )}
       {loteParaEliminar && (
         <ModalConfirmarEliminar
           titulo="Eliminar lote"
@@ -181,26 +188,25 @@ export default function Lotes() {
       {showModalElegirLote && (
         <ModalElegirLote
           lotes={lotesTodos}
-          onElegir={(loteId) => { setShowModalElegirLote(false); navigate(`/lotes/${loteId}`) }}
+          onElegir={(loteId) => { setShowModalElegirLote(false); irAlUltimoDiagnostico(navigate, loteId) }}
           onClose={() => setShowModalElegirLote(false)}
         />
       )}
 
-      <SidebarNav user={user} onVerDiagnosticos={handleVerDiagnosticos} />
+      <SidebarNav user={user} onVerDiagnosticos={handleVerDiagnosticos} plegable />
 
       <div className="dashboard-body">
-        <TopbarPanel migas={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Lotes' }]} />
+        <TopbarPanel migas={[{ label: 'Lotes' }]} />
 
         <main className="dashboard-main">
-          <div className="welcome-section">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div className="welcome-section lotes-encabezado">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <h1 className="welcome-title">Lotes registrados</h1>
-                <p className="welcome-sub">Todas tus parcelas — creá una nueva o eliminá las que ya no uses.</p>
               </div>
               <div style={{ display: 'flex', gap: '0.6rem' }}>
                 <button className="btn-secondary" onClick={() => setShowModalNuevoLote(true)}>+ Nuevo Lote</button>
-                <button className="btn-primary" onClick={() => setShowModalCarga(true)}>Cargar Ortomosaico</button>
+                <button className="btn-primary" onClick={() => setShowModalCarga(true)}>+ Cargar Ortomosaico</button>
               </div>
             </div>
           </div>
@@ -262,38 +268,43 @@ export default function Lotes() {
                 {lotes.map((lote) => {
                   const cultivo = etiquetaTipoCultivo(cultivoMasReciente(lote)?.tipo_cultivo)
                   return (
-                    <div className="lote-card" key={lote.id}>
-                      <div className="lote-card-thumb">
-                        <img src="/fondo.jpeg" alt={lote.nombre} />
-                      </div>
+                    <div
+                      className="lote-card lote-card--clicable"
+                      key={lote.id}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigate(`/lotes/${lote.id}`)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/lotes/${lote.id}`) }}
+                    >
+                      <span className="lote-meta-icon lote-card-icono"><IconPlant /></span>
                       <div className="lote-card-body">
                         <div className="lote-card-title-row">
                           <div>
-                            <h3 className="lote-card-nombre">{lote.nombre}</h3>
+                            <h3 className="lote-card-nombre">
+                              <span className="lote-card-nombre-link">{lote.nombre}</span>
+                            </h3>
                             {cultivo && <span className="lote-crop-tag">{cultivo}</span>}
                           </div>
                           <div className="lote-card-acciones">
-                            <button className="tbl-btn" title="Ver detalle del lote" onClick={() => navigate(`/lotes/${lote.id}`)}>
-                              <IconZoom />
+                            <button className="tbl-btn" title="Editar lote" onClick={(e) => { e.stopPropagation(); setLoteParaEditar(lote) }}>
+                              <IconPencil />
                             </button>
-                            <button className="tbl-btn tbl-btn--danger" title="Eliminar lote" onClick={() => setLoteParaEliminar(lote)}>
+                            <button className="tbl-btn tbl-btn--danger" title="Eliminar lote" onClick={(e) => { e.stopPropagation(); setLoteParaEliminar(lote) }}>
                               <IconTrash />
                             </button>
                           </div>
                         </div>
 
                         <div className="lote-card-meta">
-                          <div className="lote-meta-item" title={`Cultivo: ${cultivo || 'Sin cultivo'}`}>
-                            <span className="lote-meta-icon"><IconPlant /></span>
-                            <span className="lote-meta-val">{cultivo || 'Sin cultivo'}</span>
-                          </div>
+                          {!cultivo && (
+                            <div className="lote-meta-item" title="Cultivo: Sin cultivo">
+                              <span className="lote-meta-icon"><IconPlant /></span>
+                              <span className="lote-meta-val">Sin cultivo</span>
+                            </div>
+                          )}
                           <div className="lote-meta-item" title={`Superficie: ${lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}`}>
                             <span className="lote-meta-icon"><IconArea /></span>
                             <span className="lote-meta-val">{lote.area_ha ? `${Math.round(lote.area_ha)} ha` : 'Sin límites'}</span>
-                          </div>
-                          <div className="lote-meta-item" title={lote.ultimo_vuelo_estado ? `Estado del último análisis: ${ESTADO_LABELS[lote.ultimo_vuelo_estado] || lote.ultimo_vuelo_estado}` : 'Sin vuelos todavía'}>
-                            <span className="lote-meta-icon"><IconFlight /></span>
-                            <span className="lote-meta-val">{lote.ultimo_vuelo_estado ? ESTADO_LABELS[lote.ultimo_vuelo_estado] || lote.ultimo_vuelo_estado : 'Sin vuelos'}</span>
                           </div>
                           <div className="lote-meta-item" title={`Último vuelo: ${lote.ultimo_vuelo_fecha ? fmtFecha(lote.ultimo_vuelo_fecha) : '—'}`}>
                             <span className="lote-meta-icon"><IconCalendarMini /></span>

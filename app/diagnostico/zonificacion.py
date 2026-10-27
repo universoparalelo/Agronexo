@@ -129,6 +129,7 @@ def _crear_unidad(
         "severidad": severidad,
         "regla_nombre": p0.get("regla_nombre", ""),
         "accion_recomendada": p0.get("accion_recomendada", ""),
+        "como_confirmar_campo": p0.get("como_confirmar_campo", ""),
         "productos_sugeridos": p0.get("productos_sugeridos", []),
         "area_total_ha": round(area_total, 2),
         "ndvi_promedio": ndvi_promedio,

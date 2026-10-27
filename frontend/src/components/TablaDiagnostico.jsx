@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import BayesZona from './BayesZona'
 import ComoConfirmarCampo from './ComoConfirmarCampo'
 import RevisionZona from './RevisionZona'
-import { fechaVuelo } from '../utils/fechas'
 
 const CONFIANZA_LABELS = {
   alta:  'Confianza alta',
@@ -48,6 +47,73 @@ function revisionesIniciales(features) {
   )
 }
 
+const CONFIABILIDAD_DOSIS = {
+  marbete: 'según marbete',
+  web: 'habitual según web',
+}
+
+const formatoUsd = (n) => (n == null ? '—' : `USD ${n.toFixed(2)}`)
+
+const sinTildes = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+// La variante del catálogo suele repetir marca y concentración ("250 SC — genérico"):
+// se muestra solo si agrega algo, como "uso herbicida" en Paraquat.
+function detalleMarca(m) {
+  const partes = [m.concentracion]
+  const variante = m.variante
+  if (variante) {
+    const v = sinTildes(variante)
+    const repite = v.includes(sinTildes(m.marca)) || (m.concentracion && v.includes(sinTildes(m.concentracion)))
+    if (!repite) partes.push(variante)
+  }
+  return partes.filter(Boolean).join(' · ')
+}
+
+function ProductosSugeridos({ productos, alternativas }) {
+  if (!productos?.length) return null
+  return (
+    <div className="diagnostico-productos">
+      {productos.map((prod, j) => {
+        const marcas = alternativas?.[prod.nombre] || []
+        if (marcas.length === 0) {
+          return <span key={j} className="producto-chip">{prod.nombre}</span>
+        }
+        return (
+          <details key={j} className="producto-alternativas">
+            <summary className="producto-chip">
+              {prod.nombre} · {marcas.length} {marcas.length === 1 ? 'marca' : 'marcas'}
+            </summary>
+            <table className="producto-alternativas-tabla">
+              <thead>
+                <tr><th>Marca</th><th>Dosis</th><th>Precio</th><th>Costo/ha</th></tr>
+              </thead>
+              <tbody>
+                {marcas.map((m, k) => (
+                  <tr key={k}>
+                    <td>
+                      {m.marca}
+                      {detalleMarca(m) && <small>{detalleMarca(m)}</small>}
+                    </td>
+                    <td>
+                      {m.dosis_por_ha} {m.unidad_dosis}
+                      {m.confiabilidad_dosis && <small> {CONFIABILIDAD_DOSIS[m.confiabilidad_dosis] || m.confiabilidad_dosis}</small>}
+                    </td>
+                    <td>{formatoUsd(m.precio_usd)}/{m.unidad_precio}</td>
+                    <td>{formatoUsd(m.costo_por_ha_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="producto-alternativas-aviso">
+              Ordenadas de menor a mayor costo por hectárea. Verificá en el marbete que sea apto para tu cultivo.
+            </p>
+          </details>
+        )
+      })}
+    </div>
+  )
+}
+
 const CAUSA_LABELS = {
   sin_problema_detectado: 'Sin problema',
   interferencia_vegetacion: 'Malezas',
@@ -64,7 +130,7 @@ const CAUSA_LABELS = {
 }
 
 export default function TablaDiagnostico({
-  diagnostico, onRecalcular, recalculando, onGenerarOrdenTrabajo, generandoOrden,
+  diagnostico,
 }) {
   const features = diagnostico?.features || []
   const metadata = diagnostico?.metadata
@@ -101,28 +167,17 @@ export default function TablaDiagnostico({
   return (
     <div className="tabla-diagnostico-wrapper">
       <div className="diagnostico-title-row">
-        <h3 className="tabla-zonas-title">Diagnóstico agronómico</h3>
-        <div className="diagnostico-title-row-controles">
-          <button
-            type="button"
-            className="btn-recalcular-diagnostico"
-            onClick={onRecalcular}
-            disabled={recalculando}
-            title="Vuelve a calcular el diagnóstico desde cero y reemplaza el guardado"
-          >
-            {recalculando ? 'Recalculando...' : '↻ Recalcular'}
-          </button>
-          {diagnostico?.unidades_manejo?.length > 0 && (
-            <button
-              type="button"
-              className="btn-recalcular-diagnostico"
-              onClick={onGenerarOrdenTrabajo}
-              disabled={generandoOrden}
-              title="Genera el PDF de orden de trabajo con las dosis por unidad de manejo"
-            >
-              {generandoOrden ? 'Generando orden...' : '📋 Generar orden de trabajo'}
-            </button>
+        <div className="seccion-encabezado">
+          <h3 className="tabla-zonas-title">Diagnóstico por zona</h3>
+          {metadata?.calculado_en && (
+            <p className="seccion-sub">
+              Calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+              })}
+            </p>
           )}
+        </div>
+        <div className="diagnostico-title-row-controles">
           <div className="diagnostico-vista-toggle">
             <button
               className={`vista-btn ${vista === 'tabla' ? 'vista-btn--active' : ''}`}
@@ -142,32 +197,10 @@ export default function TablaDiagnostico({
         </div>
       </div>
 
-      {metadata && (
-        <div className="diagnostico-header-info">
-          <p className="diagnostico-metadata">
-            {metadata.lote_nombre && <strong>{metadata.lote_nombre}</strong>}
-            {metadata.lote_nombre && ' · '}
-            {metadata.cultivo}{metadata.variedad ? ` (${metadata.variedad})` : ''} · estadio {metadata.estadio_fenologico || 'sin cargar'}
-            {metadata.fecha_vuelo && ` · vuelo del ${fechaVuelo(metadata.fecha_vuelo).toLocaleDateString('es-AR')}`}
-            {' · '}índices usados: {metadata.indices_disponibles?.join(', ') || 'ndvi'}
-            {metadata.calculado_en && (
-              <span className="diagnostico-calculado-en">
-                {' · '}calculado el {new Date(metadata.calculado_en).toLocaleString('es-AR', {
-                  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                })}
-              </span>
-            )}
-            {metadata.motor_version && ` · motor de reglas v${metadata.motor_version}`}
-          </p>
-          {metadata.resumen_general && (
-            <p className="diagnostico-resumen">{metadata.resumen_general}</p>
-          )}
-          <p className="diagnostico-revisadas">
-            {nRevisadas} de {features.length} zonas con criterio técnico cargado
-            {vista === 'tabla' ? ' — tocá una zona para ver cómo confirmarla en campo y validarla.' : '.'}
-          </p>
-        </div>
-      )}
+      <p className="diagnostico-revisadas">
+        {nRevisadas} de {features.length} zonas con criterio técnico cargado
+        {vista === 'tabla' ? ' — tocá una zona para ver cómo confirmarla en campo y validarla.' : '.'}
+      </p>
 
       {vista === 'tabla' && (
         <div className="stats-table-wrap">
@@ -277,13 +310,7 @@ export default function TablaDiagnostico({
                         <strong>Acción recomendada:</strong> {p.accion_recomendada}
                       </p>
                     )}
-                    {p.productos_sugeridos?.length > 0 && (
-                      <div className="diagnostico-productos">
-                        {p.productos_sugeridos.map((prod, j) => (
-                          <span key={j} className="producto-chip">{prod.nombre}</span>
-                        ))}
-                      </div>
-                    )}
+                    <ProductosSugeridos productos={p.productos_sugeridos} alternativas={diagnostico?.alternativas_marca} />
                   </>
                 )}
 
@@ -310,10 +337,17 @@ export default function TablaDiagnostico({
 
       {diagnostico?.unidades_manejo?.length > 0 && (
         <div className="unidades-manejo-section">
-          <h3 className="tabla-zonas-title">Unidades de manejo</h3>
-          <p className="unidades-manejo-desc">
-            Zonas agrupadas por causa y severidad para prescripción diferenciada.
-          </p>
+          <div className="seccion-encabezado">
+            <h3 className="tabla-zonas-title titulo-con-ayuda">
+              Unidades de manejo
+              <span className="ayuda-tip">
+                <button type="button" className="ayuda-tip-boton" aria-label="¿Qué son las unidades de manejo?">i</button>
+                <span role="tooltip" className="ayuda-tip-caja">
+                  Zonas agrupadas por causa y severidad para prescripción diferenciada.
+                </span>
+              </span>
+            </h3>
+          </div>
           <div className="unidades-manejo-lista">
             {diagnostico.unidades_manejo.map((u) => {
               const p = u.properties || {}
@@ -325,28 +359,25 @@ export default function TablaDiagnostico({
                       {SEVERIDAD_LABELS[p.severidad] || p.severidad}
                     </span>
                   </div>
-                  <div className="unidad-card-meta">
-                    <span>{p.area_total_ha} ha</span>
-                    <span>·</span>
-                    <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
-                    {p.ndvi_promedio != null && (
-                      <>
-                        <span>·</span>
-                        <span>NDVI: {p.ndvi_promedio.toFixed(3)}</span>
-                      </>
-                    )}
-                  </div>
-                  <p className="unidad-card-causa">{p.regla_nombre}</p>
-                  {p.texto_unidad && (
-                    <p className="unidad-card-texto">{p.texto_unidad}</p>
-                  )}
-                  {p.productos_sugeridos?.length > 0 && (
-                    <div className="diagnostico-productos">
-                      {p.productos_sugeridos.map((prod, j) => (
-                        <span key={j} className="producto-chip">{prod.nombre}</span>
-                      ))}
+                  <div className="unidad-card-cuerpo">
+                    <div>
+                      <p className="unidad-card-causa">{p.regla_nombre}</p>
+                      <div className="unidad-card-meta">
+                        <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
+                        {p.ndvi_promedio != null && (
+                          <>
+                            <span>·</span>
+                            <span>NDVI {p.ndvi_promedio.toFixed(3)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
+                    <span className="unidad-card-area">{Number(p.area_total_ha).toFixed(1).replace('.', ',')} ha</span>
+                  </div>
+                  {p.accion_recomendada && (
+                    <p className="unidad-card-texto">{p.accion_recomendada.split('. ')[0].replace(/\.$/, '')}.</p>
                   )}
+                  <ProductosSugeridos productos={p.productos_sugeridos} alternativas={diagnostico?.alternativas_marca} />
                 </div>
               )
             })}

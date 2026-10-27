@@ -1,7 +1,7 @@
 """crear tabla revisiones_diagnostico (RFDR-04 — criterio técnico del agrónomo)
 
-Revision ID: 0026
-Revises: 0025
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-10-23
 
 Una revisión vigente por zona de un vuelo (UNIQUE vuelo_id + zona_id): el
@@ -13,8 +13,8 @@ motor probabilístico (app/diagnostico/bayes.py).
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0026"
-down_revision = "0025"
+revision = "0028"
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 

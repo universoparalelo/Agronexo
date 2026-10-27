@@ -22,7 +22,7 @@ from app.lotes.models import CultivoEnum
 # Versión del set de 20 reglas de este módulo (HU-R4-02, trazabilidad) — subir
 # al agregar, quitar o cambiar el criterio de una regla, para que un
 # diagnóstico guardado quede ligado a la versión que lo generó.
-MOTOR_VERSION = "1.2.0"
+MOTOR_VERSION = "1.2.1"
 
 # Corte de "NDVI bajo" cuando no hay curva esperada para el cultivo+estadio
 # del vuelo (estadio sin cargar o fuera de la curva). Con curva, "bajo"

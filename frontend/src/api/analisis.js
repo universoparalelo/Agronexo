@@ -85,3 +85,8 @@ export const revisarZonaDiagnostico = (loteId, vueloId, zonaId, revision) =>
 
 export const borrarRevisionZona = (loteId, vueloId, zonaId) =>
   client.delete(`/lotes/${loteId}/vuelos/${vueloId}/diagnostico/zonas/${zonaId}/revision`)
+
+// { fecha_vuelo?, estadio_fenologico?, cultivo_id? } — devuelve diagnostico_desactualizado en true si cambió
+// el cultivo o el estadio; el diagnóstico guardado se recalcula solo al abrirlo (firma de datos).
+export const actualizarVuelo = (loteId, vueloId, datos) =>
+  client.put(`/lotes/${loteId}/vuelos/${vueloId}`, datos).then(r => r.data)

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { obtenerDiagnostico, obtenerZonas, recalcularDiagnostico } from '../api/analisis'
+import { obtenerDiagnostico, obtenerZonas } from '../api/analisis'
+import { obtenerAhorroVuelo } from '../api/ahorro'
 import { descargarOrdenTrabajoPdf } from '../api/reportes'
 import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 
@@ -16,8 +17,11 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   const [diagnostico, setDiagnostico] = useState(null)
   const [diagnosticoLoading, setDiagnosticoLoading] = useState(false)
   const [diagnosticoError, setDiagnosticoError] = useState('')
-  const [recalculando, setRecalculando] = useState(false)
+  const [ahorro, setAhorro] = useState(null)
+  const [ahorroLoading, setAhorroLoading] = useState(false)
+  const [ahorroError, setAhorroError] = useState('')
   const [generandoOrden, setGenerandoOrden] = useState(false)
+  const [ordenError, setOrdenError] = useState('')
   const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
 
   useEffect(() => {
@@ -27,6 +31,8 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
     setZonas(null)
     setDiagnostico(null)
     setDiagnosticoError('')
+    setAhorro(null)
+    setAhorroError('')
     obtenerZonas(loteId, vueloId)
       .then(setZonas)
       .catch(() => setError('No se pudieron cargar los resultados del análisis.'))
@@ -34,34 +40,40 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   }, [loteId, vueloId])
 
   useEffect(() => {
-    if (!loteId || !vueloId || tab !== 'diagnostico' || diagnostico || diagnosticoLoading) return
+    if (!loteId || !vueloId || diagnostico || diagnosticoLoading || diagnosticoError) return
     setDiagnosticoLoading(true)
     setDiagnosticoError('')
     obtenerDiagnostico(loteId, vueloId)
       .then(setDiagnostico)
       .catch(() => setDiagnosticoError('No se pudo generar el diagnóstico para este análisis.'))
       .finally(() => setDiagnosticoLoading(false))
-  }, [tab, loteId, vueloId, diagnostico, diagnosticoLoading])
+  }, [loteId, vueloId, diagnostico, diagnosticoLoading, diagnosticoError])
 
-  function handleRecalcular() {
-    setRecalculando(true)
-    setDiagnosticoError('')
-    recalcularDiagnostico(loteId, vueloId)
-      .then(setDiagnostico)
-      .catch(() => setDiagnosticoError('No se pudo recalcular el diagnóstico.'))
-      .finally(() => setRecalculando(false))
+  // El ahorro sale del diagnóstico: se pide al abrir la pestaña y se vuelve a pedir si se recalcula.
+  useEffect(() => {
+    if (!loteId || !vueloId || tab !== 'ahorro' || ahorro || ahorroLoading || ahorroError) return
+    setAhorroLoading(true)
+    obtenerAhorroVuelo(loteId, vueloId)
+      .then(setAhorro)
+      .catch((err) => setAhorroError(err.response?.data?.detail || 'No se pudo calcular el ahorro de este análisis.'))
+      .finally(() => setAhorroLoading(false))
+  }, [tab, loteId, vueloId, ahorro, ahorroLoading, ahorroError])
+
+  function recargarAhorro() {
+    setAhorro(null)
+    setAhorroError('')
   }
 
   function handleGenerarOrdenTrabajo() {
     setGenerandoOrden(true)
-    setDiagnosticoError('')
+    setOrdenError('')
     descargarOrdenTrabajoPdf(loteId, vueloId)
       .then((blob) => setPreviewPdf({
         titulo: `Orden de trabajo — ${nombreLote ?? ''}`,
         blob,
         filename: `orden_trabajo_${vueloId}.pdf`,
       }))
-      .catch(async (err) => setDiagnosticoError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
+      .catch(async (err) => setOrdenError(await extraerMensajeErrorBlob(err, 'No se pudo generar la orden de trabajo.')))
       .finally(() => setGenerandoOrden(false))
   }
 
@@ -69,8 +81,9 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
     zonas, loading, error,
     tab, setTab,
     diagnostico, diagnosticoLoading, diagnosticoError,
-    recalculando, generandoOrden,
+    ahorro, ahorroLoading, ahorroError, recargarAhorro,
+    generandoOrden, ordenError,
     previewPdf, cerrarPreviewPdf: () => setPreviewPdf(null),
-    handleRecalcular, handleGenerarOrdenTrabajo,
+    handleGenerarOrdenTrabajo,
   }
 }
