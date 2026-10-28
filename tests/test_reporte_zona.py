@@ -31,6 +31,7 @@ def _renderizar(*props_zonas):
     return _env.get_template("reporte_ejecutivo.html").render(
         zonas=zonas, n_zonas=len(zonas), n_zonas_con_problema=len(zonas),
         area_afectada_ha=0.0, ndvi_promedio_lote=0.5, n_unidades_manejo=0,
+        resumen_ejecutivo={"estado": "", "problemas": [], "proximo_paso": ""},
     )
 
 
