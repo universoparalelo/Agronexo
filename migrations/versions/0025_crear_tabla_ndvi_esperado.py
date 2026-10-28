@@ -91,16 +91,19 @@ def upgrade() -> None:
     """)
     op.create_index("ix_ndvi_esperado_cultivo_orden", "ndvi_esperado_estadio", ["tipo_cultivo", "orden"])
 
-    filas = _filas_seed()
-    values = ", ".join(
-        f"('{cultivo}'::cultivoenum, '{estadio}', '{etiqueta}', {orden}, {esperado}, {ndvi_min}, {ndvi_max})"
-        for cultivo, estadio, etiqueta, orden, esperado, ndvi_min, ndvi_max in filas
+    bind.execute(
+        sa.text("""
+            INSERT INTO ndvi_esperado_estadio
+                (tipo_cultivo, estadio_normalizado, etiqueta, orden, ndvi_esperado, ndvi_min, ndvi_max)
+            VALUES
+                (CAST(:cultivo AS cultivoenum), :estadio, :etiqueta, :orden, :esperado, :ndvi_min, :ndvi_max)
+        """),
+        [
+            {"cultivo": cultivo, "estadio": estadio, "etiqueta": etiqueta, "orden": orden,
+             "esperado": esperado, "ndvi_min": ndvi_min, "ndvi_max": ndvi_max}
+            for cultivo, estadio, etiqueta, orden, esperado, ndvi_min, ndvi_max in _filas_seed()
+        ],
     )
-    bind.execute(sa.text(f"""
-        INSERT INTO ndvi_esperado_estadio
-            (tipo_cultivo, estadio_normalizado, etiqueta, orden, ndvi_esperado, ndvi_min, ndvi_max)
-        VALUES {values}
-    """))
 
 
 def downgrade() -> None:
