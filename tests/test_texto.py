@@ -243,3 +243,30 @@ class TestGenerarResumenGeneral:
 if __name__ == "__main__":
     import sys
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def test_severidad_toma_la_peor_entre_lote_y_esperado():
+    from app.diagnostico.texto import calcular_severidad
+    # Contra el lote (0.32) la zona apenas cae; contra lo esperado (0.587) cae ~49%.
+    assert calcular_severidad(0.30, 0.32, "bajo_vigor_estadio") == "normal"
+    assert calcular_severidad(0.30, 0.32, "bajo_vigor_estadio", ndvi_esperado=0.587) == "moderada"
+    assert calcular_severidad(0.25, 0.32, "bajo_vigor_estadio", ndvi_esperado=0.587) == "critica"
+
+
+def test_texto_menciona_lo_esperado_para_el_estadio():
+    from app.diagnostico.texto import generar_texto_zona
+    props = {"area_ha": 2.0, "ndvi_promedio": 0.30, "patron_espacial": "por_sectores",
+             "causa_indice": "bajo_vigor_estadio", "confianza": "baja", "regla_id": "R80"}
+    texto = generar_texto_zona(props, 0.32, ndvi_esperado=0.587, estadio="R5")
+    assert "Para el estadio R5 se espera un NDVI cercano a 0.59" in texto
+    assert "49% por debajo" in texto
+
+
+def test_texto_r80_nombra_las_causas_candidatas():
+    from app.diagnostico.texto import generar_texto_zona
+    props = {"area_ha": 1.4, "ndvi_promedio": 0.30, "patron_espacial": "bordes_lote", "causa_indice": "bajo_vigor_estadio",
+             "confianza": "baja", "regla_id": "R80",
+             "regla_nombre": "Vigor bajo para el estadio — estrés hídrico o déficit de nitrógeno"}
+    texto = generar_texto_zona(props, 0.45)
+    assert "Diagnóstico: vigor bajo para el estadio, estrés hídrico o déficit de nitrógeno" in texto
+    assert "sin una causa puntual" not in texto

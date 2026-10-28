@@ -16,6 +16,8 @@ CAUSA_LABELS: dict[str, str] = {
     "estres_hidrico": "estrés hídrico",
     "madurez_temprana_diferencial": "madurez temprana diferencial",
     "vigor_excesivo": "vigor excesivo",
+    "compactacion_falla_siembra": "compactación o falla de siembra",
+    "bajo_vigor_estadio": "vigor bajo para el estadio (causa a confirmar a campo entre dos posibles)",
 }
 
 PATRON_LABELS: dict[str, str] = {
@@ -39,14 +41,24 @@ def calcular_severidad(
     ndvi_zona: float | None,
     ndvi_promedio_lote: float,
     causa_indice: str,
+    ndvi_esperado: float | None = None,
 ) -> str:
+    """
+    Caída relativa de la zona contra dos referencias — el promedio del lote y
+    el NDVI esperado para el estadio — y se queda con la peor. Solo contra el
+    lote, un lote parejo pero muy por debajo de lo normal para su etapa salía
+    entero con severidad "normal".
+    """
     if causa_indice == "sin_problema_detectado":
         return "normal"
-    if ndvi_zona is None or ndvi_promedio_lote <= 0:
+    if ndvi_zona is None:
         return "normal"
     if causa_indice == "vigor_excesivo":
         return "vigorosa"
-    ratio = (ndvi_promedio_lote - ndvi_zona) / ndvi_promedio_lote
+    referencias = [r for r in (ndvi_promedio_lote, ndvi_esperado) if r is not None and r > 0]
+    if not referencias:
+        return "normal"
+    ratio = max((ref - ndvi_zona) / ref for ref in referencias)
     if ratio > 0.50:
         return "critica"
     if ratio > 0.25:
@@ -56,7 +68,10 @@ def calcular_severidad(
     return "normal"
 
 
-def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
+def generar_texto_zona(
+    props: dict, ndvi_promedio_lote: float,
+    ndvi_esperado: float | None = None, estadio: str | None = None,
+) -> str:
     area = props.get("area_ha", 0)
     ndvi = props.get("ndvi_promedio")
     patron = props.get("patron_espacial", "")
@@ -84,6 +99,11 @@ def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
 
     patron_label = PATRON_LABELS.get(patron, patron)
     causa_label = CAUSA_LABELS.get(causa, causa)
+    # R80 precisado con el motor probabilístico (engine.precisar_con_bayes):
+    # el nombre de la regla ya trae las causas candidatas.
+    regla_nombre = props.get("regla_nombre", "")
+    if regla_id == "R80" and "—" in regla_nombre:
+        causa_label = "vigor bajo para el estadio, " + regla_nombre.split("—", 1)[1].strip()
     confianza_label = CONFIANZA_LABELS.get(confianza, confianza)
 
     if ndvi is not None and ndvi_promedio_lote > 0:
@@ -96,6 +116,16 @@ def generar_texto_zona(props: dict, ndvi_promedio_lote: float) -> str:
         )
     else:
         parts.append(f"Zona de {area:.1f} ha con {patron_label}.")
+
+    if ndvi is not None and ndvi_esperado:
+        diff_pct = (ndvi - ndvi_esperado) / ndvi_esperado * 100
+        etapa = f"el estadio {estadio}" if estadio else "este estadio"
+        if diff_pct <= -5:
+            parts.append(f"Para {etapa} se espera un NDVI cercano a {ndvi_esperado:.2f}: la zona está un {abs(diff_pct):.0f}% por debajo.")
+        elif diff_pct >= 5:
+            parts.append(f"Para {etapa} se espera un NDVI cercano a {ndvi_esperado:.2f}: la zona está un {diff_pct:.0f}% por encima.")
+        else:
+            parts.append(f"Para {etapa} se espera un NDVI cercano a {ndvi_esperado:.2f}, en línea con la zona.")
 
     parts.append(f"Diagnóstico: {causa_label} ({confianza_label}).")
 

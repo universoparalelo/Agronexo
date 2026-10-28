@@ -110,6 +110,13 @@ function fmtFecha(iso) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// fecha_vuelo se carga como fecha sin hora (medianoche UTC): en UTC para no
+// mostrar el día anterior en Argentina.
+function fmtFechaVuelo(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
 function saludoSegunHora() {
   const h = new Date().getHours()
   if (h < 6) return 'Buenas noches'
@@ -665,7 +672,7 @@ export default function Dashboard() {
                         <thead>
                           <tr>
                             <th>LOTE</th>
-                            <th>FECHA</th>
+                            <th>FECHA DE VUELO</th>
                             <th>ESTADIO</th>
                             <th>ÍNDICES</th>
                             <th>ESTADO</th>
@@ -684,7 +691,12 @@ export default function Dashboard() {
                                     {v.lote.area_ha ? ` · ${Math.round(v.lote.area_ha)} ha` : ''}
                                   </div>
                                 </td>
-                                <td className="td-fecha">{fmtFecha(v.fecha_vuelo)}</td>
+                                <td className="td-fecha">
+                                  <div>{fmtFechaVuelo(v.fecha_vuelo)}</div>
+                                  <div className="td-fecha-subido" title="Fecha en que se cargó el ortomosaico">
+                                    Subido {fmtFecha(v.created_at)}
+                                  </div>
+                                </td>
                                 <td>
                                   {v.estadio_fenologico
                                     ? <span className="vuelo-estadio-tag">{v.estadio_fenologico}</span>
@@ -802,7 +814,7 @@ export default function Dashboard() {
                                       onClick={() => setAnalisisParaEliminar({
                                         loteId: v.lote.id,
                                         vueloId: v.vueloId,
-                                        etiqueta: `${v.lote.nombre} · ${fmtFecha(v.fecha_vuelo)}`,
+                                        etiqueta: `${v.lote.nombre} · ${fmtFechaVuelo(v.fecha_vuelo)}`,
                                       })}
                                     >
                                       <IconTrash />
@@ -836,7 +848,7 @@ export default function Dashboard() {
                     <p className="card-sub">
                       {selectedVuelo
                         ? (selectedVueloRow
-                            ? `Análisis — ${selectedVueloRow.lote.nombre} · ${fmtFecha(selectedVueloRow.fecha_vuelo)}`
+                            ? `Análisis — ${selectedVueloRow.lote.nombre} · vuelo del ${fmtFechaVuelo(selectedVueloRow.fecha_vuelo)}`
                             : 'Análisis en curso')
                         : 'Mapa de lotes registrados en la zona norte'}
                     </p>

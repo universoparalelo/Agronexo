@@ -38,6 +38,8 @@ const CAUSA_LABELS = {
   estres_hidrico: 'Estrés hídrico',
   madurez_temprana_diferencial: 'Madurez dif.',
   vigor_excesivo: 'Vigor excesivo',
+  compactacion_falla_siembra: 'Compactación / siembra',
+  bajo_vigor_estadio: 'Vigor bajo p/ estadio',
 }
 
 function MiniSilueta({ lotePath, zonaPath, color }) {

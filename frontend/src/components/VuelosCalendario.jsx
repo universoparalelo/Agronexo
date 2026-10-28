@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CalendarioMensual from './CalendarioMensual'
-import { fechaISOLocal, fechaDDMMAAAA } from '../utils/fechas'
+import ResumenVuelo from './ResumenVuelo'
+import { fechaISOLocal, fechaDDMMAAAA, fechaVuelo } from '../utils/fechas'
 
 const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 const ESTADO_LABELS = { pendiente: 'Pendiente', procesando: 'Procesando', completado: 'Completado', error: 'Error' }
@@ -19,9 +20,10 @@ export default function VuelosCalendario({ loteId, vuelos, vueloActualId, onCerr
   const navigate = useNavigate()
 
   const vueloActual = vuelos.find(v => idDe(v) === vueloActualId)
-  const fechaInicial = vueloActual ? new Date(vueloActual.fecha_vuelo) : new Date()
+  const fechaInicial = vueloActual ? fechaVuelo(vueloActual.fecha_vuelo) : new Date()
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => fechaISOLocal(fechaInicial))
   const [menuAbiertoId, setMenuAbiertoId] = useState(null)
+  const [resumenAbiertoId, setResumenAbiertoId] = useState(null)
 
   useEffect(() => {
     if (!menuAbiertoId) return
@@ -32,7 +34,7 @@ export default function VuelosCalendario({ loteId, vuelos, vueloActualId, onCerr
 
   const porFecha = {}
   for (const v of vuelos) {
-    const iso = fechaISOLocal(new Date(v.fecha_vuelo))
+    const iso = fechaISOLocal(fechaVuelo(v.fecha_vuelo))
     ;(porFecha[iso] ??= []).push(v)
   }
 
@@ -83,38 +85,53 @@ export default function VuelosCalendario({ loteId, vuelos, vueloActualId, onCerr
             const esActual = idDe(v) === vueloActualId
             const seleccionable = v.estado === 'completado'
             const puedeComparar = onComparar && !esActual && seleccionable
+            const resumenAbierto = resumenAbiertoId === idDe(v)
             return (
               <li key={idDe(v)} className="vuelos-calendario-item-fila">
-                <button
-                  type="button"
-                  className={`vuelos-calendario-item ${esActual ? 'vuelos-calendario-item--activo' : ''}`}
-                  disabled={!seleccionable}
-                  title={seleccionable ? undefined : 'Este vuelo todavía no tiene resultados para ver'}
-                  onClick={() => seleccionable && irAVuelo(v)}
-                >
-                  <span className="vuelos-calendario-item-sensor">{SENSOR_LABELS[v.sensor] || v.sensor}</span>
-                  <span className={`estado-badge estado-${v.estado}`}>{ESTADO_LABELS[v.estado] || v.estado}</span>
-                </button>
-                {puedeComparar && (
-                  <div className="vuelos-calendario-item-menu">
+                <div className="vuelos-calendario-item-row">
+                  <button
+                    type="button"
+                    className={`vuelos-calendario-item ${esActual ? 'vuelos-calendario-item--activo' : ''}`}
+                    disabled={!seleccionable}
+                    title={seleccionable ? undefined : 'Este vuelo todavía no tiene resultados para ver'}
+                    onClick={() => seleccionable && irAVuelo(v)}
+                  >
+                    <span className="vuelos-calendario-item-sensor">{SENSOR_LABELS[v.sensor] || v.sensor}</span>
+                    <span className={`estado-badge estado-${v.estado}`}>{ESTADO_LABELS[v.estado] || v.estado}</span>
+                  </button>
+                  {seleccionable && (
                     <button
                       type="button"
-                      className="vuelos-calendario-item-menu-boton"
-                      onClick={(e) => { e.stopPropagation(); setMenuAbiertoId(prev => prev === idDe(v) ? null : idDe(v)) }}
-                      aria-label="Más opciones"
-                      title="Más opciones"
+                      className="vuelos-calendario-item-resumen-boton"
+                      onClick={(e) => { e.stopPropagation(); setResumenAbiertoId(prev => prev === idDe(v) ? null : idDe(v)) }}
+                      aria-label="Ver resumen del vuelo"
+                      title="Índice, severidad y descargas de este vuelo"
                     >
-                      ⋮
+                      {resumenAbierto ? '▲ Resumen' : '▾ Resumen'}
                     </button>
-                    {menuAbiertoId === idDe(v) && (
-                      <div className="vuelos-calendario-item-menu-lista">
-                        <button type="button" onClick={() => { onComparar(v); setMenuAbiertoId(null) }}>
-                          Seleccionar para comparar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                  {puedeComparar && (
+                    <div className="vuelos-calendario-item-menu">
+                      <button
+                        type="button"
+                        className="vuelos-calendario-item-menu-boton"
+                        onClick={(e) => { e.stopPropagation(); setMenuAbiertoId(prev => prev === idDe(v) ? null : idDe(v)) }}
+                        aria-label="Más opciones"
+                        title="Más opciones"
+                      >
+                        ⋮
+                      </button>
+                      {menuAbiertoId === idDe(v) && (
+                        <div className="vuelos-calendario-item-menu-lista">
+                          <button type="button" onClick={() => { onComparar(v); setMenuAbiertoId(null) }}>
+                            Seleccionar para comparar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {resumenAbierto && <ResumenVuelo loteId={loteId} vueloId={idDe(v)} />}
               </li>
             )
           })}
