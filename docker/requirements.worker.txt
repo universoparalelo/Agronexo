@@ -7,7 +7,7 @@ redis==8.1.0
 # Python 3.14 que trae la imagen base osgeo/gdal:ubuntu-small-3.13.3 — pip
 # cae a compilar pydantic-core desde fuente y falla (PyO3 0.22.6 no
 # soporta 3.14). 2.13.5 sí trae wheel cp314 (pydantic-core 2.46.5).
-pydantic==2.13.5
+pydantic==2.14.1
 pydantic-settings==2.15.0
 
 # Base de datos (para escribir resultados)
