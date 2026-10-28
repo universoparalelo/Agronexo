@@ -1340,7 +1340,8 @@
 .tabla-vuelos-fecha-link:hover { text-decoration: underline; }
 .titulo-con-ayuda { display: flex; align-items: center; gap: 0.45rem; }
 .titulo-con-ayuda .ayuda-tip-caja { font-size: 0.78rem; font-weight: 400; }
-.tendencia-indice .titulo-con-ayuda .ayuda-tip-caja { width: 280px; }
+.tendencia-indice .titulo-con-ayuda .ayuda-tip-caja,
+.grafico-evolucion-explicacion .titulo-con-ayuda .ayuda-tip-caja { width: 280px; }
 .diagnostico-title-row { align-items: flex-start; }
 
 /* La tabla del diagnóstico toma el mismo estilo que la de zonas y la de ahorro */
@@ -1369,3 +1370,26 @@
 /* Resultados: las etiquetas de los índices usados van a continuación de R3, juntas entre sí y con el borde un poco más oscuro. */
 .indices-usados { display: inline-flex; flex-wrap: wrap; gap: 0.2rem; }
 .indices-usados .vuelo-estadio-tag { border: 1px solid #9cb99f; }
+
+/* Evolución del NDVI: el resumen en tarjetas en lugar de párrafos. */
+.grafico-evolucion-explicacion--tarjetas { background: none; border-left: 0; padding: 0; margin-top: 0.9rem; }
+.grafico-evolucion-explicacion--tarjetas h4 { font-size: 0.9rem; margin-bottom: 0.6rem; }
+.evolucion-tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+.evolucion-tarjeta { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; padding: 0.8rem 1rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; }
+.evolucion-tarjeta-etiqueta { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7280; }
+.evolucion-tarjeta-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; width: 100%; }
+.evolucion-tarjeta-fecha { font-size: 0.78rem; color: #6b7280; }
+.evolucion-tarjeta-valor { font-size: 1.7rem; font-weight: 700; line-height: 1.1; color: #1a3a2a; }
+.evolucion-tarjeta-valor small { font-size: 0.8rem; font-weight: 500; color: #6b7280; }
+.evolucion-tarjeta-detalle { font-size: 0.78rem; color: #6b7280; }
+.evolucion-pastilla { display: inline-block; margin-left: -0.3rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+.evolucion-pastilla--ok { background: #dcfce7; color: #166534; }
+.evolucion-pastilla--alerta { background: #fee2e2; color: #b91c1c; }
+.evolucion-pastilla--info { background: #dbeafe; color: #1d4ed8; }
+.evolucion-tarjeta--aviso { background: #fffbeb; border-color: #fcd34d; }
+.evolucion-tarjeta--aviso .evolucion-tarjeta-etiqueta { color: #92400e; }
+.evolucion-tarjeta--aviso-rojo { background: #fef2f2; border-color: #fca5a5; }
+.evolucion-tarjeta--aviso-rojo .evolucion-tarjeta-etiqueta { color: #b91c1c; }
+.evolucion-causas { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.88rem; color: #374151; }
+.evolucion-causas li::first-letter { text-transform: uppercase; }
+.evolucion-causas strong { color: #1a3a2a; }
