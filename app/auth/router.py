@@ -55,7 +55,7 @@ async def login(data: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
 async def refresh(data: dict, db: AsyncSession = Depends(get_db)):
-    from jose import JWTError, jwt
+    import jwt
     from app.core.config import settings
     from sqlalchemy import select
 
@@ -69,7 +69,7 @@ async def refresh(data: dict, db: AsyncSession = Depends(get_db)):
         token_type: str = payload.get("type")
         if usuario_id is None or token_type != "refresh":
             raise credentials_exc
-    except JWTError:
+    except jwt.InvalidTokenError:
         raise credentials_exc
 
     result = await db.execute(select(Usuario).where(Usuario.id == usuario_id))

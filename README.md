@@ -40,7 +40,7 @@ El procesamiento de GeoTIFF **nunca ocurre en FastAPI**: siempre se encola en Ce
 | **FastAPI** | API REST, routing, coordinación de tareas |
 | **SQLAlchemy + GeoAlchemy2** | ORM con soporte de geometrías PostGIS |
 | **Alembic** | Migraciones de base de datos versionadas |
-| **python-jose + passlib/bcrypt** | JWT stateless + hashing de contraseñas |
+| **PyJWT + bcrypt** | JWT stateless + hashing de contraseñas |
 | **Celery + Redis** | Cola de tareas asíncronas (broker db 0, result backend db 1) |
 | **WeasyPrint** | Generación de reportes PDF desde HTML/CSS |
 
