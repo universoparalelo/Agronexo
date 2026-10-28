@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useEvolucionNdvi from '../hooks/useEvolucionNdvi'
-import { explicarEvolucion, estadoVsEsperado, fechaVueloCorta } from '../utils/evolucionNdvi'
+import { explicarEvolucion, resumirEvolucion, estadoVsEsperado, fechaVueloCorta } from '../utils/evolucionNdvi'
 
 const ANCHO = 760
 const ALTO = 240
@@ -76,6 +76,7 @@ export default function GraficoEvolucionNdvi({ loteId, vuelos }) {
   const ticksX = puntos.filter((_, i) => i === 0 || i === puntos.length - 1 || i % paso === 0)
 
   const explicacion = explicarEvolucion(puntos)
+  const resumen = resumirEvolucion(puntos)
 
   return (
     <div className="grafico-evolucion">
@@ -183,16 +184,79 @@ export default function GraficoEvolucionNdvi({ loteId, vuelos }) {
         })}
       </svg>
 
-      <div className="grafico-evolucion-explicacion">
-        <h4>¿Qué muestra la diferencia?</h4>
-        {explicacion.map((texto, i) => <p key={i}>{texto}</p>)}
+      <div className={`grafico-evolucion-explicacion ${resumen ? 'grafico-evolucion-explicacion--tarjetas' : ''}`}>
+        <h4 className="titulo-con-ayuda">
+          ¿Qué muestra la diferencia?
+          {comparables.length > 0 && (
+            <span className="ayuda-tip">
+              <button type="button" className="ayuda-tip-boton" aria-label="Sobre el NDVI esperado">i</button>
+              <span role="tooltip" className="ayuda-tip-caja">
+                El NDVI esperado sale de una curva de referencia genérica por cultivo y estadio, todavía no ajustada con datos reales — se refina a medida que se acumulan vuelos.
+                {comparables.length < puntos.length && ` ${puntos.length - comparables.length} ${puntos.length - comparables.length === 1 ? 'vuelo no tiene' : 'vuelos no tienen'} estadio comparable con la curva.`}
+              </span>
+            </span>
+          )}
+        </h4>
+        {resumen
+          ? <TarjetasResumen resumen={resumen} />
+          : explicacion.map((texto, i) => <p key={i}>{texto}</p>)}
+      </div>
+    </div>
+  )
+}
+
+const ESTADO_ULTIMO = {
+  normal: { clase: 'ok', texto: 'Dentro de lo normal' },
+  debajo: { clase: 'alerta', texto: 'por debajo de lo esperado' },
+  encima: { clase: 'info', texto: 'por encima de lo esperado' },
+}
+const TENDENCIA = { achica: 'La diferencia se viene achicando', agranda: 'La diferencia se viene agrandando' }
+
+function TarjetasResumen({ resumen }) {
+  const { total, enRango, debajo, encima, ultimo, aRevisar } = resumen
+  const estado = ESTADO_ULTIMO[ultimo.estado]
+  const textoEstado = ultimo.estado === 'normal' ? estado.texto : `${Math.abs(ultimo.diff).toFixed(2)} ${estado.texto}`
+  const hayAviso = aRevisar.causas.length > 0 || aRevisar.tipo === 'debajo'
+
+  return (
+    <div className="evolucion-tarjetas">
+      <div className="evolucion-tarjeta">
+        <span className="evolucion-tarjeta-etiqueta">Vuelos en rango normal</span>
+        <span className="evolucion-tarjeta-valor">{enRango} <small>de {total}</small></span>
+        {(debajo > 0 || encima > 0) && (
+          <span className="evolucion-tarjeta-detalle">
+            {debajo > 0 && `${debajo} por debajo`}{debajo > 0 && encima > 0 && ' · '}{encima > 0 && `${encima} por encima`}
+          </span>
+        )}
       </div>
 
-      {comparables.length > 0 && (
-        <p className="tendencia-nota">
-          * El NDVI esperado sale de una curva de referencia genérica por cultivo y estadio, todavía no ajustada con datos reales — se refina a medida que se acumulan vuelos.
-          {comparables.length < puntos.length && ` ${puntos.length - comparables.length} ${puntos.length - comparables.length === 1 ? 'vuelo no tiene' : 'vuelos no tienen'} estadio comparable con la curva.`}
-        </p>
+      <div className="evolucion-tarjeta">
+        <div className="evolucion-tarjeta-cabecera">
+          <span className="evolucion-tarjeta-etiqueta">NDVI del último vuelo</span>
+          <span className="evolucion-tarjeta-fecha">{fechaVueloCorta(ultimo.fecha)}</span>
+        </div>
+        <span className="evolucion-tarjeta-valor">
+          {ultimo.ndvi.toFixed(2)} <small>vs {ultimo.esperado.toFixed(2)} esperado en {ultimo.estadio}</small>
+        </span>
+        <span className={`evolucion-pastilla evolucion-pastilla--${estado.clase}`}>{textoEstado}</span>
+        {ultimo.tendencia && <span className="evolucion-tarjeta-detalle">{TENDENCIA[ultimo.tendencia]}</span>}
+      </div>
+
+      {hayAviso && (
+        <div className={`evolucion-tarjeta evolucion-tarjeta--aviso ${aRevisar.tipo === 'debajo' ? 'evolucion-tarjeta--aviso-rojo' : ''}`}>
+          <span className="evolucion-tarjeta-etiqueta">
+            {aRevisar.tipo === 'debajo' ? 'Qué explica la diferencia' : 'Zonas a revisar'}
+          </span>
+          {aRevisar.causas.length > 0
+            ? (
+              <ul className="evolucion-causas">
+                {aRevisar.causas.map(c => (
+                  <li key={c.texto}>{c.texto} en <strong>{c.area.toFixed(1)} ha</strong></li>
+                ))}
+              </ul>
+            )
+            : <span className="evolucion-tarjeta-detalle">Caída pareja en todo el lote: suele responder a factores generales (clima, fecha de siembra, suelo).</span>}
+        </div>
       )}
     </div>
   )

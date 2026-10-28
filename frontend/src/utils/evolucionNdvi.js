@@ -32,7 +32,7 @@ function plural(n, singular, pluralTxt) {
   return n === 1 ? singular : pluralTxt
 }
 
-function causasPrincipales(puntos) {
+function causasDetalle(puntos) {
   const total = {}
   for (const p of puntos) {
     for (const [causa, area] of Object.entries(p.causas || {})) {
@@ -42,7 +42,53 @@ function causasPrincipales(puntos) {
   return Object.entries(total)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
-    .map(([causa, area]) => `${CAUSA_TEXTO[causa] || causa} (${area.toFixed(1)} ha)`)
+    .map(([causa, area]) => ({ texto: CAUSA_TEXTO[causa] || causa, area }))
+}
+
+function causasPrincipales(puntos) {
+  return causasDetalle(puntos).map(c => `${c.texto} (${c.area.toFixed(1)} ha)`)
+}
+
+// Los mismos datos que cuenta explicarEvolucion, pero estructurados para
+// mostrarlos como tarjetas en vez de párrafos. Null si ningún vuelo es comparable.
+export function resumirEvolucion(puntos) {
+  const comparables = puntos.filter(p => p.esperado)
+  if (comparables.length === 0) return null
+
+  const estados = comparables.map(estadoVsEsperado)
+  const ultimo = comparables[comparables.length - 1]
+  const diff = ultimo.ndviProm - ultimo.esperado.valor
+
+  let tendencia = null
+  if (comparables.length >= 2) {
+    const primero = comparables[0]
+    const brechaInicial = Math.abs(primero.ndviProm - primero.esperado.valor)
+    const brechaFinal = Math.abs(diff)
+    if (brechaFinal < brechaInicial - 0.03) tendencia = 'achica'
+    else if (brechaFinal > brechaInicial + 0.03) tendencia = 'agranda'
+  }
+
+  const vuelosDebajo = comparables.filter(p => estadoVsEsperado(p) === 'debajo')
+  const aRevisar = vuelosDebajo.length > 0
+    ? { tipo: 'debajo', causas: causasDetalle(vuelosDebajo) }
+    : { tipo: 'zonas', causas: causasDetalle([puntos[puntos.length - 1]]) }
+
+  return {
+    total: comparables.length,
+    enRango: estados.filter(e => e === 'normal').length,
+    debajo: estados.filter(e => e === 'debajo').length,
+    encima: estados.filter(e => e === 'encima').length,
+    ultimo: {
+      fecha: ultimo.fecha,
+      estadio: ultimo.estadio,
+      ndvi: ultimo.ndviProm,
+      esperado: ultimo.esperado.valor,
+      diff,
+      estado: estadoVsEsperado(ultimo),
+      tendencia,
+    },
+    aRevisar,
+  }
 }
 
 // Explicación general, en lenguaje simple, de la diferencia entre el NDVI

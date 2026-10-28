@@ -241,8 +241,6 @@ export default function DetalleLote() {
 
   const contenido = (
     <>
-      {vuelos.length > 0 && <GraficoEvolucionNdvi loteId={loteId} vuelos={vuelos} />}
-
       <section className="vuelos-tarjeta">
         <div className="vuelos-toolbar">
           <div>
@@ -358,6 +356,8 @@ export default function DetalleLote() {
           </div>
         )}
       </section>
+
+      {vuelos.length > 0 && <GraficoEvolucionNdvi loteId={loteId} vuelos={vuelos} />}
     </>
   )
 
