@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import client from '../api/client'
 import { obtenerDiagnostico } from '../api/analisis'
 import { etiquetaTipoCultivo } from '../utils/cultivos'
@@ -8,8 +8,8 @@ import PanelLayout from '../components/PanelLayout'
 import PanelResultadoVuelo from '../components/PanelResultadoVuelo'
 import ResumenDiferenciaVuelos from '../components/ResumenDiferenciaVuelos'
 import MapaComparacionLote from '../components/MapaComparacionLote'
-import VuelosCalendario from '../components/VuelosCalendario'
-import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
+import SelectorVuelo from '../components/SelectorVuelo'
+import ModalCompararVuelos from '../components/ModalCompararVuelos'
 
 const SENSOR_LABELS = { sentinel2: 'Sentinel-2', dji_mavic3: 'DJI Mavic 3' }
 
@@ -20,15 +20,16 @@ function idDe(vuelo) {
 export default function ResultadosVuelo() {
   const { loteId, vueloId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [lote, setLote]     = useState(null)
   const [vuelos, setVuelos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
-  const [vueloComparacionId, setVueloComparacionId] = useState(null)
-  const [calendarioAbierto, setCalendarioAbierto] = useState(false)
-  const [nuevoAnalisisAbierto, setNuevoAnalisisAbierto] = useState(false)
+  // `?comparar=<vuelo>` abre la pantalla ya comparando (viene del botón "Comparar vuelos" del lote).
+  const [vueloComparacionId, setVueloComparacionId] = useState(searchParams.get('comparar'))
+  const [compararAbierto, setCompararAbierto] = useState(false)
   // Una sola forma de ver el mapa a la vez: 'completa' (los dos paneles
   // enteros, con sidebar de Zonas/Diagnóstico — el default y lo único que
   // existe sin comparación activa), 'lado-a-lado' o 'cortina'.
@@ -43,6 +44,22 @@ export default function ResultadosVuelo() {
   // tab "Diagnóstico"), así que acá se pide aparte apenas arranca una
   // comparación, sin esperar a que el usuario abra ese tab en el panel.
   const [diagnosticoPrincipal, setDiagnosticoPrincipal] = useState(null)
+
+  function cerrarComparacion() {
+    navigate(`/lotes/${loteId}`)
+  }
+
+  const irAVuelo = (id) => navigate(`/lotes/${loteId}/vuelos/${id}`)
+  const cambiarVueloBase = (id) => navigate(`/lotes/${loteId}/vuelos/${id}?comparar=${vueloComparacionId}`, { replace: true })
+  const cambiarVueloComparado = (id) => {
+    setVueloComparacionId(id)
+    navigate(`/lotes/${loteId}/vuelos/${vueloId}?comparar=${id}`, { replace: true })
+  }
+  function comenzarComparacion(anteriorId, posteriorId) {
+    setCompararAbierto(false)
+    setVueloComparacionId(posteriorId)
+    navigate(`/lotes/${loteId}/vuelos/${anteriorId}?comparar=${posteriorId}`)
+  }
 
   function cargarLoteYVuelos() {
     setLoading(true)
@@ -99,6 +116,7 @@ export default function ResultadosVuelo() {
     </div>
   )
 
+  const vuelosCompletados = vuelos.filter(v => v.estado === 'completado')
   const vueloPrincipal = vuelos.find(v => idDe(v) === vueloId) || null
   const vueloComparacion = vueloComparacionId ? vuelos.find(v => idDe(v) === vueloComparacionId) || null : null
 
@@ -114,7 +132,16 @@ export default function ResultadosVuelo() {
       <div className={`resultados-shell${!vueloComparacionId ? ' resultados-shell--fija' : ''}`}>
         <div className="detalle-cabecera">
           <div>
-            <div className="detalle-titulo-fila"><h1>{lote?.nombre}</h1></div>
+            <div className="detalle-titulo-fila">
+              <h1>{vueloComparacionId ? 'Comparación de vuelos' : lote?.nombre}</h1>
+              {vueloComparacionId && lote?.nombre && <span className="lote-etiqueta">{lote.nombre}</span>}
+            </div>
+            {vueloComparacionId && (
+              <div className="detalle-subtitulo">
+                {vueloPrincipal?.cultivo && <span>{etiquetaTipoCultivo(vueloPrincipal.cultivo.tipo_cultivo)}</span>}
+                {lote?.area_ha ? <span>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha</span> : null}
+              </div>
+            )}
             {!vueloComparacionId && vueloPrincipal && (
               <div className="detalle-subtitulo">
                 {vueloPrincipal.cultivo && (
@@ -123,9 +150,7 @@ export default function ResultadosVuelo() {
                     {vueloPrincipal.cultivo.variedad ? ` · ${vueloPrincipal.cultivo.variedad}` : ''}
                   </span>
                 )}
-                <span>
-                  {new Date(vueloPrincipal.fecha_vuelo).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                </span>
+                <SelectorVuelo vuelos={vuelosCompletados} valor={vueloId} onCambiar={irAVuelo} />
                 <span>{SENSOR_LABELS[vueloPrincipal.sensor] || vueloPrincipal.sensor}</span>
                 {lote?.area_ha ? <span>{lote.area_ha.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ha</span> : null}
                 {vueloPrincipal.estadio_fenologico && <span className="vuelo-estadio-tag" title="Estadio fenológico">{vueloPrincipal.estadio_fenologico}</span>}
@@ -137,41 +162,55 @@ export default function ResultadosVuelo() {
               </div>
             )}
           </div>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setCalendarioAbierto(true)}
-            title="Ver vuelos del lote en un calendario"
-          >
-            Vuelos
-          </button>
-        </div>
-
-        {vueloComparacionId && (
-          <div className="vista-mapa-tabs">
-            <button
-              type="button"
-              className={`mapa-comparacion-tab ${vistaMapa === 'completa' ? 'mapa-comparacion-tab--activo' : ''}`}
-              onClick={() => setVistaMapa('completa')}
-            >
-              Vista completa
-            </button>
-            <button
-              type="button"
-              className={`mapa-comparacion-tab ${vistaMapa === 'lado-a-lado' ? 'mapa-comparacion-tab--activo' : ''}`}
-              onClick={() => setVistaMapa('lado-a-lado')}
-            >
-              Lado a lado
-            </button>
-            <button
-              type="button"
-              className={`mapa-comparacion-tab ${vistaMapa === 'cortina' ? 'mapa-comparacion-tab--activo' : ''}`}
-              onClick={() => setVistaMapa('cortina')}
-            >
-              Cortina
-            </button>
+          <div className="detalle-cabecera-acciones">
+            {vueloComparacionId && (
+              <div className="vista-mapa-tabs">
+                <button
+                  type="button"
+                  className={`mapa-comparacion-tab ${vistaMapa === 'completa' ? 'mapa-comparacion-tab--activo' : ''}`}
+                  onClick={() => setVistaMapa('completa')}
+                >
+                  Vista completa
+                </button>
+                <button
+                  type="button"
+                  className={`mapa-comparacion-tab ${vistaMapa === 'lado-a-lado' ? 'mapa-comparacion-tab--activo' : ''}`}
+                  onClick={() => setVistaMapa('lado-a-lado')}
+                >
+                  Lado a lado
+                </button>
+                <button
+                  type="button"
+                  className={`mapa-comparacion-tab ${vistaMapa === 'cortina' ? 'mapa-comparacion-tab--activo' : ''}`}
+                  onClick={() => setVistaMapa('cortina')}
+                >
+                  Cortina
+                </button>
+              </div>
+            )}
+            {vueloComparacionId && (
+              <button
+                type="button"
+                className="btn-secondary btn-cerrar-comparacion"
+                onClick={cerrarComparacion}
+                title="Volver a la página del lote"
+              >
+                ✕ Cerrar comparación
+              </button>
+            )}
+            {!vueloComparacionId && (
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={vuelosCompletados.length < 2}
+                onClick={() => setCompararAbierto(true)}
+                title={vuelosCompletados.length < 2 ? 'Hace falta otro vuelo completado para comparar' : 'Comparar dos vuelos del lote'}
+              >
+                Comparar vuelos
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Los dos paneles quedan siempre montados (cada uno pide sus propias
             zonas) aunque no se estén mostrando, para no re-pedirlas cada vez
@@ -188,6 +227,9 @@ export default function ResultadosVuelo() {
             lote={lote}
             ocultarEncabezado={!vueloComparacionId}
             onZonasCargadas={setZonasPrincipal}
+            vuelosDisponibles={vuelosCompletados}
+            excluirVueloId={vueloComparacionId}
+            onCambiarVuelo={cambiarVueloBase}
           />
 
           {vueloComparacionId && (
@@ -198,8 +240,10 @@ export default function ResultadosVuelo() {
               vuelo={vueloComparacion}
               lote={lote}
               esComparacion
-                onCerrarComparacion={() => setVueloComparacionId(null)}
               onZonasCargadas={setZonasComparacion}
+              vuelosDisponibles={vuelosCompletados}
+              excluirVueloId={vueloId}
+              onCambiarVuelo={cambiarVueloComparado}
             />
           )}
         </div>
@@ -226,28 +270,11 @@ export default function ResultadosVuelo() {
         )}
       </div>
 
-      {calendarioAbierto && (
-        <div className="resultados-calendario-overlay" onClick={() => setCalendarioAbierto(false)}>
-          <div className="resultados-calendario-panel" onClick={(e) => e.stopPropagation()}>
-            <VuelosCalendario
-              loteId={loteId}
-              vuelos={vuelos}
-              vueloActualId={vueloId}
-              onCerrar={() => setCalendarioAbierto(false)}
-              onComparar={(v) => { setVueloComparacionId(idDe(v)); setCalendarioAbierto(false) }}
-              onNuevoAnalisis={() => { setCalendarioAbierto(false); setNuevoAnalisisAbierto(true) }}
-            />
-          </div>
-        </div>
-      )}
-
-      {nuevoAnalisisAbierto && (
-        <ModalCargaGeoTIFF
-          lotes={lote ? [lote] : []}
-          loteIdInicial={loteId}
-          loteFijo
-          onSuccess={() => { setNuevoAnalisisAbierto(false); cargarLoteYVuelos() }}
-          onClose={() => setNuevoAnalisisAbierto(false)}
+      {compararAbierto && (
+        <ModalCompararVuelos
+          vuelos={vuelosCompletados}
+          onComparar={comenzarComparacion}
+          onClose={() => setCompararAbierto(false)}
         />
       )}
     </PanelLayout>

@@ -11,6 +11,7 @@ import GraficoEvolucionNdvi from '../components/GraficoEvolucionNdvi'
 import ModalCargaGeoTIFF from '../components/ModalCargaGeoTIFF'
 import ModalEditarLote from '../components/ModalEditarLote'
 import ModalEditarVuelo from '../components/ModalEditarVuelo'
+import ModalCompararVuelos from '../components/ModalCompararVuelos'
 import { useAvisos } from '../components/AvisosProvider'
 import ModalConfirmarEliminar from '../components/ModalConfirmarEliminar'
 import { TIPOS_SUELO } from '../utils/suelos'
@@ -172,6 +173,7 @@ export default function DetalleLote() {
   const [vueloParaEditar, setVueloParaEditar] = useState(null)
   const { avisar } = useAvisos()
   const [vueloParaEliminar, setVueloParaEliminar] = useState(null)
+  const [comparandoVuelos, setComparandoVuelos] = useState(false)
 
   const cargarLote = useCallback(() => {
     return Promise.all([
@@ -230,6 +232,9 @@ export default function DetalleLote() {
     </div>
   )
 
+  const vuelosCompletados = vuelos.filter(v => v.estado === 'completado')
+  const puedeComparar = vuelosCompletados.length >= 2
+
   const vuelosDelDiaSeleccionado = vuelos
     .filter(v => fechaISOLocal(fechaVuelo(v.fecha_vuelo)) === diaSeleccionado)
     .sort((a, b) => new Date(b.fecha_vuelo) - new Date(a.fecha_vuelo))
@@ -246,6 +251,16 @@ export default function DetalleLote() {
               {vuelos.length} vuelo{vuelos.length === 1 ? '' : 's'} registrado{vuelos.length === 1 ? '' : 's'}
             </span>
           </div>
+          <div className="vuelos-toolbar-acciones">
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            disabled={!puedeComparar}
+            title={puedeComparar ? 'Comparar dos vuelos del lote' : 'Hace falta otro vuelo completado para comparar'}
+            onClick={() => setComparandoVuelos(true)}
+          >
+            Comparar vuelos
+          </button>
           <div className="vuelos-vista-toggle">
             <button
               type="button"
@@ -263,6 +278,7 @@ export default function DetalleLote() {
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.6"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity="0.35"/></svg>
             </button>
+          </div>
           </div>
         </div>
 
@@ -406,6 +422,14 @@ export default function DetalleLote() {
           cultivos={lote.cultivos || []}
           onSuccess={() => { setVueloParaEditar(null); cargarLote(); avisar('Vuelo actualizado') }}
           onClose={() => setVueloParaEditar(null)}
+        />
+      )}
+
+      {comparandoVuelos && (
+        <ModalCompararVuelos
+          vuelos={vuelosCompletados}
+          onComparar={(anteriorId, posteriorId) => navigate(`/lotes/${loteId}/vuelos/${anteriorId}?comparar=${posteriorId}`)}
+          onClose={() => setComparandoVuelos(false)}
         />
       )}
 
