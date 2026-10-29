@@ -64,6 +64,7 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 |---|---|
 | `feat/pdf-weasyprint-opcional` (`36b6a80`) | WeasyPrint se importa dentro de `generar_pdf_reporte` y `generar_pdf_orden_trabajo` y no al cargar el módulo, para que la API arranque aunque falten las librerías de GTK/Pango. Solo falla el pedido del PDF, con el error que el endpoint ya captura ("No se pudo generar el PDF"). Test nuevo `tests/test_weasyprint_opcional.py` (3 tests) y un ajuste en `tests/test_reporte_ejecutivo.py`, que ahora reemplaza `weasyprint.HTML`. 91 tests de reportes y diagnóstico pasan, y los dos PDF reales salen igual que antes. |
 | `chore/limpieza-repo` (`af9f194`) | Se borran el componente `MiniMapaLote.jsx` y sus estilos, `app/diagnostico/productos.py` (diccionario viejo, ya no se importaba), la landing `docs/landing-estatica.html`, 8 imágenes sin uso de `frontend/public/`, los scripts `poc_reporte_pdf.py` y `poc_satelital_earthsearch.py`, y dos líneas de `.gitignore`. Se sacan además los dos fondos que solo se precargaban en `index.html` y se comprimen `logo.png`, `logo_hoja.png` y `fondozaira1.jpeg`: `frontend/public/` pasa de 22 MB a 0,4 MB, lo que achica el instalador. |
+| `feat/arranque-autonomo` (`520aab4`) | Que la app de escritorio prepare la base y entregue las pantallas por sí sola. **`app/core/migraciones.py`** (nuevo): `aplicar_migraciones()` corre `alembic upgrade head` en el mismo proceso; busca `migrations/` en `sys._MEIPASS` cuando está empaquetada. Se llama **antes** de arrancar la API, no desde adentro, porque `migrations/env.py` abre su propio loop con `asyncio.run()`. **`escritorio/api.py`** (nuevo): punto de entrada que migra y recién después arranca uvicorn (`AGRONEXO_HOST` y `AGRONEXO_PORT`). **`app/frontend.py`** (nuevo): `montar_frontend()` sirve la carpeta `dist` de Vite con respaldo a `index.html` para las rutas de React, y deja intactas `/api/...`; se activa solo si se define `FRONTEND_DIR` (variable nueva en `app/core/config.py`), así que Docker y desarrollo no cambian. `app/main.py`, `README.md` y `.env.example` ajustados. 19 tests nuevos (`tests/test_migraciones_arranque.py` crea una base vacía, migra y la borra; `tests/test_frontend_estatico.py` cubre las pantallas, la API intacta y que no se lean archivos fuera de la carpeta) y 79 tests existentes siguen pasando. **Al mergear con `feat/almacenamiento-en-disco` hay un choque trivial en `app/main.py`** (dos bloques contiguos al final). |
 
 ## Probado: el motor empaquetado en una Windows limpia (2026-10-29)
 
@@ -78,6 +79,21 @@ No es código del repo. Se hizo en una copia temporal que combina esta rama con 
 
 **Entorno del Sandbox:** Windows 11 Enterprise 10.0.26100, 10 GB de RAM, sin Python, sin GTK y sin Postgres instalados. Con 4 GB el Sandbox se había cerrado solo (`0x80370106`) al descomprimir el zip de Postgres.
 
+### Arranque autónomo desde una base vacía (2026-10-29)
+
+Segunda ronda, con el código de `feat/arranque-autonomo`: la API empaquetada (139 MB, con `migrations/`, `alembic` y el frontend compilado de 24 MB junto al programa) contra una base **recién creada y vacía**, en tu PC y en el Sandbox limpio (mismas condiciones que arriba, con las DLL de Visual C++ de Postgres).
+
+| Paso | Resultado en el Sandbox |
+|---|---|
+| Base nueva antes de arrancar | 0 tablas |
+| Arranque de la API | Respondió en ~23 s, contando la creación del esquema |
+| Base después de arrancar | 13 tablas, revisión **0028**, usuario inicial (`ADMIN_EMAIL`) |
+| Pantallas | `/`, `/login`, `/dashboard` y `/lotes/abc` devuelven la pantalla; el JavaScript principal (1.149 KB) se entrega como archivo; `/api/...` inexistente da 404 y no la pantalla |
+| Login con el usuario inicial | OK |
+| Worker + GeoTIFF | Worker listo en ~19 s; el vuelo se completó en **28,6 s**, 3 zonas y diagnóstico con 2 unidades de manejo |
+
+Opciones de PyInstaller nuevas para esto: `--add-data migrations;migrations`, `--collect-submodules alembic`, y copiar `frontend/dist` junto al programa (se indica con `FRONTEND_DIR`). Las migraciones se cargan como archivos, por eso PyInstaller no ve sus imports; los de terceros que usan (`sqlalchemy`, `alembic`, `geoalchemy2` y `bcrypt`) ya los importa el resto de la app, así que quedan incluidos. Otro detalle: si el Sandbox anterior sigue abierto, bloquea las carpetas que tiene mapeadas y la compilación falla con `PermissionError [WinError 32]`; hay que cerrarlo o compilar en otra carpeta.
+
 ### Hallazgos
 
 1. **Postgres necesita las librerías de Visual C++.** En la primera prueba no arrancó: `vcruntime140.dll` la piden 179 archivos de Postgres y PostGIS, `msvcp140.dll` las librerías de ICU y `vcruntime140_1.dll` otros ocho. Una Windows limpia no las trae; la PC de desarrollo sí (Visual C++ Redistributable). Con las tres junto a `postgres.exe` arrancó bien. El instalador tiene que incluirlas (o instalar el redistribuible); **falta verificar las condiciones de Microsoft para redistribuirlas.** La API no tiene el problema porque PyInstaller ya trae las suyas.
@@ -88,9 +104,9 @@ No es código del repo. Se hizo en una copia temporal que combina esta rama con 
 ### Lo que no se probó
 
 - No hay lanzador: cada programa se arrancó a mano.
-- No se corrió `alembic upgrade head` desde el paquete: en el Sandbox se llevó una base ya migrada.
+- ~~No se corrió `alembic upgrade head` desde el paquete~~: resuelto el mismo día en `feat/arranque-autonomo` (ver "Arranque autónomo desde una base vacía").
 - No hay instalador, ni firma de código, ni desinstalador.
-- La API no sirve el frontend compilado (hoy no existe esa función).
+- ~~La API no sirve el frontend compilado~~: resuelto el mismo día en `feat/arranque-autonomo`.
 - El PDF no funciona dentro del paquete (hallazgo 2).
 - No se probó un GeoTIFF grande (más de 500 MB) ni el procesamiento de varios vuelos seguidos.
 
@@ -131,14 +147,14 @@ No es código del repo. Se hizo en una copia temporal que combina esta rama con 
 Probado en parte, ver "Probado: el motor empaquetado en una Windows limpia".
 - Un solo entorno de Python y de `pydantic`: hoy la API usa `pydantic 2.10.4` y Python 3.12, y el worker `2.13.5` y Python 3.14.
 - Empaquetar API y worker con `migrations/`, `alembic.ini` y los datos de PROJ.
-- La API sirve el frontend compilado.
+- ~~La API sirve el frontend compilado.~~ Hecho en `feat/arranque-autonomo`.
 - Celery con Postgres como broker y result backend y `--pool=solo`. El lock de deduplicación de Redis en `workers/gis/tasks.py` ya está dentro de un `try/except`; con `solo` deja de hacer falta.
 - Revisar que ningún `os.unlink` de `workers/gis/tasks.py` corra con un dataset de rasterio abierto (da `PermissionError [WinError 32]` en Windows).
 - PDF: las DLL de GTK junto al `.exe` (o `os.add_dll_directory` a mano), `fonts.conf`, y la fuente DejaVu (`app/reportes/mapa.py` apunta a una ruta de Linux).
 - Datos de zona horaria (`tzdata`) para `America/Argentina/Buenos_Aires`.
 - Incluir `vcruntime140.dll`, `vcruntime140_1.dll` y `msvcp140.dll` junto a Postgres, y podar su carpeta (hoy 1,2 GB). Verificar las condiciones de redistribución de Microsoft.
 - Unir la API y el worker en un solo paquete para no repetir librerías.
-- Correr `alembic upgrade head` desde el paquete al arrancar (incluir `migrations/` y `alembic.ini`).
+- ~~Correr `alembic upgrade head` desde el paquete al arrancar.~~ Hecho en `feat/arranque-autonomo` (no hace falta `alembic.ini`).
 
 ### Lanzador, instalador y CI
 - Lanzador: elige puertos libres, arranca Postgres, API y worker en orden, espera los health checks, abre la ventana y cierra todo al salir. Instancia única y logs en AppData.
