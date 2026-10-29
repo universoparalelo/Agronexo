@@ -41,7 +41,6 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 | `app/core/config.py` | Variables nuevas `STORAGE_BACKEND` (`minio` o `disk`, por defecto `minio`) y `STORAGE_PATH`. `MINIO_ENDPOINT`, `MINIO_ROOT_USER` y `MINIO_ROOT_PASSWORD` pasan de obligatorias a opcionales. Un validador hace fallar el arranque si falta lo que pide el backend elegido, o si el valor de `STORAGE_BACKEND` no es válido. |
 | `app/core/storage_disco.py` (nuevo) | Backend de disco con las mismas funciones que `storage.py`. Rechaza claves absolutas, con letra de unidad, con `\` o con `..`. Escribe de forma atómica, porque la API y el worker comparten la carpeta y `object_exists()` se usa como caché. Las URLs firmadas pasan a ser `/api/v1/archivos/{token}`: un JWT firmado con `JWT_SECRET_KEY`, con `type="archivo"` (no sirve como token de acceso) y vencimiento `MINIO_PRESIGNED_URL_EXPIRY`. |
 | `app/core/storage.py` | Cada función delega en `storage_disco` cuando `STORAGE_BACKEND=disk`. Con `minio` no cambia nada. Los módulos que lo usan (`ingesta`, `reportes`, `auth`, el worker) no se tocan. |
-
 | `app/archivos/` (nuevo módulo) | `GET /api/v1/archivos/{token}`: sirve el archivo si el token es válido y no venció. Responde 401 si el token es inválido, vencido o de otro tipo, 404 si el archivo no existe o si el backend no es disco. |
 | `app/main.py` | Registra ese router en `/api/v1/archivos`. |
 | `tests/test_almacenamiento_disco.py` (nuevo) | 37 tests: ida y vuelta de archivos, escritura atómica, claves con `..`, validación de la configuración, tokens y endpoint. No necesitan base de datos. |
@@ -58,6 +57,42 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 - Es Windows con Python 3.14, no Linux: valida la lógica de disco y de la cola en Postgres, pero no reemplaza el CI.
 
 **Qué no cambia en el código:** `app/auth/router.py`, `app/reportes/router.py`, `app/ingesta/` y el worker siguen llamando a `storage.py` con los mismos nombres; por eso no se tocaron.
+
+## Hecho en otras ramas (locales, sin mergear)
+
+| Rama | Cambio |
+|---|---|
+| `feat/pdf-weasyprint-opcional` (`36b6a80`) | WeasyPrint se importa dentro de `generar_pdf_reporte` y `generar_pdf_orden_trabajo` y no al cargar el módulo, para que la API arranque aunque falten las librerías de GTK/Pango. Solo falla el pedido del PDF, con el error que el endpoint ya captura ("No se pudo generar el PDF"). Test nuevo `tests/test_weasyprint_opcional.py` (3 tests) y un ajuste en `tests/test_reporte_ejecutivo.py`, que ahora reemplaza `weasyprint.HTML`. 91 tests de reportes y diagnóstico pasan, y los dos PDF reales salen igual que antes. |
+| `chore/limpieza-repo` (`af9f194`) | Se borran el componente `MiniMapaLote.jsx` y sus estilos, `app/diagnostico/productos.py` (diccionario viejo, ya no se importaba), la landing `docs/landing-estatica.html`, 8 imágenes sin uso de `frontend/public/`, los scripts `poc_reporte_pdf.py` y `poc_satelital_earthsearch.py`, y dos líneas de `.gitignore`. Se sacan además los dos fondos que solo se precargaban en `index.html` y se comprimen `logo.png`, `logo_hoja.png` y `fondozaira1.jpeg`: `frontend/public/` pasa de 22 MB a 0,4 MB, lo que achica el instalador. |
+
+## Probado: el motor empaquetado en una Windows limpia (2026-10-29)
+
+No es código del repo. Se hizo en una copia temporal que combina esta rama con `feat/pdf-weasyprint-opcional`, sin Docker y sin tocar ninguna rama. Los scripts de armado y de prueba están fuera del repo (en la carpeta temporal de la sesión).
+
+| Pieza | Cómo se armó | Resultado |
+|---|---|---|
+| API | PyInstaller `--onedir`, 114 MB, sin Electron ni Tauri | Arranca en ~3 s (PC de desarrollo) y ~12 s (Sandbox). Probados: health, `health/db` (ve PostGIS 3.6), registro, login con bcrypt y JWT, lote con geometría, cultivo y estadios. |
+| Worker | PyInstaller `--onedir`, 425 MB, Celery con `--pool=solo` | Listo en ~7 s (PC) y ~13 s (Sandbox), conectado a la cola en Postgres. |
+| Postgres + PostGIS | Zip de binarios de EDB 16.15 + bundle de PostGIS 3.6.2, sueltos, arrancados con `pg_ctl start -w` | Arranca en ~3 s con las 28 migraciones (revisión 0028). |
+| Recorrido completo | Usuario, lote, cultivo, subir `lote_prueba_con_problemas.tif` | Vuelo completado en **21 s** (Sandbox) y 11 s (PC): 3 zonas, diagnóstico con 2 unidades de manejo, exportación de zonas con su enlace firmado (12.858 bytes) y archivos en disco (original, `preparado_4326.tif`, `zonas.geojson`). |
+
+**Entorno del Sandbox:** Windows 11 Enterprise 10.0.26100, 10 GB de RAM, sin Python, sin GTK y sin Postgres instalados. Con 4 GB el Sandbox se había cerrado solo (`0x80370106`) al descomprimir el zip de Postgres.
+
+### Hallazgos
+
+1. **Postgres necesita las librerías de Visual C++.** En la primera prueba no arrancó: `vcruntime140.dll` la piden 179 archivos de Postgres y PostGIS, `msvcp140.dll` las librerías de ICU y `vcruntime140_1.dll` otros ocho. Una Windows limpia no las trae; la PC de desarrollo sí (Visual C++ Redistributable). Con las tres junto a `postgres.exe` arrancó bien. El instalador tiene que incluirlas (o instalar el redistribuible); **falta verificar las condiciones de Microsoft para redistribuirlas.** La API no tiene el problema porque PyInstaller ya trae las suyas.
+2. **El PDF falla en el programa empaquetado, aunque GTK esté instalado:** `OSError: cannot load library 'libgobject-2.0-0': error 0x7e`. WeasyPrint solo registra sus rutas de DLL cuando la aplicación no está congelada (`weasyprint/text/ffi.py`). La API siguió viva y respondió después del error, gracias al import diferido. Pendiente: las DLL de GTK junto al `.exe`, o `printToPDF` de Electron.
+3. **Opciones de PyInstaller necesarias** (el primer intento falló con `ModuleNotFoundError: No module named 'celery.fixups'`): para la API, `--collect-submodules` de `uvicorn`, `celery`, `kombu`, `billiard` y `sqlalchemy.dialects.postgresql`, más las plantillas de `app/reportes/` y `app/ordenes_trabajo/` y los imports ocultos `multipart`, `email_validator`, `asyncpg` y `psycopg2`. **No incluir `workers` en la API**: arrastra rasterio, scipy y pandas y el paquete pasa de 114 a 349 MB. Para el worker, `--collect-all` de `rasterio`, `pyproj`, `pyogrio` y `skimage`, y `--collect-submodules` de `workers` y `scipy`.
+4. **Peso:** API 114 MB y worker 425 MB, con librerías repetidas; conviene unirlos en un solo paquete. La carpeta de Postgres pesa 1,2 GB y se puede podar mucho (pgAdmin, StackBuilder, lenguajes opcionales, documentación).
+
+### Lo que no se probó
+
+- No hay lanzador: cada programa se arrancó a mano.
+- No se corrió `alembic upgrade head` desde el paquete: en el Sandbox se llevó una base ya migrada.
+- No hay instalador, ni firma de código, ni desinstalador.
+- La API no sirve el frontend compilado (hoy no existe esa función).
+- El PDF no funciona dentro del paquete (hallazgo 2).
+- No se probó un GeoTIFF grande (más de 500 MB) ni el procesamiento de varios vuelos seguidos.
 
 ## Pendiente de esta rama
 
@@ -90,9 +125,10 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 - Detección de conexión en el frontend (`navigator.onLine` por sí solo no es confiable).
 - Indicador de "Modo sin conexión".
 - Deshabilitar, con aviso al pasar el mouse, la búsqueda de direcciones (Nominatim) y las imágenes satelitales (`desde-satelite`).
-- Fondo neutro cuando falla el mapa base, en los 7 componentes que hoy lo bajan de internet: `MapaDibujoLote.jsx`, `MapaNEA.jsx`, `ModalCargaGeoTIFF.jsx`, `MapaIndice.jsx`, `MapaZonas.jsx`, `MiniMapaLote.jsx` y `ModalLimites.jsx`.
+- Fondo neutro cuando falla el mapa base, en los 6 componentes que hoy lo bajan de internet: `MapaDibujoLote.jsx`, `MapaNEA.jsx`, `ModalCargaGeoTIFF.jsx`, `MapaIndice.jsx`, `MapaZonas.jsx` y `ModalLimites.jsx`. (`MiniMapaLote.jsx`, que figuraba como el séptimo, nadie lo usaba y se borra en `chore/limpieza-repo`.)
 
 ### Backend empaquetado
+Probado en parte, ver "Probado: el motor empaquetado en una Windows limpia".
 - Un solo entorno de Python y de `pydantic`: hoy la API usa `pydantic 2.10.4` y Python 3.12, y el worker `2.13.5` y Python 3.14.
 - Empaquetar API y worker con `migrations/`, `alembic.ini` y los datos de PROJ.
 - La API sirve el frontend compilado.
@@ -100,6 +136,9 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 - Revisar que ningún `os.unlink` de `workers/gis/tasks.py` corra con un dataset de rasterio abierto (da `PermissionError [WinError 32]` en Windows).
 - PDF: las DLL de GTK junto al `.exe` (o `os.add_dll_directory` a mano), `fonts.conf`, y la fuente DejaVu (`app/reportes/mapa.py` apunta a una ruta de Linux).
 - Datos de zona horaria (`tzdata`) para `America/Argentina/Buenos_Aires`.
+- Incluir `vcruntime140.dll`, `vcruntime140_1.dll` y `msvcp140.dll` junto a Postgres, y podar su carpeta (hoy 1,2 GB). Verificar las condiciones de redistribución de Microsoft.
+- Unir la API y el worker en un solo paquete para no repetir librerías.
+- Correr `alembic upgrade head` desde el paquete al arrancar (incluir `migrations/` y `alembic.ini`).
 
 ### Lanzador, instalador y CI
 - Lanzador: elige puertos libres, arranca Postgres, API y worker en orden, espera los health checks, abre la ventana y cierra todo al salir. Instancia única y logs en AppData.
