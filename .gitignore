@@ -48,9 +48,6 @@ tests/fixtures/*.tif
 !.claude/skills/
 !.claude/skills/**
 
-# Salida local de scripts/poc_reporte_pdf.py
-reporte_poc.pdf
-
 # Notas/investigación local, no se trackean
 docs/esq_datos_prod_fito.md
 docs/ind_veg_asoc_causas.md
