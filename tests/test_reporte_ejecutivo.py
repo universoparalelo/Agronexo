@@ -95,7 +95,7 @@ def test_pdf_incluye_como_confirmar_en_campo_y_unidades():
             return b"%PDF"
 
     with patch.object(service, "generar_imagen_mapa_zonas", return_value=b"png"), \
-         patch.object(service, "HTML", _HTMLFalso):
+         patch("weasyprint.HTML", _HTMLFalso):
         assert service.generar_pdf_reporte(diagnostico) == b"%PDF"
 
     html = capturado["html"]
