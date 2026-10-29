@@ -149,7 +149,7 @@ agronexo/
 │   ├── core/               # Config (pydantic-settings), BD, cliente MinIO, migraciones al arrancar
 │   ├── frontend.py         # Entrega el frontend compilado (app de escritorio, con FRONTEND_DIR)
 │   └── main.py             # Punto de entrada FastAPI
-├── escritorio/             # Puntos de entrada de la app de escritorio (migra la base y arranca la API)
+├── escritorio/             # Puntos de entrada de la app de escritorio: API (migra la base y arranca) y worker GIS
 ├── workers/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización
