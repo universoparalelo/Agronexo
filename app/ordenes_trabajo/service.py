@@ -17,7 +17,6 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from weasyprint import HTML
 
 from app.diagnostico.models import ProductoFitosanitario
 
@@ -112,6 +111,9 @@ def generar_pdf_orden_trabajo(orden: dict, metadata: dict, datos_aplicador: dict
 
     template = _env.get_template("orden_trabajo.html")
     html_str = template.render(**contexto)
+
+    # Ver el comentario equivalente en app/reportes/service.py.
+    from weasyprint import HTML
 
     return HTML(string=html_str, base_url=str(_TEMPLATES_DIR)).write_pdf()
 
