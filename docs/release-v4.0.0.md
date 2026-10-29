@@ -50,6 +50,7 @@
 | Motor probabilístico (Naive Bayes) experimental en paralelo a las reglas | Completada — tablas a validar |
 | Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada |
 | Catálogo de fitosanitarios — tanda 2: tabla de presentaciones (marcas/concentraciones) | Completada — parcial, ver detalle |
+| Empaquetado como aplicación de escritorio (camino B): spike técnico y 12 decisiones de alcance | En curso — spike hecho y decisiones tomadas, implementación sin empezar; ver detalle |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -177,6 +178,8 @@ Al reconstruir el stack desde cero, `docker compose up` falló en seco: `Error r
 - ~~`python-jose` con CVEs parcheables~~ — **resuelto parcial**, ver tarea más abajo (queda 1 CVE nuevo sin fix disponible, evaluado como no explotable en este código). **Resuelto del todo el 2026-10-28** reemplazándolo por PyJWT (ver "Reemplazo de `python-jose` por PyJWT"); con eso desaparece también `ecdsa`.
 - **`docker/certs/avast-root.crt` no es portable entre instalaciones de Avast de distintas máquinas** — Avast genera una raíz TLS-scanning self-signed distinta por cada instalación aunque el Subject/Issuer sea el mismo texto literal. El cert commiteado solo sirve en la máquina donde se exportó originalmente; cualquier otro dev con Avast activo necesita exportar su propia raíz (`Cert:\LocalMachine\Root` en Windows) y reemplazar el archivo localmente (sin commitear) para poder buildear la imagen `api`. Sin solución de equipo todavía — ver tarea HU-R4-07 más abajo donde se detectó.
 - **El volumen `minio_data` de desarrollo creado con la imagen vieja `minio/minio` no es compatible con el usuario no-root de `cgr.dev/chainguard/minio`** — falla con `FATAL Unable to initialize backend: Unable to write to the backend`. Cualquier entorno local que todavía tenga el volumen viejo necesita recrearlo (`docker volume rm`) para migrar a la imagen nueva; se pierden los archivos ya subidos a MinIO (Postgres no se ve afectado). Ver tarea HU-R4-07 más abajo.
+- **App de escritorio — decisiones sin tomar (2026-10-29):** Electron o Tauri para el lanzador (recomendado Electron, ligado a si el empaquetado de GTK resulta caro); fechas, sprint y responsables de la primera versión; consulta de marcas antes de invertir en nombre y firma de código; quién aprueba la rama del spike. Detalle en `docs/decisiones-app-escritorio.md`.
+- **App de escritorio — riesgos técnicos sin probar (2026-10-29):** (1) las DLL de GTK junto a un ejecutable de PyInstaller (en una app congelada WeasyPrint ignora `WEASYPRINT_DLL_DIRECTORIES`); (2) los `os.unlink` de `workers/gis/tasks.py` nunca deben correr con un dataset de rasterio abierto (en Windows da `PermissionError [WinError 32]`); (3) repetir los criterios de Postgres, Celery y PDF en una Windows limpia; (4) unificar `pydantic` (API `2.10.4`, worker `2.13.5`, y el de la API no tiene rueda para Python 3.14) y la versión de Python; (5) que los datos de PROJ viajen en el paquete; (6) incluir la fuente DejaVu (`app/reportes/mapa.py` apunta a una ruta de Linux). Detalle en `spike-escritorio/INFORME.md`.
 
 #### Revisión de los hallazgos de Semgrep (25 → 17 tras 2 arreglos)
 **Fecha:** 2026-09-27
@@ -1041,6 +1044,34 @@ Antes, al cambiar el cultivo o el estadio de un vuelo, el diagnóstico guardado 
 2. **Volver a la ventana "Se necesita una acción"** al guardar un vuelo: en `frontend/src/components/ModalEditarVuelo.jsx`, después de `actualizarVuelo(...)`, si `resultado.diagnostico_desactualizado` es verdadero mostrar la ventana de aviso en lugar de llamar a `onSuccess()`. El servidor sigue devolviendo ese campo (`diagnostico_desactualizado`) en `PUT /lotes/{id}/vuelos/{id}`.
 3. **Apagar el recálculo automático** (volver a que el diagnóstico guardado se muestre siempre): en `app/diagnostico/service.py::generar_diagnostico`, hacer que la condición `guardado.resultado.get("metadata").get("firma_datos") == firma` sea siempre verdadera, o sea devolver `guardado.resultado` cuando existe un guardado. La firma puede seguir guardándose sin molestar. Sin esto, el botón del paso 1 hay que dejarlo para que alguien pueda refrescar a mano.
 4. **Volver todo con git:** esta tarea es un cambio separado (archivos de diagnóstico, `ModalEditarVuelo.jsx`, `TablaDiagnostico.jsx`, `useResultadoVuelo.js`, `PanelResultadoVuelo.jsx`, `panel-tema.css` y las pruebas `tests/test_firma_diagnostico.py` y `tests/test_diagnostico_api.py`). Si se commitea por separado de los ajustes de diseño, se revierte con `git revert <commit>` sin tocar nada más. **Conviene commitearla sola** para que esto funcione.
+
+---
+
+#### Empaquetado como aplicación de escritorio (camino B) — spike y decisiones
+**Fecha:** 2026-10-29
+**Rama:** `chore/spike-escritorio` (sin commitear todavía: hoy `spike-escritorio/` y `docs/decisiones-app-escritorio.md` están sin trackear en `main`)
+
+Se probó si AgroNexo se puede entregar como instalador autocontenido, sin Docker (camino B del estudio de opciones), y se fueron tomando de a una las decisiones de alcance. El registro completo, con el historial de preguntas y respuestas, está en `docs/decisiones-app-escritorio.md`; los resultados del spike, en `spike-escritorio/INFORME.md`. **Todavía no se implementó nada de código** del instalador.
+
+**Resultados del spike (Windows 11):**
+- Ruedas de Windows para todas las dependencias, y rasterio (lectura, reproyección y vectorización de 22.698 polígonos sin configurar `GDAL_DATA` ni `PROJ_DATA`): pasan en una Windows limpia (Windows Sandbox).
+- Postgres 16.15 + PostGIS 3.6.2 embebidos (zip de binarios, sin instalador) con `uuid-ossp`: `alembic upgrade head` completa las **28** migraciones desde cero en 4,3 s. Celery 5.6.3 con kombu 5.6.2 sobre ese Postgres y `--pool=solo`: dos tareas en serie, progreso `[20, 40, 60, 80]`. Probados en la máquina de desarrollo, no en una Windows limpia.
+- Reporte ejecutivo (4 páginas) y orden de trabajo (2 páginas) generados con WeasyPrint 70.0 y GTK3 runtime instalado en el sistema, con tildes y ñ; no se revisaron a ojo ni se probó el empaquetado de las DLL.
+- Borrado de archivos: con un dataset de rasterio abierto da `PermissionError [WinError 32]`; los `os.unlink` de `workers/gis/tasks.py` no se revisaron.
+
+**Decisiones tomadas** (D1 a D12 del registro):
+- **D1:** el instalador de escritorio reemplaza el despliegue en servidor. Concreta la decisión del 2026-10-27 de HU-R4-06: HTTPS, firewall y servidor dejan de aplicar y pasa a ser "distribución del instalador".
+- **D2 y D3:** los archivos se guardan en disco (`%APPDATA%\AgroNexo\`) y **MinIO se elimina por completo**, también de Docker y CI, en dos pasos: primero un backend de disco (`app/core/storage.py` es el único módulo que importa `minio`) con MinIO todavía disponible; cuando todo pase en CI, se quita MinIO. Las URLs firmadas pasan a ser un endpoint de la API con token que vence. Se descartó dejar MinIO en Docker y CI porque con D1 no queda uso en producción y dos backends es más código.
+- **D4 y D10:** sesión automática, sin pantalla de login. El usuario local se crea con la migración 0006 desde `ADMIN_EMAIL` y `ADMIN_PASSWORD`; en el instalador la contraseña es aleatoria por instalación y el usuario no la ve. La primera vez se muestra una pantalla de bienvenida que pide nombre y correo (sin contraseña y sin verificar el correo).
+- **D5, D7 y D11:** backup con "Exportar todo" e "Importar" en un `.zip`; al desinstalar se pregunta si borrar los datos (casilla desmarcada por defecto); copia automática de la base antes de cada actualización, con las últimas 2 o 3 copias.
+- **D8 y D9:** la app funciona con y sin internet. Sin conexión, la búsqueda de direcciones y las imágenes satelitales quedan deshabilitadas con un aviso al pasar el mouse y se muestra un indicador de "Modo sin conexión". El mapa base cae al fondo neutro (D6).
+- **D12:** primera versión con lote + GeoTIFF propio, índices y mapa de zonas, diagnóstico y PDF, y backup. Quedan para después las imágenes satelitales, las actualizaciones automáticas y la caché de mapas.
+
+**Error encontrado — WeasyPrint sin GTK**
+`cannot load library 'libgobject-2.0-0': error 0x7e` al importar `weasyprint` en una máquina sin GTK. Se resolvió instalando el GTK3 runtime (3.24.31, 2022-01-04) en `C:\Program Files\GTK3-Runtime Win64`, una de las rutas donde WeasyPrint busca solo. Queda pendiente el empaquetado de esas DLL en un ejecutable.
+
+**Error encontrado — Windows Sandbox cerrado al descomprimir**
+`El entorno de Windows Sandbox finalizó inesperadamente (0x80370106)` al descomprimir el zip de Postgres (373 MB) con 4 GB de RAM; se pierde todo lo de adentro. Las pruebas pesadas (Postgres, Celery, PDF) se hicieron en la máquina de desarrollo.
 
 
 ---
