@@ -146,8 +146,10 @@ agronexo/
 │   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
-│   ├── core/               # Config (pydantic-settings), BD, cliente MinIO
+│   ├── core/               # Config (pydantic-settings), BD, cliente MinIO, migraciones al arrancar
+│   ├── frontend.py         # Entrega el frontend compilado (app de escritorio, con FRONTEND_DIR)
 │   └── main.py             # Punto de entrada FastAPI
+├── escritorio/             # Puntos de entrada de la app de escritorio (migra la base y arranca la API)
 ├── workers/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)
 │   └── gis/tasks.py        # Pipeline GIS: lectura → índices → vectorización

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_debug: bool = False
     allowed_origins: str = "http://localhost:5173"
+    # Carpeta con el frontend compilado (app de escritorio). Vacío = la API no lo sirve.
+    frontend_dir: str = ""
 
     # PostgreSQL
     postgres_host: str
