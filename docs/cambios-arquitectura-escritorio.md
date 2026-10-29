@@ -50,13 +50,19 @@ Rama `feat/almacenamiento-en-disco`, sin mergear.
 
 **Cómo se probó:** los 37 tests nuevos; las suites `test_auth`, `test_lotes`, `test_cultivos` y `test_exportacion_api` con `STORAGE_BACKEND=disk` contra una base real (127 tests en total, sin fallos); y una prueba de punta a punta: subir un avatar, recibir `/api/v1/archivos/{token}` y descargar exactamente el mismo archivo. Los frontends no cambian: `<img src>` y `window.open` aceptan la ruta relativa (en desarrollo Vite redirige `/api`).
 
+**Prueba con el worker (2026-10-29, en Windows, sin Docker, sin Redis y sin MinIO):** Postgres embebido como cola y como result backend de Celery (`sqla+postgresql://` y `db+postgresql://`), worker con `--pool=solo` y `STORAGE_BACKEND=disk`. Se subió `lote_prueba_con_problemas.tif` (4 bandas, EPSG:32721, 3,4 MB) por la API:
+- El vuelo pasó de pendiente a completado en 13 s, con progreso visible (`Validando CRS y bandas`, `Calculando NDVI`).
+- Quedaron en la carpeta de datos el original, la versión reproyectada preparada (`preparado_4326.tif`) y `zonas.geojson` (3 zonas).
+- El diagnóstico, el reporte PDF (32 KB, 4 págs.) y la exportación de zonas funcionaron, y el enlace `/api/v1/archivos/{token}` devolvió el archivo exportado.
+- Único aviso del worker: `lock de preparación (Redis) no disponible, se continúa sin dedupe`, que el código ya manejaba con un `try/except`. Con `--pool=solo` no hace falta ese lock; queda anotado para silenciar el aviso más adelante.
+- Es Windows con Python 3.14, no Linux: valida la lógica de disco y de la cola en Postgres, pero no reemplaza el CI.
+
 **Qué no cambia en el código:** `app/auth/router.py`, `app/reportes/router.py`, `app/ingesta/` y el worker siguen llamando a `storage.py` con los mismos nombres; por eso no se tocaron.
 
 ## Pendiente de esta rama
 
 - Commit y pull request.
-- **Agregar `tests/test_almacenamiento_disco.py` al CI.** Verificado en `.github/workflows/ci.yml`: el job `test-api` corre una lista fija de tests y el nuevo no está. Basta un paso más con `python3 -m pytest tests/test_almacenamiento_disco.py -v`; falta el OK para tocar el CI.
-- No se corrió el flujo completo con el worker sobre disco (subir un GeoTIFF y procesarlo): el worker usa las mismas funciones, pero esa ruta no se ejercitó.
+- **Hecho: `tests/test_almacenamiento_disco.py` está en el CI** (paso nuevo en el job `test-api` de `.github/workflows/ci.yml`, porque esa lista de tests es fija). Falta ver que pase en GitHub.
 - No se verificó cuál endpoint carga el archivo entero en RAM al subir.
 
 ## Planificado
