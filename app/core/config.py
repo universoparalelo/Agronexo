@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,10 +35,16 @@ class Settings(BaseSettings):
     celery_broker_url: str
     celery_result_backend: str
 
-    # MinIO
-    minio_endpoint: str
-    minio_root_user: str
-    minio_root_password: str
+    # Almacenamiento de archivos: "minio" (Docker y CI) o "disk" (app de
+    # escritorio, carpeta storage_path). MinIO sale del proyecto cuando CI
+    # pase con "disk".
+    storage_backend: str = "minio"
+    storage_path: str = ""
+
+    # MinIO (solo con storage_backend="minio")
+    minio_endpoint: str = ""
+    minio_root_user: str = ""
+    minio_root_password: str = ""
     minio_bucket: str = "agronexo"
     minio_use_ssl: bool = False
     minio_presigned_url_expiry: int = 3600
@@ -61,6 +68,27 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+
+    @model_validator(mode="after")
+    def _validar_almacenamiento(self):
+        if self.storage_backend == "disk":
+            if not self.storage_path:
+                raise ValueError("STORAGE_PATH es obligatorio con STORAGE_BACKEND=disk")
+        elif self.storage_backend == "minio":
+            faltan = [
+                nombre
+                for nombre, valor in (
+                    ("MINIO_ENDPOINT", self.minio_endpoint),
+                    ("MINIO_ROOT_USER", self.minio_root_user),
+                    ("MINIO_ROOT_PASSWORD", self.minio_root_password),
+                )
+                if not valor
+            ]
+            if faltan:
+                raise ValueError(f"Faltan {', '.join(faltan)} con STORAGE_BACKEND=minio")
+        else:
+            raise ValueError("STORAGE_BACKEND debe ser 'minio' o 'disk'")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

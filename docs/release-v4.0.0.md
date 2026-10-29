@@ -4,6 +4,10 @@
 **Rama principal:** `main`
 **Inicio:** Sprint 14
 
+> **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
+>
+> **Primer cambio de código (2026-10-29, rama `feat/almacenamiento-en-disco`, sin mergear):** backend de almacenamiento en disco (`STORAGE_BACKEND=disk`) y endpoint `GET /api/v1/archivos/{token}`, paso 1 de la decisión D3 (MinIO sigue disponible hasta el paso 2). Probado con 37 tests nuevos y con las suites de auth, lotes, cultivos y exportación sobre el backend de disco. Detalle en "Hecho" de `docs/cambios-arquitectura-escritorio.md`.
+
 ---
 
 ## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
