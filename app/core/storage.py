@@ -4,7 +4,12 @@ from datetime import timedelta
 
 from minio import Minio
 
+from app.core import storage_disco
 from app.core.config import settings
+
+
+def _disco() -> bool:
+    return settings.storage_backend == "disk"
 
 
 def _client() -> Minio:
@@ -24,6 +29,8 @@ def _ensure_bucket(client: Minio) -> None:
 
 def upload_geotiff(usuario_id: str, lote_id: str, vuelo_id: str, data: bytes) -> str:
     """Sube el GeoTIFF a MinIO y retorna la clave del objeto."""
+    if _disco():
+        return storage_disco.upload_geotiff(usuario_id, lote_id, vuelo_id, data)
     client = _client()
     _ensure_bucket(client)
     key = f"{usuario_id}/{lote_id}/{vuelo_id}/original.tif"
@@ -49,6 +56,8 @@ def upload_geotiff_stream(
     length=-1 activa multipart upload automático con partes de 64 MB, lo que
     permite subir archivos de cualquier tamaño sin conocer el tamaño de antemano.
     """
+    if _disco():
+        return storage_disco.upload_geotiff_stream(usuario_id, lote_id, vuelo_id, stream, length)
     client = _client()
     _ensure_bucket(client)
     key = f"{usuario_id}/{lote_id}/{vuelo_id}/original.tif"
@@ -69,6 +78,8 @@ def download_geotiff_to_file(key: str, destino: str) -> str:
     No carga el archivo completo en RAM — escribe en chunks de 8 MB.
     Retorna la ruta del archivo descargado.
     """
+    if _disco():
+        return storage_disco.download_geotiff_to_file(key, destino)
     client = _client()
     response = client.get_object(settings.minio_bucket, key)
     try:
@@ -82,6 +93,8 @@ def download_geotiff_to_file(key: str, destino: str) -> str:
 
 def download_geotiff(key: str) -> bytes:
     """Descarga un GeoTIFF desde MinIO y retorna sus bytes."""
+    if _disco():
+        return storage_disco.download_geotiff(key)
     client = _client()
     response = client.get_object(settings.minio_bucket, key)
     try:
@@ -93,6 +106,8 @@ def download_geotiff(key: str) -> bytes:
 
 def download_bytes(key: str) -> bytes:
     """Descarga cualquier objeto desde MinIO y retorna sus bytes."""
+    if _disco():
+        return storage_disco.download_bytes(key)
     client = _client()
     response = client.get_object(settings.minio_bucket, key)
     try:
@@ -104,6 +119,8 @@ def download_bytes(key: str) -> bytes:
 
 def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
     """Sube bytes arbitrarios a MinIO bajo la clave dada. Retorna la clave."""
+    if _disco():
+        return storage_disco.upload_bytes(key, data, content_type)
     client = _client()
     _ensure_bucket(client)
     client.put_object(
@@ -118,6 +135,8 @@ def upload_bytes(key: str, data: bytes, content_type: str = "application/octet-s
 
 def object_exists(key: str) -> bool:
     """Verifica si un objeto existe en MinIO sin descargarlo (HEAD request)."""
+    if _disco():
+        return storage_disco.object_exists(key)
     from minio.error import S3Error
 
     client = _client()
@@ -130,6 +149,8 @@ def object_exists(key: str) -> bool:
 
 def upload_file(key: str, local_path: str, content_type: str = "application/octet-stream") -> str:
     """Sube un archivo local a MinIO por streaming (fput_object) — no lo carga en RAM."""
+    if _disco():
+        return storage_disco.upload_file(key, local_path, content_type)
     client = _client()
     _ensure_bucket(client)
     client.fput_object(settings.minio_bucket, key, local_path, content_type=content_type)
@@ -147,7 +168,12 @@ def presigned_url(key: str) -> str:
     region pegándole por HTTP al propio endpoint del cliente — y ese
     endpoint público (p. ej. "localhost:9000") no es alcanzable DESDE el
     contenedor de la API, solo desde afuera.
+
+    Con storage_backend="disk" devuelve una ruta de la propia API
+    (/api/v1/archivos/{token}), con un token firmado que vence.
     """
+    if _disco():
+        return storage_disco.presigned_url(key)
     client = Minio(
         settings.minio_public_endpoint or settings.minio_endpoint,
         access_key=settings.minio_root_user,

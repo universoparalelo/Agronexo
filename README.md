@@ -57,7 +57,7 @@ El procesamiento de GeoTIFF **nunca ocurre en FastAPI**: siempre se encola en Ce
 | Tecnología | Rol |
 |---|---|
 | **PostgreSQL + PostGIS** | Metadatos y geometrías vectoriales con índices GiST |
-| **MinIO** | Archivos binarios (GeoTIFF, PDF, SHP) — S3-compatible |
+| **MinIO** | Archivos binarios (GeoTIFF, PDF, SHP) — S3-compatible. Con `STORAGE_BACKEND=disk` se guardan en una carpeta (`STORAGE_PATH`), pensado para la app de escritorio |
 
 ### Frontend
 | Tecnología | Rol |
@@ -146,7 +146,8 @@ agronexo/
 │   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
-│   ├── core/               # Config (pydantic-settings), BD, cliente MinIO
+│   ├── archivos/           # Descarga de archivos con token firmado (almacenamiento en disco)
+│   ├── core/               # Config (pydantic-settings), BD, almacenamiento (MinIO o disco)
 │   └── main.py             # Punto de entrada FastAPI
 ├── workers/
 │   ├── celery_app.py       # Configuración Celery (broker + result_backend)

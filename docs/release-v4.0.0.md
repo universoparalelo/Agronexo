@@ -4,6 +4,14 @@
 **Rama principal:** `main`
 **Inicio:** Sprint 14
 
+> **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
+>
+> **Primer cambio de código (2026-10-29, rama `feat/almacenamiento-en-disco`, sin mergear):** backend de almacenamiento en disco (`STORAGE_BACKEND=disk`) y endpoint `GET /api/v1/archivos/{token}`, paso 1 de la decisión D3 (MinIO sigue disponible hasta el paso 2). Probado con 37 tests nuevos, con las suites de auth, lotes, cultivos y exportación sobre el backend de disco, y con el flujo completo (subir un GeoTIFF, worker Celery sobre Postgres sin Redis, diagnóstico y PDF) en Windows. Detalle en "Hecho" de `docs/cambios-arquitectura-escritorio.md`.
+>
+> **Otras tres ramas locales, sin mergear (2026-10-29):** `feat/pdf-weasyprint-opcional` (WeasyPrint se carga solo al generar un PDF, para que la API arranque sin GTK), `chore/limpieza-repo` (archivos sin uso e imágenes: `frontend/public/` pasa de 22 MB a 0,4 MB) y `feat/arranque-autonomo` (la API migra la base al arrancar y entrega el frontend compilado, con `FRONTEND_DIR`; 19 tests nuevos).
+>
+> **Motor empaquetado probado en una Windows limpia (2026-10-29):** la API (114 MB), el worker (425 MB) y Postgres con PostGIS corrieron sin Python, sin GTK y sin Docker, y procesaron un GeoTIFF en 21 s con diagnóstico y exportación. No es código del repo: se hizo en una copia temporal. Hallazgos: Postgres necesita las librerías de Visual C++ (`vcruntime140.dll`, `msvcp140.dll`) y el PDF no funciona dentro del programa empaquetado (WeasyPrint no encuentra GTK). Con `feat/arranque-autonomo` la API empaquetada también crea sola el esquema desde una base vacía (13 tablas, revisión 0028), entrega las pantallas y, con el worker, procesa un GeoTIFF en 28 s en la Windows limpia. Falta el lanzador, el instalador y la firma. Detalle en "Probado" de `docs/cambios-arquitectura-escritorio.md`.
+
 ---
 
 ## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
