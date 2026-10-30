@@ -1,0 +1,14 @@
+{
+  "name": "agronexo-prototipo",
+  "productName": "AgroNexo (prototipo)",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Lanzador de la app de escritorio de AgroNexo: arranca Postgres, la API y el worker, y abre la ventana.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.10.0"
+  }
+}
