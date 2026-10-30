@@ -113,7 +113,7 @@ Ingresá a http://localhost:5173 con el usuario administrador por defecto (ver t
 
 | Servicio | URL / Puerto | Descripción |
 |---|---|---|
-| **Frontend** | http://localhost:5173 | React — usuario `admin@agronexo.com` / contraseña `password123` |
+| **Frontend** | http://localhost:5173 | React — usuario `admin@agronexo.com`; la contraseña de desarrollo está en `migrations/versions/0006_seed_usuario_default.py` (o la que definas con `ADMIN_PASSWORD` en `.env`) |
 | **API (FastAPI)** | http://localhost:8000 | Backend principal |
 | **Docs Swagger** | http://localhost:8000/api/docs | Documentación interactiva de la API |
 | **MinIO Console** | http://localhost:9001 | Explorador de archivos (credenciales del `.env`) |
