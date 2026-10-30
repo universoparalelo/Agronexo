@@ -58,7 +58,7 @@
 | Motor probabilístico (Naive Bayes) experimental en paralelo a las reglas | Completada — tablas a validar |
 | Catálogo de fitosanitarios desde Excel — tanda 1 (dosis, unidad, confiabilidad y precio de los 21 productos del motor) | Completada |
 | Catálogo de fitosanitarios — tanda 2: tabla de presentaciones (marcas/concentraciones) | Completada — parcial, ver detalle |
-| Empaquetado como aplicación de escritorio (camino B): spike técnico y 12 decisiones de alcance | En curso — spike hecho y decisiones tomadas, implementación sin empezar; ver detalle |
+| Empaquetado como aplicación de escritorio (camino B): spike técnico y 12 decisiones de alcance | En curso — spike hecho, almacenamiento en disco, arranque autónomo y optimización del GeoTIFF mergeados; falta lanzador, instalador y funciones de la v1; ver detalle |
 
 #### Workflow de seguridad separado de `ci.yml`
 **Fecha:** 2026-09-27
@@ -1114,6 +1114,15 @@ Se probó si AgroNexo se puede entregar como instalador autocontenido, sin Docke
 **Error encontrado — Windows Sandbox cerrado al descomprimir**
 `El entorno de Windows Sandbox finalizó inesperadamente (0x80370106)` al descomprimir el zip de Postgres (373 MB) con 4 GB de RAM; se pierde todo lo de adentro. Las pruebas pesadas (Postgres, Celery, PDF) se hicieron en la máquina de desarrollo.
 
+
+**Tareas pendientes para entregar la v1 (2026-10-30):** el lanzador será de Electron (decisión D13, propuesta en el PR de decisiones). Orden de trabajo:
+1. **Lanzador de Electron** (`escritorio/electron/`): una sola instancia, carpeta de datos en `%APPDATA%\AgroNexo\`, `initdb` y secretos en el primer arranque, puertos libres, arranque de Postgres, API y worker con espera de `GET /api/v1/health`, cierre limpio de los procesos. Fases: prototipo contra los programas ya empaquetados, robustez, sesión automática (D4, única decisión de diseño abierta), instalador con desinstalador (D7) y prueba en una Windows limpia.
+2. **PDF dentro del .exe:** primero las DLL de GTK junto al ejecutable; `printToPDF` de Electron como plan B (obliga a reescribir los dos generadores de PDF). Se puede investigar en paralelo al lanzador.
+3. **Funciones de la v1 (D12):** backup exportar/importar (D5), pantalla de bienvenida (D10), modo sin conexión (D6/D8/D9) y copia de la base antes de actualizar (D11).
+4. **CI:** sumar a `ci.yml` los tests nuevos (disco, migraciones, frontend, worker, optimización) y un job con runner de Windows. Conviene hacerlo cuanto antes, porque la lista de tests del CI es fija.
+5. **Reempaquetar el worker** con `escritorio/worker.py` del repo (el empaquetado probado usó un punto de entrada equivalente).
+6. **Sin urgencia:** paso 2 de D3 (quitar MinIO de Docker, CI y tests; de paso, que el worker abra el archivo en disco sin copiarlo).
+7. **Fuera de la v1:** imágenes satelitales, actualizaciones automáticas y caché de mapas.
 
 ---
 
