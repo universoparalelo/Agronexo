@@ -7,11 +7,21 @@ import time
 
 import numpy as np
 import rasterio
+from rasterio.windows import Window
 from workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
 _DTYPES_VALIDOS = {"float32", "uint8", "uint16", "int16", "int32"}
+
+# Hilos de GDAL para comprimir (DEFLATE) al optimizar un GeoTIFF. Conservador a
+# propósito, mismo criterio que _WARP_NUM_THREADS en reproyeccion.py: con 2 hilos
+# la compresión ya es ~3 veces más rápida y queda CPU libre para el resto.
+_OPT_NUM_THREADS = 2
+
+# Tope de bytes de una franja de lectura (512 líneas de ancho completo). Un raster
+# muy ancho o con muchas bandas puede superarlo: en ese caso se lee por mosaicos.
+_OPT_FRANJA_MAX_BYTES = 1 << 30
 
 
 def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
@@ -126,6 +136,25 @@ def _actualizar_vuelo(
         engine.dispose()
 
 
+def _copiar_a_destino_tileado(src, dst) -> None:
+    """
+    Copia src a dst (tileado) leyendo franjas de líneas completas, no mosaicos.
+
+    En un GeoTIFF por líneas (strip-based) leer mosaico por mosaico obliga a
+    releer las mismas líneas por cada mosaico de la franja; leyendo la franja
+    una sola vez se escriben de golpe todos sus mosaicos.
+    """
+    alto_franja = dst.block_shapes[0][0]
+    bytes_franja = src.width * alto_franja * src.count * np.dtype(src.dtypes[0]).itemsize
+    if bytes_franja > _OPT_FRANJA_MAX_BYTES:
+        for _, window in dst.block_windows(1):
+            dst.write(src.read(window=window), window=window)
+        return
+    for fila in range(0, src.height, alto_franja):
+        window = Window(0, fila, src.width, min(alto_franja, src.height - fila))
+        dst.write(src.read(window=window), window=window)
+
+
 def _optimizar_si_necesario(src_path: str) -> str:
     """
     Si el GeoTIFF no tiene compresión + tileado, lo reescribe con DEFLATE
@@ -160,6 +189,7 @@ def _optimizar_si_necesario(src_path: str) -> str:
         # suficiente con DEFLATE — sin esto, GDAL falla al cruzar el límite
         # de TIFF clásico igual que en reproyeccion.py.
         bigtiff="IF_SAFER",
+        num_threads=str(_OPT_NUM_THREADS),
     )
     dst_path = src_path + ".opt.tif"
     size_orig_mb = os.path.getsize(src_path) / 1_048_576
@@ -168,8 +198,7 @@ def _optimizar_si_necesario(src_path: str) -> str:
 
     try:
         with rasterio.open(src_path) as src, rasterio.open(dst_path, "w", **perfil) as dst:
-            for _, window in dst.block_windows(1):
-                dst.write(src.read(window=window), window=window)
+            _copiar_a_destino_tileado(src, dst)
     except Exception:
         if os.path.exists(dst_path):
             os.unlink(dst_path)
