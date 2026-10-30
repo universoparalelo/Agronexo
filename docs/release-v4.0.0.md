@@ -1006,6 +1006,39 @@ El diagnóstico ahora recomienda el activo y, debajo de cada uno, las marcas apt
 
 ---
 
+#### Optimización del GeoTIFF por franjas y con 2 hilos de compresión
+**Fecha:** 2026-10-30
+**Rama:** `feat/optimizar-geotiff-mas-rapido` (PR #133, en borrador, sin mergear)
+
+Con un GeoTIFF real de 4,98 GB (48.177 × 27.719 px, 4 bandas `uint8`, sin compresión ni mosaicos) el worker tardó 10,3 minutos, de los cuales **7,6 eran la fase "Optimizando"** (`_optimizar_si_necesario` en `workers/gis/tasks.py`, que reescribe el archivo a tiles de 512×512 con DEFLATE): comprimía con un solo núcleo de 8. Se cambió para leer por franjas de 512 líneas de ancho completo y comprimir con 2 hilos; **la fase pasa de 455 s a 149 s** con el mismo archivo, y el resultado es **idéntico píxel a píxel** (55 franjas comparadas contra el resultado del código anterior, 0 con diferencias).
+
+**Qué se hizo:**
+- `_copiar_a_destino_tileado()` (nueva) lee franjas y las escribe de una vez; si una franja supera `_OPT_FRANJA_MAX_BYTES` (1 GiB, rasters muy anchos o con muchas bandas) vuelve a leer por mosaicos como antes.
+- `_OPT_NUM_THREADS = 2` agrega `num_threads` a la creación del archivo de salida (compresión multihilo de GDAL).
+- `_optimizacion_rapida()` (nueva): el interruptor `AGRONEXO_OPTIMIZACION_RAPIDA=0` vuelve al comportamiento anterior. Documentado en `.env.example`.
+- `tests/test_optimizacion_geotiff.py` (nuevo, 25 tests; esa función no tenía ninguno): mismos píxeles en `uint8`, `uint16` y `float32` y con tamaños que no son múltiplo de 512, destino tileado y comprimido, se borra el original, un archivo ya optimizado no se toca, el respaldo por mosaicos, los hilos configurados y el interruptor.
+
+**Decisiones tomadas:**
+- **2 hilos y no más.** Benchmark sobre el 7,4 % del archivo (franjas, tamaño de salida idéntico en todos los casos): 1 hilo 41,7 s, 2 hilos 15,1 s (2,8×), 4 hilos 9,6 s (4,3×), 6 hilos 7,7 s, 8 hilos 6,9 s (6,0×). Con 2 ya se obtiene casi la mitad de la ganancia posible y queda CPU libre; es el mismo criterio conservador de `_WARP_NUM_THREADS = 4` en `reproyeccion.py`.
+- Se descartó bajar el nivel de compresión (`zlevel=3`): era ~2× más rápido pero dejaba el archivo un 39 % más grande.
+- El diagnóstico inicial era en parte equivocado: se creyó que el cuello era releer las mismas líneas por cada mosaico, y la medición mostró que leer por franjas solo aporta ~1,7× y **la compresión de un solo núcleo era lo principal** (~10×).
+
+**Cómo volver atrás** (de menor a mayor):
+1. **Sin tocar código:** poner `AGRONEXO_OPTIMIZACION_RAPIDA=0` en el entorno del worker y reiniciarlo. Vuelve a leer por mosaicos y a comprimir con un hilo, y el archivo resultante es el mismo (lo cubre `test_el_interruptor_vuelve_al_comportamiento_anterior`).
+2. **Cambiar solo los hilos:** `_OPT_NUM_THREADS` en `workers/gis/tasks.py` (hoy 2).
+3. **Revertir con git:** el cambio está aislado en `_copiar_a_destino_tileado`, las constantes `_OPT_*`, `_optimizacion_rapida` y el `num_threads` dentro de `_optimizar_si_necesario`. Como el repositorio mergea con squash, queda como un solo commit: `git revert <commit del PR #133>` lo deshace limpio, junto con `tests/test_optimizacion_geotiff.py` y la línea de `.env.example`.
+
+Los vuelos ya procesados no se ven afectados: el formato del archivo es el mismo, así que los `preparado_4326.tif` que ya están en caché siguen siendo válidos con cualquiera de las dos versiones.
+
+**Pendiente / sin verificar:**
+- **Consultar a `Matrixas8`**, que escribió la función original (commit `ecc6fa3`, 2026-08-04) y agregó los hilos a la reproyección el 2026-08-28 (`fc9ebb2`): si dejó la optimización con un solo núcleo a propósito. Por eso el PR sigue en borrador.
+- **No se midió el pico de memoria** con el cambio (una franja del archivo real ocupa ~100 MB; el worker con el código anterior llegó a 1,25 GB).
+- No se probó con rasters multiespectrales `float32` de varios GB, ni en Linux/Docker (`concurrency=16`, donde varias tareas podrían optimizar a la vez).
+- Los tests nuevos no están agregados al CI (la lista de `ci.yml` es fija).
+- Idea relacionada, no hecha: con el backend de disco el worker copia el original a un temporal (49 s para 5 GB) solo para abrirlo; podría abrirlo donde ya está.
+
+---
+
 #### Edición de lotes y vuelos
 **Fecha:** 2026-10-26
 **Rama:** `feat/alternativas-con-marca` (sin commitear todavía)
