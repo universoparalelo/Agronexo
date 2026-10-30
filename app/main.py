@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -54,3 +56,8 @@ app.include_router(reportes_router, prefix="/api/v1/lotes", tags=["reportes"])
 app.include_router(ordenes_trabajo_router, prefix="/api/v1/lotes", tags=["ordenes-trabajo"])
 app.include_router(ahorro_router, prefix="/api/v1/lotes", tags=["ahorro"])
 app.include_router(archivos_router, prefix="/api/v1/archivos", tags=["archivos"])
+
+if settings.frontend_dir:
+    from app.frontend import montar_frontend
+
+    montar_frontend(app, Path(settings.frontend_dir))
