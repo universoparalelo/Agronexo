@@ -53,7 +53,7 @@
 | API / Swagger | http://localhost:8000/api/docs | — |
 | MinIO Console | http://localhost:9001 | Ver `.env` |
 | PostgreSQL | localhost:5432 | Ver `.env` |
-| **Usuario por defecto** | — | `admin@agronexo.com` / `password123` |
+| **Usuario por defecto** | — | `admin@agronexo.com` / contraseña de desarrollo: ver `migrations/versions/0006_seed_usuario_default.py` o `ADMIN_PASSWORD` en `.env` |
 
 ### Decisiones recientes no obvias desde el código
 

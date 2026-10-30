@@ -126,7 +126,7 @@ Opciones de PyInstaller nuevas para esto: `--add-data migrations;migrations`, `-
 - Quitar `scripts/backup_minio.sh`.
 
 ### Autenticación y primer arranque (D4, D10)
-- El lanzador genera una contraseña aleatoria por instalación, la guarda en AppData y la pasa como `ADMIN_PASSWORD`. Hoy la migración `0006` siembra `admin@agronexo.com` / `password123` si faltan las variables: **en el instalador siempre deben estar definidas.**
+- El lanzador genera una contraseña aleatoria por instalación, la guarda en AppData y la pasa como `ADMIN_PASSWORD`. Hoy la migración `0006` siembra el usuario `admin@agronexo.com` con una contraseña de desarrollo fija si faltan las variables: **en el instalador siempre deben estar definidas.**
 - Pantalla de bienvenida de una sola vez que pide nombre y correo, sin contraseña y sin internet.
 - Decidir el orden: pedir el correo antes de migrar y pasarlo como `ADMIN_EMAIL`, o sembrar un usuario provisorio y actualizarlo con `/auth/me`.
 - Decidir cómo recibe el frontend la sesión automática.
