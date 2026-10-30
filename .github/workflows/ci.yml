@@ -109,6 +109,9 @@ jobs:
       - name: Tests motor de diagnostico (patron espacial + reglas + endpoint)
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_forma.py tests/test_diagnostico_engine.py tests/test_diagnostico_api.py -v
 
+      - name: Tests almacenamiento en disco y endpoint de archivos
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_almacenamiento_disco.py -v
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI

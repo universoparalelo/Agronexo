@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from weasyprint import HTML
 
 from app.diagnostico.texto import CONFIANZA_LABELS, PATRON_LABELS
 from app.reportes.mapa import generar_imagen_mapa_zonas
@@ -180,6 +179,10 @@ def generar_pdf_reporte(diagnostico: dict, datos_aplicador: dict | None = None) 
 
     template = _env.get_template("reporte_ejecutivo.html")
     html_str = template.render(**contexto)
+
+    # WeasyPrint necesita GTK/Pango del sistema: se importa acá y no al cargar el
+    # módulo para que la API arranque aunque esas librerías no estén (app de escritorio).
+    from weasyprint import HTML
 
     return HTML(string=html_str, base_url=str(_TEMPLATES_DIR)).write_pdf()
 

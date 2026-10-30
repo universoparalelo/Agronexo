@@ -4,6 +4,14 @@
 **Rama principal:** `main`
 **Inicio:** Sprint 14
 
+> **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
+>
+> **Primer cambio de código (2026-10-29, rama `feat/almacenamiento-en-disco`, sin mergear):** backend de almacenamiento en disco (`STORAGE_BACKEND=disk`) y endpoint `GET /api/v1/archivos/{token}`, paso 1 de la decisión D3 (MinIO sigue disponible hasta el paso 2). Probado con 37 tests nuevos, con las suites de auth, lotes, cultivos y exportación sobre el backend de disco, y con el flujo completo (subir un GeoTIFF, worker Celery sobre Postgres sin Redis, diagnóstico y PDF) en Windows. Detalle en "Hecho" de `docs/cambios-arquitectura-escritorio.md`.
+>
+> **Otras tres ramas locales, sin mergear (2026-10-29):** `feat/pdf-weasyprint-opcional` (WeasyPrint se carga solo al generar un PDF, para que la API arranque sin GTK), `chore/limpieza-repo` (archivos sin uso e imágenes: `frontend/public/` pasa de 22 MB a 0,4 MB) y `feat/arranque-autonomo` (la API migra la base al arrancar y entrega el frontend compilado, con `FRONTEND_DIR`; 19 tests nuevos).
+>
+> **Motor empaquetado probado en una Windows limpia (2026-10-29):** la API (114 MB), el worker (425 MB) y Postgres con PostGIS corrieron sin Python, sin GTK y sin Docker, y procesaron un GeoTIFF en 21 s con diagnóstico y exportación. No es código del repo: se hizo en una copia temporal. Hallazgos: Postgres necesita las librerías de Visual C++ (`vcruntime140.dll`, `msvcp140.dll`) y el PDF no funciona dentro del programa empaquetado (WeasyPrint no encuentra GTK). Con `feat/arranque-autonomo` la API empaquetada también crea sola el esquema desde una base vacía (13 tablas, revisión 0028), entrega las pantallas y, con el worker, procesa un GeoTIFF en 28 s en la Windows limpia. Falta el lanzador, el instalador y la firma. Detalle en "Probado" de `docs/cambios-arquitectura-escritorio.md`.
+
 ---
 
 ## Sprint 14 — CI/CD: seguridad (SAST, SCA, secretos, imágenes)
@@ -1003,6 +1011,39 @@ El diagnóstico ahora recomienda el activo y, debajo de cada uno, las marcas apt
 - 19 de las 21 dosis de los activos del motor son "habitual según web": contrastar antes de presentarlas como recomendación real.
 
 **Pendiente:** ahorro como rango (marca más barata a más cara).
+
+---
+
+#### Optimización del GeoTIFF por franjas y con 2 hilos de compresión
+**Fecha:** 2026-10-30
+**Rama:** `feat/optimizar-geotiff-mas-rapido` (PR #133, en borrador, sin mergear)
+
+Con un GeoTIFF real de 4,98 GB (48.177 × 27.719 px, 4 bandas `uint8`, sin compresión ni mosaicos) el worker tardó 10,3 minutos, de los cuales **7,6 eran la fase "Optimizando"** (`_optimizar_si_necesario` en `workers/gis/tasks.py`, que reescribe el archivo a tiles de 512×512 con DEFLATE): comprimía con un solo núcleo de 8. Se cambió para leer por franjas de 512 líneas de ancho completo y comprimir con 2 hilos; **la fase pasa de 455 s a 149 s** con el mismo archivo, y el resultado es **idéntico píxel a píxel** (55 franjas comparadas contra el resultado del código anterior, 0 con diferencias).
+
+**Qué se hizo:**
+- `_copiar_a_destino_tileado()` (nueva) lee franjas y las escribe de una vez; si una franja supera `_OPT_FRANJA_MAX_BYTES` (1 GiB, rasters muy anchos o con muchas bandas) vuelve a leer por mosaicos como antes.
+- `_OPT_NUM_THREADS = 2` agrega `num_threads` a la creación del archivo de salida (compresión multihilo de GDAL).
+- `_optimizacion_rapida()` (nueva): el interruptor `AGRONEXO_OPTIMIZACION_RAPIDA=0` vuelve al comportamiento anterior. Documentado en `.env.example`.
+- `tests/test_optimizacion_geotiff.py` (nuevo, 25 tests; esa función no tenía ninguno): mismos píxeles en `uint8`, `uint16` y `float32` y con tamaños que no son múltiplo de 512, destino tileado y comprimido, se borra el original, un archivo ya optimizado no se toca, el respaldo por mosaicos, los hilos configurados y el interruptor.
+
+**Decisiones tomadas:**
+- **2 hilos y no más.** Benchmark sobre el 7,4 % del archivo (franjas, tamaño de salida idéntico en todos los casos): 1 hilo 41,7 s, 2 hilos 15,1 s (2,8×), 4 hilos 9,6 s (4,3×), 6 hilos 7,7 s, 8 hilos 6,9 s (6,0×). Con 2 ya se obtiene casi la mitad de la ganancia posible y queda CPU libre; es el mismo criterio conservador de `_WARP_NUM_THREADS = 4` en `reproyeccion.py`.
+- Se descartó bajar el nivel de compresión (`zlevel=3`): era ~2× más rápido pero dejaba el archivo un 39 % más grande.
+- El diagnóstico inicial era en parte equivocado: se creyó que el cuello era releer las mismas líneas por cada mosaico, y la medición mostró que leer por franjas solo aporta ~1,7× y **la compresión de un solo núcleo era lo principal** (~10×).
+
+**Cómo volver atrás** (de menor a mayor):
+1. **Sin tocar código:** poner `AGRONEXO_OPTIMIZACION_RAPIDA=0` en el entorno del worker y reiniciarlo. Vuelve a leer por mosaicos y a comprimir con un hilo, y el archivo resultante es el mismo (lo cubre `test_el_interruptor_vuelve_al_comportamiento_anterior`).
+2. **Cambiar solo los hilos:** `_OPT_NUM_THREADS` en `workers/gis/tasks.py` (hoy 2).
+3. **Revertir con git:** el cambio está aislado en `_copiar_a_destino_tileado`, las constantes `_OPT_*`, `_optimizacion_rapida` y el `num_threads` dentro de `_optimizar_si_necesario`. Como el repositorio mergea con squash, queda como un solo commit: `git revert <commit del PR #133>` lo deshace limpio, junto con `tests/test_optimizacion_geotiff.py` y la línea de `.env.example`.
+
+Los vuelos ya procesados no se ven afectados: el formato del archivo es el mismo, así que los `preparado_4326.tif` que ya están en caché siguen siendo válidos con cualquiera de las dos versiones.
+
+**Pendiente / sin verificar:**
+- **Consultar a `Matrixas8`**, que escribió la función original (commit `ecc6fa3`, 2026-08-04) y agregó los hilos a la reproyección el 2026-08-28 (`fc9ebb2`): si dejó la optimización con un solo núcleo a propósito. Por eso el PR sigue en borrador.
+- **No se midió el pico de memoria** con el cambio (una franja del archivo real ocupa ~100 MB; el worker con el código anterior llegó a 1,25 GB).
+- No se probó con rasters multiespectrales `float32` de varios GB, ni en Linux/Docker (`concurrency=16`, donde varias tareas podrían optimizar a la vez).
+- Los tests nuevos no están agregados al CI (la lista de `ci.yml` es fija).
+- Idea relacionada, no hecha: con el backend de disco el worker copia el original a un temporal (49 s para 5 GB) solo para abrirlo; podría abrirlo donde ya está.
 
 ---
 

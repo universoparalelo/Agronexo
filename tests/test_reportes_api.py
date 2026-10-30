@@ -4,8 +4,8 @@ Tests del endpoint GET /lotes/{id}/vuelos/{id}/reporte/pdf.
 Mismo criterio que test_diagnostico_api.py: los vuelos se insertan
 directamente en la BD (sin MinIO ni Celery) para testear la capa HTTP sin
 depender del stack completo. El camino feliz (PDF real generado a partir
-de un GeoJSON real en MinIO) se verificó manualmente con
-scripts/poc_reporte_pdf.py y contra el endpoint corriendo — acá se cubren
+de un GeoJSON real en MinIO) se verificó manualmente contra el endpoint
+corriendo — acá se cubren
 los 404 y la integración de la capa HTTP/ownership, igual que en
 test_diagnostico_api.py, del que este endpoint depende directamente
 (reutiliza generar_diagnostico()).

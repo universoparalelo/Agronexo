@@ -68,7 +68,7 @@
 - `test_celery_integracion.py` tiene tres tests: dos de configuración (corren en CI dentro del job `test-gis`) y uno de ciclo completo E2E que requiere MinIO + worker levantados — ese solo corre con `docker compose exec worker`.
 - `tipo_suelo` en tabla `lotes` es un PostgreSQL enum (`tiposueloenum`) — asyncpg no auto-castea VARCHAR a enum, así que las migraciones crean enums con SQL directo y `DO/EXCEPTION` para idempotencia.
 - `productos_fitosanitarios` tiene su propio router (`productos_router`) montado en `/api/v1/productos-fitosanitarios` — no puede ir bajo `/api/v1/lotes/` porque FastAPI interpreta el segmento como `{lote_id}` UUID y falla.
-- El servicio de diagnóstico (`app/diagnostico/service.py`) carga productos desde BD en cada request vía `_cargar_catalogo_productos()` — el dict estático en `app/diagnostico/productos.py` sigue existiendo pero ya no se importa.
+- El servicio de diagnóstico (`app/diagnostico/service.py`) carga productos desde BD en cada request vía `_cargar_catalogo_productos()`.
 
 ---
 

@@ -57,7 +57,7 @@ El procesamiento de GeoTIFF **nunca ocurre en FastAPI**: siempre se encola en Ce
 | Tecnología | Rol |
 |---|---|
 | **PostgreSQL + PostGIS** | Metadatos y geometrías vectoriales con índices GiST |
-| **MinIO** | Archivos binarios (GeoTIFF, PDF, SHP) — S3-compatible |
+| **MinIO** | Archivos binarios (GeoTIFF, PDF, SHP) — S3-compatible. Con `STORAGE_BACKEND=disk` se guardan en una carpeta (`STORAGE_PATH`), pensado para la app de escritorio |
 
 ### Frontend
 | Tecnología | Rol |
@@ -146,7 +146,8 @@ agronexo/
 │   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
-│   ├── core/               # Config (pydantic-settings), BD, cliente MinIO, migraciones al arrancar
+│   ├── archivos/           # Descarga de archivos con token firmado (almacenamiento en disco)
+│   ├── core/               # Config (pydantic-settings), BD, almacenamiento (MinIO o disco), migraciones al arrancar
 │   ├── frontend.py         # Entrega el frontend compilado (app de escritorio, con FRONTEND_DIR)
 │   └── main.py             # Punto de entrada FastAPI
 ├── escritorio/             # Puntos de entrada de la app de escritorio: API (migra la base y arranca) y worker GIS
