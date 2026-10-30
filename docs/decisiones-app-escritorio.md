@@ -20,6 +20,7 @@ Registro de las decisiones y preguntas que se van discutiendo, en orden. Context
 | D10 | 2026-10-29 | **Pantalla de bienvenida en el primer arranque que pide nombre y correo** (Q7). | Aparece una sola vez. **No es un login:** no pide contraseña y la sesión sigue siendo automática (D4). El correo no se verifica y la pantalla no depende de internet (D8). Ese usuario es la identidad bajo la que se guardan los datos y la que aparece en reportes y órdenes de trabajo. Pendiente de diseño: la migración `0006` siembra el usuario antes de que nadie escriba el correo (pedirlo antes de migrar y pasarlo como `ADMIN_EMAIL`, o sembrar uno provisorio y actualizarlo con `/auth/me`); y qué pasa con la bienvenida cuando se importa un backup (D5), cuyo usuario ya existe. Aún no se implementó nada. |
 | D11 | 2026-10-29 | **Copia automática de la base antes de cada actualización de la app** (Q9), como red de seguridad ante migraciones que salgan mal. | Se guardan solo las últimas 2 o 3 copias para no llenar el disco (propuesta de Claude; cantidad exacta sin definir). Se hace antes de correr `alembic upgrade head`. Pendiente: dónde se guarda la copia (¿dentro de la carpeta de datos?), cómo se restaura y si cubre también los archivos o solo la base. Aún no se implementó nada. |
 | D12 | 2026-10-29 | **Alcance de la primera versión del instalador** (Q10): crear un lote y subir un GeoTIFF propio; calcular índices y ver el mapa de zonas; ver el diagnóstico y generar el reporte PDF; backup con Exportar e Importar. | **Quedan para después:** imágenes satelitales (`desde-satelite`), actualizaciones automáticas de la app y caché de mapas. Incluye lo ya decidido: pantalla de bienvenida (D10), almacenamiento en disco (D2/D3), modo sin conexión (D8/D9) y copia antes de actualizar (D11), que son parte de que la app funcione. Fechas, sprint y responsables siguen sin definir. |
+| D13 | 2026-10-30 | **Electron (no Tauri) como ventana, lanzador e instalador de la app de escritorio** (Q2). | Razones: el motor ya pesa ~700 MB–1,2 GB (Postgres con PostGIS sin podar) y los GeoTIFF usan varios GB, así que el ahorro de tamaño de Tauri pesa poco; el lanzador (elegir puertos, `initdb`, health checks, cerrar todo al salir) es más simple en Node que en Rust; no depende de que WebView2 esté instalado en Windows 10 viejos. Contras aceptados: instalador y RAM más grandes (estimado ~120 MB y ~100–150 MB, no medido) y actualizar Electron periódicamente por seguridad. **PDF:** primero probar las DLL de GTK junto al `.exe`; `printToPDF` de Electron queda como plan B (obliga a reescribir los dos generadores de PDF). |
 
 ### Detalle de D2
 - **Para qué sirve el almacenamiento:** guarda el GeoTIFF original, los índices, las zonas GeoJSON, los PDF y el avatar/logo.
@@ -34,7 +35,7 @@ Registro de las decisiones y preguntas que se van discutiendo, en orden. Context
 ### Q2. Lanzador: ¿Electron o Tauri?
 - **Electron (recomendado por Claude):** JavaScript (el equipo ya lo sabe), Chromium propio con versión fija, `printToPDF` como salida si GTK resulta caro, madurez muy alta. En contra: instalador ~140 MB más pesado (poco frente a ~1 GB de Postgres, GDAL y PDF) y hay que actualizar Electron periódicamente por seguridad.
 - **Tauri:** ~5–10 MB, usa el WebView2 del sistema (varía por máquina), el lanzador se escribe en Rust. En contra: toolchain de Rust y build tools de Visual Studio, menor madurez, no resuelve el PDF (habría que empaquetar GTK) y un mapa de Leaflet probablemente se vea igual pero no es garantizable.
-- **Estado:** sin decidir (2026-10-29). Según el documento de opciones, la elección puede tomarse tarde porque el trabajo difícil es idéntico con ambos.
+- **Estado:** decidida el 2026-10-30: Electron (D13).
 
 ### Q3. Login en una app de un solo usuario
 - **Idea planteada:** sacar el login (2026-10-29), todavía sin decidir cómo.
@@ -87,7 +88,7 @@ Registro de las decisiones y preguntas que se van discutiendo, en orden. Context
 
 ## Abiertas (de la sección 16 de `opciones-app-escritorio.md`)
 
-- Electron o Tauri (recomendado: Electron). Ligada al PDF: si GTK resulta caro de empaquetar, `printToPDF` de Electron es la salida.
+- ~~Electron o Tauri~~ — **decidida el 2026-10-30: Electron** (D13). Sigue abierto lo del PDF: si GTK resulta caro de empaquetar, `printToPDF` de Electron es la salida.
 - Cómo recibe el frontend la sesión automática (se define al implementar).
 - Fechas, sprint y responsables de la primera versión (el alcance ya se decidió en D12).
 - Consulta de marcas antes de invertir en nombre y firma de código.
