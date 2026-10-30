@@ -124,7 +124,47 @@ def test_lee_por_franjas_y_si_la_franja_es_enorme_vuelve_a_leer_por_mosaicos(tmp
     print("✓ por franjas con memoria normal; por mosaicos si la franja supera el tope")
 
 
+def test_el_interruptor_vuelve_al_comportamiento_anterior(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGRONEXO_OPTIMIZACION_RAPIDA", "0")
+    llamadas = []
+    ventana_real = tasks.Window
+    monkeypatch.setattr(tasks, "Window", lambda *a, **kw: llamadas.append(a) or ventana_real(*a, **kw))
+    abrir = rasterio.open
+    creaciones = []
+
+    def espia(*args, **kwargs):
+        if (len(args) > 1 and args[1] == "w") or kwargs.get("mode") == "w":
+            creaciones.append(kwargs)
+        return abrir(*args, **kwargs)
+
+    monkeypatch.setattr(rasterio, "open", espia)
+    datos = _datos(1300, 1100, 4, "uint8")
+    ruta = str(tmp_path / "entrada.tif")
+    _por_lineas(ruta, datos)
+    creaciones.clear()
+
+    resultado = tasks._optimizar_si_necesario(ruta)
+
+    with rasterio.open(resultado) as dst:
+        assert np.array_equal(dst.read(), datos)
+    assert llamadas == []                                    # se leyó por mosaicos
+    assert all("num_threads" not in c for c in creaciones)   # un solo hilo
+    print("✓ AGRONEXO_OPTIMIZACION_RAPIDA=0: mosaicos, un hilo y los mismos píxeles")
+
+
+@pytest.mark.parametrize("valor", ["1", "", "si"])
+def test_cualquier_valor_distinto_de_cero_deja_la_optimizacion_rapida(monkeypatch, valor):
+    monkeypatch.setenv("AGRONEXO_OPTIMIZACION_RAPIDA", valor)
+    assert tasks._optimizacion_rapida() is True
+
+
+def test_sin_la_variable_la_optimizacion_es_rapida(monkeypatch):
+    monkeypatch.delenv("AGRONEXO_OPTIMIZACION_RAPIDA", raising=False)
+    assert tasks._optimizacion_rapida() is True
+
+
 def test_pide_a_gdal_comprimir_con_los_hilos_configurados(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGRONEXO_OPTIMIZACION_RAPIDA", raising=False)
     abrir = rasterio.open
     creaciones = []
 

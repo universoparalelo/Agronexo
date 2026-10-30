@@ -24,6 +24,12 @@ _OPT_NUM_THREADS = 2
 _OPT_FRANJA_MAX_BYTES = 1 << 30
 
 
+def _optimizacion_rapida() -> bool:
+    """AGRONEXO_OPTIMIZACION_RAPIDA=0 vuelve al comportamiento anterior (mosaicos y un
+    solo hilo) sin tocar código ni volver a desplegar."""
+    return os.environ.get("AGRONEXO_OPTIMIZACION_RAPIDA", "1") != "0"
+
+
 def _actualizar_lote_geometry(lote_id: str, wkt: str) -> None:
     """
     Rellena geometry (y area_ha) SOLO si el lote todavía no tiene una: un
@@ -146,7 +152,7 @@ def _copiar_a_destino_tileado(src, dst) -> None:
     """
     alto_franja = dst.block_shapes[0][0]
     bytes_franja = src.width * alto_franja * src.count * np.dtype(src.dtypes[0]).itemsize
-    if bytes_franja > _OPT_FRANJA_MAX_BYTES:
+    if not _optimizacion_rapida() or bytes_franja > _OPT_FRANJA_MAX_BYTES:
         for _, window in dst.block_windows(1):
             dst.write(src.read(window=window), window=window)
         return
@@ -189,8 +195,9 @@ def _optimizar_si_necesario(src_path: str) -> str:
         # suficiente con DEFLATE — sin esto, GDAL falla al cruzar el límite
         # de TIFF clásico igual que en reproyeccion.py.
         bigtiff="IF_SAFER",
-        num_threads=str(_OPT_NUM_THREADS),
     )
+    if _optimizacion_rapida():
+        perfil["num_threads"] = str(_OPT_NUM_THREADS)
     dst_path = src_path + ".opt.tif"
     size_orig_mb = os.path.getsize(src_path) / 1_048_576
     t0 = time.perf_counter()
