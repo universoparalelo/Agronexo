@@ -1124,6 +1124,24 @@ Se probó si AgroNexo se puede entregar como instalador autocontenido, sin Docke
 6. **Sin urgencia:** paso 2 de D3 (quitar MinIO de Docker, CI y tests; de paso, que el worker abra el archivo en disco sin copiarlo).
 7. **Fuera de la v1:** imágenes satelitales, actualizaciones automáticas y caché de mapas.
 
+#### Lanzador de Electron — fase 1 (prototipo)
+**Fecha:** 2026-10-30
+**Rama:** `feat/lanzador-electron`
+
+Primera pieza del lanzador de la app de escritorio (`escritorio/electron/`): abre una ventana de Electron que inicializa Postgres en el primer arranque, levanta la API y el worker empaquetados, espera `GET /api/v1/health`, muestra el frontend y al cerrar detiene todo en orden (worker, API, Postgres). Es un prototipo: apunta a los programas empaquetados de `trabajo-escritorio\` (fuera del repo) y guarda sus datos en `%APPDATA%\AgroNexo (prototipo)\`. Probado a mano: arranque desde cero y segundo arranque, login con el usuario de la instalación, puertos solo en `127.0.0.1` y cierre sin procesos huérfanos. No se probó un análisis con GeoTIFF desde la ventana ni un cierre a la fuerza.
+
+**Decisiones tomadas:**
+- Electron 44.10.0 con versión exacta y `package-lock.json` en el repo; se instala con `npm ci`. Esa versión no baja el binario al instalar: hay que correr `node node_modules/electron/install.js` (descarga ~200 MB de GitHub y los verifica con `checksums.json`).
+- Seguridad: ventana con `contextIsolation` y `sandbox`, sin `nodeIntegration` ni permisos del navegador, y navegación restringida a la API local; Postgres con `scram-sha-256` (no `trust`); contraseña de la base, clave JWT y contraseña del usuario aleatorias por instalación; programas lanzados sin shell.
+- Puertos libres al azar en lugar de fijos, y una sola instancia de la app.
+- El worker arranca después de que la API responde, para no competir con las migraciones.
+- Para cerrar se usa `taskkill /T /F`: en Windows no hay una señal que cierre con gracia, así que un análisis en curso se pierde (se trata en la fase 2).
+
+**Error encontrado — el lanzador se colgaba al iniciar Postgres**
+Con `execFile`, `pg_ctl start` nunca se daba por terminado aunque Postgres ya estuviera listo, porque el servidor hereda los canales de salida del proceso que lo lanzó. Se resolvió lanzándolo con `spawn` y la salida descartada (queda en el archivo de `-l`).
+
+**Pendiente (fases siguientes):** rotación de logs, sesión automática (D4), instalador con desinstalador (D7), política de contenido (CSP) y `fuses` de Electron, y apuntar a la carpeta de instalación en lugar de `trabajo-escritorio\`.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
