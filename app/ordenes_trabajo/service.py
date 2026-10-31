@@ -113,6 +113,9 @@ def generar_pdf_orden_trabajo(orden: dict, metadata: dict, datos_aplicador: dict
     html_str = template.render(**contexto)
 
     # Ver el comentario equivalente en app/reportes/service.py.
+    from app.core.gtk import preparar_gtk_empaquetado
+
+    preparar_gtk_empaquetado()
     from weasyprint import HTML
 
     return HTML(string=html_str, base_url=str(_TEMPLATES_DIR)).write_pdf()

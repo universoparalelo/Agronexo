@@ -18,6 +18,8 @@ polígonos rellenos sin esa dependencia.
 from __future__ import annotations
 
 import io
+import os
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import shape
@@ -69,13 +71,21 @@ _ALTO_LEYENDA_PX = 36
 # paquete fonts-dejavu-core) — la fuente bitmap por defecto de Pillow
 # (ImageFont.load_default()) no soporta tildes/ñ correctamente.
 _FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+# Windows (app de escritorio) no trae DejaVu: se usa Segoe UI o Arial, que sí soportan
+# tildes y ñ y están en toda instalación.
+_FONTS_WINDOWS = (
+    Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "segoeui.ttf",
+    Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "arial.ttf",
+)
 
 
 def _cargar_fuente(size: int = 13) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    try:
-        return ImageFont.truetype(_FONT_PATH, size)
-    except OSError:
-        return ImageFont.load_default()
+    for ruta in (_FONT_PATH, *_FONTS_WINDOWS):
+        try:
+            return ImageFont.truetype(str(ruta), size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def generar_imagen_mapa_zonas(
