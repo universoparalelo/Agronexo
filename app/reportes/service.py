@@ -182,6 +182,9 @@ def generar_pdf_reporte(diagnostico: dict, datos_aplicador: dict | None = None) 
 
     # WeasyPrint necesita GTK/Pango del sistema: se importa acá y no al cargar el
     # módulo para que la API arranque aunque esas librerías no estén (app de escritorio).
+    from app.core.gtk import preparar_gtk_empaquetado
+
+    preparar_gtk_empaquetado()
     from weasyprint import HTML
 
     return HTML(string=html_str, base_url=str(_TEMPLATES_DIR)).write_pdf()
