@@ -32,7 +32,7 @@ async function arrancar() {
   fs.mkdirSync(carpetaArchivos, { recursive: true });
   archivoLog = path.join(carpetaLogs, 'lanzador.log');
 
-  const motor = localizarMotor();
+  const motor = localizarMotor(app.isPackaged);
   const secretos = cargarSecretos(carpetaDatos);
   const puertoPg = await puertoLibre();
   const puertoApi = await puertoLibre();

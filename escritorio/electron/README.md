@@ -27,6 +27,17 @@ La primera vez crea la base de datos en `%APPDATA%\AgroNexo (prototipo)\`, que t
 - Los programas se lanzan sin shell, con los argumentos como lista.
 - Electron está fijado a una versión exacta y `package-lock.json` va en el repo. Instalar siempre con `npm ci`.
 
+## Armar el instalador
+
+Genera `dist\AgroNexo (prototipo) Setup 0.0.0.exe` (unos 430 MB) con el motor adentro. Necesita la carpeta `trabajo-escritorio\` con `pg-min\` (Postgres sin pgAdmin, documentación ni StackBuilder), y `motor2\dist\` con la API y el worker empaquetados. La ruta va relativa a esta carpeta (electron-builder no acepta absolutas en `extraResources`):
+
+```powershell
+$env:AGRONEXO_MOTOR_DIR='../../../trabajo-escritorio'
+npm run dist
+```
+
+El instalador es por usuario (no pide administrador: Postgres no arranca con permisos elevados) y todavía **no está firmado**, así que Windows avisa de "editor desconocido". Al desinstalar pregunta si se borran también los datos (por defecto no, decisión D7; ver `instalador\installer.nsh`). `npm audit` marca 15 avisos moderados, todos de `minimatch` dentro de electron-builder: es una herramienta de armado que corre solo en la PC de desarrollo y no viaja en la app.
+
 ## Qué falta (fases siguientes)
 
-Rotación de los registros, sesión automática sin login, instalador con desinstalador, política de contenido (CSP) y `fuses` de Electron para el paquete final, y apuntar a la carpeta de instalación en lugar de `trabajo-escritorio\`.
+Rotación de los registros, sesión automática sin login, política de contenido (CSP) y `fuses` de Electron para el paquete final, ícono propio, firma de código, probar el instalador y el desinstalador en una Windows limpia y cambiar las DLL de GTK por una versión más nueva.

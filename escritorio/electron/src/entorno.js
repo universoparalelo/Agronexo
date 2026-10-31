@@ -8,9 +8,13 @@ const HOST = '127.0.0.1';
 const BASE_DE_DATOS = 'agronexo';
 const USUARIO_PG = 'agronexo';
 
-function localizarMotor() {
-  const base = process.env.AGRONEXO_PROTOTIPO_DIR
-    || path.resolve(__dirname, '..', '..', '..', '..', 'trabajo-escritorio');
+// Instalada, el motor viaja dentro de la carpeta de la app (resources\motor) con la misma
+// estructura que tiene en trabajo-escritorio\, que es de donde lo toma el modo desarrollo.
+function localizarMotor(instalada) {
+  const base = instalada
+    ? path.join(process.resourcesPath, 'motor')
+    : process.env.AGRONEXO_PROTOTIPO_DIR
+      || path.resolve(__dirname, '..', '..', '..', '..', 'trabajo-escritorio');
   const motor = {
     pgBin: path.join(base, 'pg', 'pgsql', 'bin'),
     api: path.join(base, 'motor2', 'dist', 'agronexo-api', 'agronexo-api.exe'),
