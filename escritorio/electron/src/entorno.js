@@ -15,7 +15,7 @@ function localizarMotor() {
     pgBin: path.join(base, 'pg', 'pgsql', 'bin'),
     api: path.join(base, 'motor2', 'dist', 'agronexo-api', 'agronexo-api.exe'),
     frontend: path.join(base, 'motor2', 'dist', 'agronexo-api', 'frontend'),
-    worker: path.join(base, 'motor', 'dist', 'agronexo-worker', 'agronexo-worker.exe'),
+    worker: path.join(base, 'motor2', 'dist', 'agronexo-worker', 'agronexo-worker.exe'),
   };
   const faltan = Object.values(motor).filter((ruta) => !fs.existsSync(ruta));
   if (faltan.length) {
