@@ -6,9 +6,53 @@
   "description": "Lanzador de la app de escritorio de AgroNexo: arranca Postgres, la API y el worker, y abre la ventana.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never"
   },
   "devDependencies": {
-    "electron": "44.10.0"
+    "electron": "44.10.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "ar.agronexo.escritorio",
+    "productName": "AgroNexo (prototipo)",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "splash.html",
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "${env.AGRONEXO_MOTOR_DIR}/pg-min",
+        "to": "motor/pg"
+      },
+      {
+        "from": "${env.AGRONEXO_MOTOR_DIR}/motor2/dist",
+        "to": "motor/motor2/dist"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "instalador/installer.nsh"
+    }
   }
 }

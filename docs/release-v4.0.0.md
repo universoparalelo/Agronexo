@@ -1157,6 +1157,24 @@ En el programa empaquetado, WeasyPrint carga las DLL con `LOAD_LIBRARY_SEARCH_DE
 
 **Pendiente:** cambiar las DLL de GTK (versión 3.24.31, de enero de 2022) por una compilación más nueva (MSYS2) antes de entregar; incluir los avisos de licencia LGPL/MIT en el instalador; probar en una Windows limpia (Sandbox).
 
+#### Instalador de Windows (electron-builder)
+**Fecha:** 2026-10-31
+**Rama:** `feat/instalador-electron`
+
+El lanzador ahora se empaqueta en un `Setup.exe` de unos 434 MB con electron-builder 26.18.0: trae adentro Postgres con PostGIS, la API y el worker, y los busca en `resources\motor` cuando está instalado (`app.isPackaged`). Probado a mano: instalación silenciosa en una carpeta de prueba y la app instalada abre y funciona con la base existente. No se probó el desinstalador ni una Windows limpia.
+
+**Decisiones tomadas:**
+- Instalador por usuario (`perMachine: false`) y sin administrador: Postgres no arranca con permisos elevados.
+- Postgres recortado a 384 MB (antes 1,2 GB) sacando pgAdmin 4, StackBuilder, documentación, headers y las DLL wx; se verificó que `initdb`, el arranque y `CREATE EXTENSION postgis` (3.6) funcionan.
+- Desinstalador con pregunta "¿borrar también tus datos?" por defecto en No (D7), en `escritorio/electron/instalador/installer.nsh`. La carpeta no se llama `build/` porque está en el `.gitignore`.
+- Sin firma de código por ahora: Windows muestra "editor desconocido".
+- `npm audit`: 15 avisos moderados, todos de `minimatch` dentro de electron-builder (herramienta de armado, no viaja en la app).
+
+**Error encontrado — el motor no entraba en el instalador**
+`extraResources` con una ruta absoluta desde una variable de entorno se concatenaba detrás de la carpeta del proyecto y el instalador salía de 120 MB sin motor. Se resolvió pasando la ruta relativa a `escritorio/electron`.
+
+**Pendiente:** ícono propio, firma de código, probar instalador y desinstalador en una Windows limpia, sesión automática (D4), CSP y `fuses` de Electron, DLL de GTK más nuevas y avisos de licencia.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
