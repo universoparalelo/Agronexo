@@ -1142,6 +1142,21 @@ Con `execFile`, `pg_ctl start` nunca se daba por terminado aunque Postgres ya es
 
 **Pendiente (fases siguientes):** rotación de logs, sesión automática (D4), instalador con desinstalador (D7), política de contenido (CSP) y `fuses` de Electron, y apuntar a la carpeta de instalación en lugar de `trabajo-escritorio\`.
 
+#### PDF dentro del programa empaquetado
+**Fecha:** 2026-10-31
+**Rama:** `feat/pdf-en-paquete`
+
+La orden de trabajo en PDF (WeasyPrint) ahora funciona en la API empaquetada con PyInstaller. Las DLL de GTK van en una carpeta `gtk\` junto al `.exe` y `app/core/gtk.py` la registra antes de importar WeasyPrint. Probado a mano en la app de escritorio: la orden de trabajo se genera, abre y descarga bien. No se probó en una Windows limpia ni el reporte ejecutivo (no tiene botón en el dashboard).
+
+**Decisiones tomadas:**
+- DLL de GTK junto al ejecutable (26 archivos, ~11 MB) en lugar de `printToPDF` de Electron, que obligaba a reescribir los dos generadores de PDF. Queda `printToPDF` como plan B.
+- El mapa del reporte ejecutivo busca también las fuentes de Windows (Segoe UI, Arial) porque la ruta de DejaVu es de Linux.
+
+**Error encontrado — el PDF fallaba aunque GTK estuviera instalado**
+En el programa empaquetado, WeasyPrint carga las DLL con `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS`, que ignora el `PATH`, y no registra su propia carpeta cuando corre congelado. Se resolvió registrando la carpeta `gtk\` con `os.add_dll_directory` y apuntando `FONTCONFIG_PATH` a `gtk\etconts`.
+
+**Pendiente:** cambiar las DLL de GTK (versión 3.24.31, de enero de 2022) por una compilación más nueva (MSYS2) antes de entregar; incluir los avisos de licencia LGPL/MIT en el instalador; probar en una Windows limpia (Sandbox).
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
