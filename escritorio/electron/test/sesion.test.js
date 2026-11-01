@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 
 const {
-  iniciarSesion, scriptInyeccion, esDelOrigen, SesionAutomatica, MAX_REINTENTOS_LOGIN,
+  iniciarSesion, scriptInyeccion, esDelOrigen, SesionAutomatica, MAX_REINTENTOS_LOGIN, RUTA_INICIAL,
 } = require('../src/sesion');
 
 function servidorFalso({ loginOk = true } = {}) {
@@ -102,7 +102,7 @@ test('alCargar en /login inyecta y vuelve a la raíz, con tope de reintentos', a
   for (let i = 0; i < MAX_REINTENTOS_LOGIN + 2; i += 1) await sesion.alCargar(contenido);
   await srv.cerrar();
   assert.equal(contenido.llamadas.cargas.length, MAX_REINTENTOS_LOGIN);
-  assert.ok(contenido.llamadas.cargas.every((u) => u === srv.origen));
+  assert.ok(contenido.llamadas.cargas.every((u) => u === `${srv.origen}${RUTA_INICIAL}`));
 });
 
 test('alCargar no escribe en una página de otro origen', async () => {

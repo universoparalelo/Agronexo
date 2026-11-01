@@ -1179,12 +1179,13 @@ El lanzador ahora se empaqueta en un `Setup.exe` de unos 434 MB con electron-bui
 **Fecha:** 2026-11-01
 **Rama:** `feat/sesion-automatica`
 
-El lanzador inicia sesión solo con la cuenta local (`admin@agronexo.com` y la contraseña aleatoria de `secretos.json`) y deja `access_token`, `refresh_token` y `usuario` en el `localStorage` de la ventana (`escritorio/electron/src/sesion.js`). El usuario ya no ve el login. Probado con 8 tests de `node:test` (servidor HTTP falso); **no se probó todavía en la app instalada ni en la Sandbox.**
+El lanzador inicia sesión solo con la cuenta local (`admin@agronexo.com` y la contraseña aleatoria de `secretos.json`) y deja `access_token`, `refresh_token` y `usuario` en el `localStorage` de la ventana (`escritorio/electron/src/sesion.js`). El usuario ya no ve el login. Probado con 8 tests de `node:test` (servidor HTTP falso) y abriendo la app en modo desarrollo en la máquina de Denise: entra directo al Dashboard con la sesión puesta y el cierre apaga todo. **No se probó todavía en la app instalada ni en la Sandbox.**
 
 **Decisiones tomadas:**
 - Solo se escribe en páginas del origen de la API local; nunca en otra URL que llegue a la ventana. Los valores se pasan con `JSON.stringify`, y ni la contraseña ni los tokens se registran en el log.
 - El token dura 30 minutos: cada 20 minutos se vuelve a iniciar sesión y se actualiza el `localStorage` sin recargar (el cliente axios lee el token en cada pedido).
-- Si la app termina en `/login` (por ejemplo, un 401 que recarga la página), se inyecta la sesión y se vuelve a la raíz; hasta 3 veces seguidas, para no entrar en un bucle.
+- La ventana abre en `/dashboard` y no en `/`, que es la página de presentación (con "Ingresar"); la primera versión volvía a `/` y quedaba en la presentación. Se vio al probar.
+- Si la app termina en `/login` (por ejemplo, un 401 que recarga la página), se inyecta la sesión y se vuelve a `/dashboard`; hasta 3 veces seguidas, para no entrar en un bucle.
 - El correo del usuario local pasa a ser la constante `ADMIN_EMAIL` del lanzador, que además la pasa explícita a la API (antes dependía del valor por defecto de la migración `0006`). Sigue siendo provisorio hasta la pantalla de bienvenida (D10).
 
 **Error encontrado y corregido — contraseña incorrecta recargaba el login sin avisar**

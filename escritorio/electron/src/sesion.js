@@ -3,6 +3,8 @@
 
 const RENOVACION_MS = 20 * 60 * 1000; // el access token dura 30 minutos
 const MAX_REINTENTOS_LOGIN = 3;
+// "/" es la página de presentación; con sesión automática se entra directo al panel.
+const RUTA_INICIAL = '/dashboard';
 
 async function iniciarSesion(origen, email, password, fetchFn = fetch) {
   const api = `${origen}/api/v1`;
@@ -76,7 +78,7 @@ class SesionAutomatica {
         return;
       }
       this.reintentosLogin += 1;
-      await contenido.loadURL(this.origen);
+      await contenido.loadURL(`${this.origen}${RUTA_INICIAL}`);
     } catch (error) {
       this.registrar(`Sesión automática: ${error.message}`);
     }
@@ -106,5 +108,5 @@ class SesionAutomatica {
 }
 
 module.exports = {
-  RENOVACION_MS, MAX_REINTENTOS_LOGIN, iniciarSesion, scriptInyeccion, esDelOrigen, SesionAutomatica,
+  RENOVACION_MS, MAX_REINTENTOS_LOGIN, RUTA_INICIAL, iniciarSesion, scriptInyeccion, esDelOrigen, SesionAutomatica,
 };

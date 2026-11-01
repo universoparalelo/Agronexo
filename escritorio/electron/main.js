@@ -5,7 +5,7 @@ const { app, dialog, Menu } = require('electron');
 const {
   HOST, ADMIN_EMAIL, localizarMotor, cargarSecretos, puertoLibre, entornoMotor,
 } = require('./src/entorno');
-const { SesionAutomatica } = require('./src/sesion');
+const { SesionAutomatica, RUTA_INICIAL } = require('./src/sesion');
 const { Postgres } = require('./src/postgres');
 const { lanzar, detener, esperarSalud } = require('./src/procesos');
 const {
@@ -73,7 +73,7 @@ async function arrancar() {
     origen, email: ADMIN_EMAIL, password: secretos.adminPassword, registrar,
   });
   estado.sesion.adjuntar(estado.ventana);
-  await estado.ventana.loadURL(origen);
+  await estado.ventana.loadURL(`${origen}${RUTA_INICIAL}`);
 }
 
 async function apagar() {
