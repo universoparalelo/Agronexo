@@ -18,7 +18,7 @@ greenlet==3.5.6
 # no solo las que tienen columna de geometría). 0.20.0 ya usa la API nueva.
 geoalchemy2==0.20.0
 asyncpg==0.32.0
-alembic==1.20.0
+alembic==1.20.1
 psycopg2-binary==2.9.13
 
 # Auth
