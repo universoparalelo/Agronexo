@@ -129,7 +129,7 @@ Opciones de PyInstaller nuevas para esto: `--add-data migrations;migrations`, `-
 - El lanzador genera una contraseña aleatoria por instalación, la guarda en AppData y la pasa como `ADMIN_PASSWORD`. Hoy la migración `0006` siembra el usuario `admin@agronexo.com` con una contraseña de desarrollo fija si faltan las variables: **en el instalador siempre deben estar definidas.**
 - Pantalla de bienvenida de una sola vez que pide nombre y correo, sin contraseña y sin internet.
 - Decidir el orden: pedir el correo antes de migrar y pasarlo como `ADMIN_EMAIL`, o sembrar un usuario provisorio y actualizarlo con `/auth/me`.
-- Decidir cómo recibe el frontend la sesión automática.
+- ~~Decidir cómo recibe el frontend la sesión automática.~~ Hecho (2026-11-01): el lanzador inicia sesión contra la API y escribe los tokens en el `localStorage` de la ventana (`escritorio/electron/src/sesion.js`); los renueva cada 20 minutos.
 - Definir qué pasa con la bienvenida al importar un backup.
 
 ### Datos del usuario (D5, D7, D11)

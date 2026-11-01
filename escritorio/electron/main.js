@@ -3,8 +3,9 @@ const path = require('node:path');
 const { app, dialog, Menu } = require('electron');
 
 const {
-  HOST, localizarMotor, cargarSecretos, puertoLibre, entornoMotor,
+  HOST, ADMIN_EMAIL, localizarMotor, cargarSecretos, puertoLibre, entornoMotor,
 } = require('./src/entorno');
+const { SesionAutomatica } = require('./src/sesion');
 const { Postgres } = require('./src/postgres');
 const { lanzar, detener, esperarSalud } = require('./src/procesos');
 const {
@@ -13,7 +14,9 @@ const {
 
 const ESPERA_API_MS = 120000;
 
-const estado = { ventana: null, postgres: null, api: null, worker: null, apagando: false };
+const estado = {
+  ventana: null, postgres: null, api: null, worker: null, sesion: null, apagando: false,
+};
 let archivoLog = null;
 
 function registrar(mensaje) {
@@ -66,12 +69,17 @@ async function arrancar() {
     exe: motor.worker, env, archivoLog: path.join(carpetaLogs, 'worker.log'), registrar,
   });
 
+  estado.sesion = new SesionAutomatica({
+    origen, email: ADMIN_EMAIL, password: secretos.adminPassword, registrar,
+  });
+  estado.sesion.adjuntar(estado.ventana);
   await estado.ventana.loadURL(origen);
 }
 
 async function apagar() {
   if (estado.apagando) return;
   estado.apagando = true;
+  if (estado.sesion) estado.sesion.detener();
   const pasos = [
     ['worker', () => detener(estado.worker)],
     ['API', () => detener(estado.api)],
