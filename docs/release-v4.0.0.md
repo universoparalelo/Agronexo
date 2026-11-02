@@ -1274,6 +1274,21 @@ La app sigue funcionando sin internet: los mapas de fondo y las funciones que lo
 esultados_instalador7` (`probar7.ps1`).
 - En la prueba, "Imagen satelital" deshabilitada se veía casi igual que habilitada. Se agregó el estilo `.modo-limite-btn:disabled` (fondo y texto grises, cursor de no permitido); no se volvió a probar con el instalador.
 
+#### Copia de la base antes de actualizar (D11)
+
+Cuando se instala una versión con cambios en la base, las migraciones transforman los datos al abrir la app. Ahora, antes de eso, se guarda una copia y, si la migración falla, se restaura sola.
+
+- **Dónde:** `app/core/copia_migracion.py::actualizar_base`, que `escritorio/api.py` llama en lugar de `aplicar_migraciones` (que sigue igual para Docker y desarrollo). Se activa solo si el lanzador pasa `AGRONEXO_PG_BIN` y `AGRONEXO_COPIAS_DIR`.
+- **Cuándo:** únicamente si la base ya tiene el esquema y su revisión no es la última. Una base nueva no necesita copia, y abrir la misma versión no pisa la copia buena.
+- **Qué guarda:** `pg_dump -Fc` solo de la base (sin los archivos de `archivos/`), en `<datos de la app>\copiasase-anterior.dump` (+ un `.json` con la revisión y la fecha). Una sola copia: se escribe a un temporal y reemplaza a la anterior solo si salió bien.
+- **Si la migración falla:** se recrea la base (`DROP DATABASE … WITH (FORCE)` + `CREATE DATABASE`) y se restaura con `pg_restore`; se deja `copiasctualizacion-fallida.json` y la API termina con error. El lanzador (`src/copias.js::describirFallo`) lee ese aviso y muestra "AgroNexo no pudo actualizarse. Tus datos quedaron como estaban antes de actualizar. Volvé a instalar la versión anterior…"; si no hay aviso muestra el error de siempre. El aviso se borra cuando un arranque sale bien.
+- **Si no se puede hacer la copia:** no se toca la base (aviso `sin_copia`: "¿falta espacio en el disco?").
+- **Limitación:** la copia es un volcado de Postgres, no un backup de la app: no se restaura con "Importar" (hace falta `pg_restore`). Por eso la restauración automática es lo que cubre el caso de falla.
+- **Probado:** 7 tests de Python con base real (`tests/test_copia_migracion.py`: base nueva sin copia, migración real con copia, misma versión sin pisar, falla con restauración, sin copia no se toca, variables ausentes) y 6 tests nuevos del lanzador (`test/copias.test.js`, 18 en total). En Windows Sandbox con el instalador (`probar9.ps1`, resultados en `trabajo-escritorioesultados_instalador9`): un arranque normal no crea copia; con la revisión de la base puesta un paso atrás (la migración 0028 ya estaba aplicada, así que volver a correrla falla de verdad) se hizo la copia, la migración falló, la base se recreó y se restauró (el lote creado antes sigue ahí y la revisión vuelve a 0027), se dejó el aviso y el cuadro mostró el mensaje correcto.
+- **Un error que encontró la prueba:** la primera vez el cuadro mostraba el mensaje genérico porque un reemplazo mío en `main.js` no se había aplicado; se corrigió moviendo la lógica a `describirFallo` con tests.
+- **CI:** nuevo paso que instala `postgresql-client-16` y corre los tests de la copia; el job del lanzador corre también `copias.test.js`.
+- **No probado:** una migración real que salga bien dentro del instalador (en el Sandbox solo se probó la falla; el caso exitoso está en los tests de Python) ni la restauración a mano.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
