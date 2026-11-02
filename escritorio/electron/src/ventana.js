@@ -25,6 +25,7 @@ function crearVentana() {
     show: false,
     backgroundColor: '#ffffff',
     title: 'AgroNexo',
+    icon: path.join(__dirname, '..', 'recursos', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

@@ -25,6 +25,7 @@
       "main.js",
       "splash.html",
       "src/**/*",
+      "recursos/icon.ico",
       "package.json"
     ],
     "extraResources": [
@@ -38,6 +39,7 @@
       }
     ],
     "win": {
+      "icon": "recursos/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -46,7 +48,7 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "signExecutable": false
     },
     "nsis": {
       "oneClick": false,
