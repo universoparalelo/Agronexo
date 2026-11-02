@@ -399,6 +399,15 @@ def test_sumar_no_pisa_el_perfil_que_ya_esta_completo():
     assert _uno("SELECT nombre_empresa FROM usuarios WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"]) == "Empresa del backup"
 
 
+def test_reemplazar_no_cambia_el_nombre_del_usuario():
+    _sembrar()
+    _sql("UPDATE usuarios SET nombre = 'Admin' WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"])
+    backup = _exportar()
+    _sql("UPDATE usuarios SET nombre = 'Ana Perez' WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"])
+    _importar(backup, "reemplazar")
+    assert _uno("SELECT nombre FROM usuarios WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"]) == "Ana Perez"
+
+
 # ── Avisos y errores ──────────────────────────────────────────────────
 
 def test_avisa_si_el_backup_es_de_una_version_mas_nueva_pero_deja_importar():

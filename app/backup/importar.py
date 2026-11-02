@@ -273,7 +273,9 @@ async def _aplicar_perfil(db: AsyncSession, ctx: _Contexto, leido: Leido, modo: 
     perfil["logo_empresa_key"] = ctx.clave(perfil.get("logo_empresa_key"))
     cambios = {
         campo: perfil[campo] for campo in CAMPOS_PERFIL
-        if perfil.get(campo) is not None and (modo == "reemplazar" or actual[campo] in (None, ""))
+        # El nombre es el que se escribió en la bienvenida de esta instalación; un
+        # backup hecho antes de ella trae "Admin" y lo pisaría.
+        if campo != "nombre" and perfil.get(campo) is not None and (modo == "reemplazar" or actual[campo] in (None, ""))
     }
     valores, _ = valores_para_insertar(t, cambios)
     producto_id = await _id_de_producto(db, perfil.get("producto_habitual_ref"))

@@ -1243,7 +1243,7 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 - *PC nueva con backup:* se borra la carpeta de datos, la bienvenida aparece, se completa y se importa el backup del paso anterior (reemplazar): el lote vuelve, el correo real se conserva y "sumar" después no duplica. Reinicia directo al panel.
 - **Hallazgo:** como el nombre del perfil viaja en el backup, "reemplazar" con un backup hecho *antes* de la bienvenida deja el nombre en "Admin" y pisa el que la persona escribió. Con un backup hecho después de la bienvenida (el caso normal) trae el nombre real. Además la ventana abierta sigue mostrando el nombre anterior hasta que se recarga o se reinicia la app.
 
-**Pendiente de decidir:** si "reemplazar" debe conservar el nombre y el correo de la bienvenida cuando el backup trae el nombre provisorio "Admin".
+**Decidido:** importar un backup (reemplazar o sumar) no toca el nombre del usuario: `_aplicar_perfil` en `app/backup/importar.py` ignora el campo `nombre`; el resto del perfil (empresa, CUIT, logo, preferencias) sigue viajando. Test: `test_reemplazar_no_cambia_el_nombre_del_usuario` en `tests/test_backup.py` (27 tests del backup pasan).
 
 **CI:** se agregó el job `test-lanzador` (corre `node --test test/sesion.test.js`, sin instalar dependencias).
 
