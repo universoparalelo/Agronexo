@@ -7,6 +7,8 @@ const path = require('node:path');
 const HOST = '127.0.0.1';
 const BASE_DE_DATOS = 'agronexo';
 const USUARIO_PG = 'agronexo';
+// Cuenta local única de la versión de escritorio; la crea la migración 0006 con este correo.
+const ADMIN_EMAIL = 'admin@agronexo.com';
 
 // Instalada, el motor viaja dentro de la carpeta de la app (resources\motor) con la misma
 // estructura que tiene en trabajo-escritorio\, que es de donde lo toma el modo desarrollo.
@@ -79,6 +81,7 @@ function entornoMotor({ secretos, puertoPg, puertoApi, carpetaArchivos, frontend
     POSTGRES_PASSWORD: secretos.pgPassword,
     CELERY_BROKER_URL: `sqla+postgresql+psycopg2://${credenciales}`,
     CELERY_RESULT_BACKEND: `db+postgresql+psycopg2://${credenciales}`,
+    ADMIN_EMAIL,
     JWT_SECRET_KEY: secretos.jwtSecret,
     STORAGE_BACKEND: 'disk',
     STORAGE_PATH: carpetaArchivos,
@@ -89,6 +92,6 @@ function entornoMotor({ secretos, puertoPg, puertoApi, carpetaArchivos, frontend
 }
 
 module.exports = {
-  HOST, BASE_DE_DATOS, USUARIO_PG,
+  HOST, BASE_DE_DATOS, USUARIO_PG, ADMIN_EMAIL,
   localizarMotor, cargarSecretos, puertoLibre, entornoBase, entornoMotor,
 };

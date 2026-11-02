@@ -1175,6 +1175,24 @@ El lanzador ahora se empaqueta en un `Setup.exe` de unos 434 MB con electron-bui
 
 **Pendiente:** ícono propio, firma de código, probar instalador y desinstalador en una Windows limpia, sesión automática (D4), CSP y `fuses` de Electron, DLL de GTK más nuevas y avisos de licencia.
 
+#### Sesión automática en el lanzador (D4)
+**Fecha:** 2026-11-01
+**Rama:** `feat/sesion-automatica`
+
+El lanzador inicia sesión solo con la cuenta local (`admin@agronexo.com` y la contraseña aleatoria de `secretos.json`) y deja `access_token`, `refresh_token` y `usuario` en el `localStorage` de la ventana (`escritorio/electron/src/sesion.js`). El usuario ya no ve el login. Probado con 8 tests de `node:test` (servidor HTTP falso) y abriendo la app en modo desarrollo en la máquina de Denise: entra directo al Dashboard con la sesión puesta y el cierre apaga todo. También se probó el instalador en Windows Sandbox (instalación silenciosa en una Windows limpia): la ventana abre en `/dashboard` con la sesión puesta, el login con clave falsa devuelve 401 y el login real y la lista de lotes responden. No se probó la renovación a los 20 minutos ni el desinstalador.
+
+**Decisiones tomadas:**
+- Solo se escribe en páginas del origen de la API local; nunca en otra URL que llegue a la ventana. Los valores se pasan con `JSON.stringify`, y ni la contraseña ni los tokens se registran en el log.
+- El token dura 30 minutos: cada 20 minutos se vuelve a iniciar sesión y se actualiza el `localStorage` sin recargar (el cliente axios lee el token en cada pedido).
+- La ventana abre en `/dashboard` y no en `/`, que es la página de presentación (con "Ingresar"); la primera versión volvía a `/` y quedaba en la presentación. Se vio al probar.
+- Si la app termina en `/login` (por ejemplo, un 401 que recarga la página), se inyecta la sesión y se vuelve a `/dashboard`; hasta 3 veces seguidas, para no entrar en un bucle.
+- El correo del usuario local pasa a ser la constante `ADMIN_EMAIL` del lanzador, que además la pasa explícita a la API (antes dependía del valor por defecto de la migración `0006`). Sigue siendo provisorio hasta la pantalla de bienvenida (D10).
+
+**Error encontrado y corregido — contraseña incorrecta recargaba el login sin avisar**
+El interceptor de `frontend/src/api/client.js` trataba como sesión vencida cualquier 401, también el de `/auth/login`: borraba la sesión y recargaba la página, y el mensaje de error nunca se veía. Ahora el 401 del propio login no recarga.
+
+**Pendiente:** la pantalla de bienvenida (D10) y la importación de backup (D5) deben reiniciar la contraseña de la cuenta local; si se borra solo `secretos.json` y queda `pgdata`, la base no se puede abrir (la contraseña de Postgres sale de ese archivo).
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
