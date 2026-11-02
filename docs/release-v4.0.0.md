@@ -1252,6 +1252,15 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 - Un backup no trae el correo: en una PC nueva se hace primero la bienvenida y después se importa.
 - Para una instalación que ya tenía datos con `admin@agronexo.com`, la bienvenida aparece en el próximo arranque tras actualizar.
 
+#### Ícono de la app
+
+Ícono propio en lugar del de Electron: el isotipo de AgroNexo (de `Logos/svg_isotipo/agronexo-isotipo-blanco-color.svg`) en blanco sobre un cuadrado de esquinas redondeadas verde bosque `#1F3A2A`, ocupando el 82 % del cuadrado y corrido un poco a la derecha y arriba para que el peso visual (el aro, abajo a la izquierda) quede en el centro. Elegido por Denise sobre otras tres alternativas (hexágono con la hoja, isotipo sobre fondo hueso).
+
+- `escritorio/electron/recursos/icon.ico` con 16, 24, 32, 48, 64, 128 y 256 px. Está en `recursos/` y no en `build/` porque `build/` está en `.gitignore`.
+- `package.json`: `win.icon`, y `build.files` incluye el `.ico` para la ventana. `src/ventana.js` lo pasa como `icon` de la `BrowserWindow`.
+- `signAndEditExecutable: false` se cambió por `signExecutable: false`: el primero también salteaba la edición del `.exe`, que se quedaba con el ícono de Electron. Con el segundo solo se saltea la firma.
+- Verificado extrayendo el ícono del `.exe` instalado y del instalador: los dos muestran el isotipo nuevo.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
