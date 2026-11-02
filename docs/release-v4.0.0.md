@@ -1289,6 +1289,19 @@ Cuando se instala una versión con cambios en la base, las migraciones transform
 - **CI:** nuevo paso que instala `postgresql-client-16` y corre los tests de la copia; el job del lanzador corre también `copias.test.js`.
 - **No probado:** una migración real que salga bien dentro del instalador (en el Sandbox solo se probó la falla; el caso exitoso está en los tests de Python) ni la restauración a mano.
 
+#### Prueba final del instalador (2026-11-02)
+
+Instalador armado desde `main` (con #152 a #155) y probado en Windows Sandbox con red, cortándola a mitad de la prueba (`probar10.ps1`, resultados y capturas en `trabajo-escritorioesultados_instalador10`). Todo pasó a la primera:
+
+- Instalación silenciosa (código 0), primer arranque con la bienvenida y entrada al panel.
+- Un lote nuevo con cultivo (soja) y un GeoTIFF real (`Mapas\sintetico\lote_prueba_con_problemas.tif`, 3,5 MB): el análisis terminó en 7 s con 3 zonas vectorizadas, el diagnóstico respondió, el lote recibió su límite del GeoTIFF y el reporte PDF salió (32 910 bytes, empieza con `%PDF`).
+- Pantalla de resultados con internet: mapa de OpenStreetMap con las zonas encima.
+- Backup: exportó 1 lote y 1 vuelo (3,5 MB); importarlo en "sumar" no duplicó nada.
+- Se apagaron los adaptadores de red del Sandbox con la app abierta: apareció "Modo sin conexión", no quedó ningún mosaico, las zonas se siguen dibujando sobre el color liso y el reporte PDF salió igual (mismo tamaño, 32 910 bytes).
+- Se cerró y se volvió a abrir: entra directo al panel (sin bienvenida), el lote sigue y no se hizo copia de la base (no había nada que actualizar).
+
+Con esto, el empaquetado queda cerrado para el alcance de proyecto académico: no se firma el instalador, no se actualizan las librerías GTK ni se hace la fase 2 del lanzador, porque la app no se va a repartir. Si cambia el alcance, esos tres puntos se retoman.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
