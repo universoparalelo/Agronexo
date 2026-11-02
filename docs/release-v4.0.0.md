@@ -1195,6 +1195,33 @@ El interceptor de `frontend/src/api/client.js` trataba como sesión vencida cual
 
 ---
 
+#### Exportar e importar backup (D5, D14, D15, D16)
+**Fecha:** 2026-11-01
+**Rama:** `feat/backup-exportar-importar`
+
+Nueva tarjeta **"Copia de seguridad"** en Mi perfil con **Exportar todo** (genera un `.zip` y lo descarga) e **Importar** (elige un `.zip`, muestra qué trae y deja elegir entre **sumar** o **reemplazar todo**). Código en `app/backup/` (`filas.py`, `archivos.py`, `exportar.py`, `importar.py`, `router.py`), endpoints bajo `/api/v1/backup` y `frontend/src/components/CopiaSeguridad.jsx`. 26 tests en `tests/test_backup.py` (ya agregados al CI), que corren en una base propia que crean y borran. Probado además a mano en el navegador integrado (exportar, importar y reemplazar con confirmación). También se probó con el instalador en Windows Sandbox (Windows limpia): se creó un lote y un avatar, se exportó, se descargó el `.zip`, se borró el lote, y "reemplazar" recuperó el lote y el archivo (con copia previa); "sumar" después no duplicó nada. La prueba usó la API del programa instalado; la tarjeta de Mi perfil se vio en el navegador con la API local, no dentro de la app instalada. Y con el GeoTIFF real de 5,3 GB (`Don Victorio_modificado.tif`, 4,98 GB ya guardado) en la app de escritorio en modo desarrollo: se subió, se procesó (228 s), se exportó (6 s, `.zip` de 4,98 GB), se borró el lote junto con el original, y "reemplazar" lo recuperó en 22 s con `original.tif` idéntico (SHA-1) y el diagnóstico funcionando; "sumar" después no insertó nada y omitió los 2 archivos. El pico de memoria de la API fue de 199 MB, es decir que los archivos no se cargan en memoria. Falta probar un backup con varios vuelos.
+
+**Aviso para probar a mano con la app dentro de Claude:** si el lanzador se abre desde la aplicación de Claude para escritorio, Windows redirige `%APPDATA%` a una carpeta del paquete de Claude y el worker falla con "Clave de almacenamiento fuera de la carpeta de datos" (la ruta de un archivo que ya existe se resuelve a otra carpeta). No pasa en una instalación normal (se vio en la Sandbox). Se evita abriendo el lanzador con `--user-data-dir=` hacia una carpeta fuera de `AppData`.
+
+**Qué lleva el `.zip`:** `manifiesto.json` (formato, versión de la app, revisión de la base, fecha, conteos), `datos/*.jsonl` (lotes, cultivos, vuelos, análisis de índices, diagnósticos, revisiones y precios cargados por el usuario), `datos/perfil.json` (sin correo ni contraseña) y `archivos/` (GeoTIFF originales, resultados, avatar y logo).
+
+**Decisiones tomadas:**
+- Los datos van en JSON y no como volcado de Postgres: la API empaquetada no trae `pg_dump` y "sumar" necesita leer registro por registro. Las columnas se leen del modelo, así que una columna nueva viaja sin tocar el código.
+- **Reemplazar:** pide confirmación, guarda antes una copia de lo actual (`copias/antes-de-importar-*.zip`, se conservan las últimas 2) y borra los archivos viejos recién después de confirmar la base.
+- **Sumar:** cada registro se reconoce por su id (diagnósticos por vuelo; revisiones por vuelo y zona; índices por vuelo e índice). Si está en los dos lados gana el lote, el diagnóstico o la revisión más reciente; los vuelos, cultivos e índices no tienen fecha de edición y se deja el que ya estaba, salvo que se dio de baja en el backup.
+- Todo lo del backup pasa a ser del usuario de esta instalación (se reescriben `usuario_id`, `subido_por_id` y el primer tramo de las claves de archivo). El correo, la contraseña y el id nunca se tocan. En "sumar" el perfil solo completa lo que está vacío; en "reemplazar" se copia.
+- Los productos del catálogo se siembran con ids distintos en cada instalación: los precios y el "producto habitual" viajan con nombre, tipo y causa y se buscan por eso. Los que no se encuentran se omiten y se avisa.
+- Backup de una versión más nueva (D16): se importa con un aviso; backup más viejo: los campos que faltan quedan con el valor por defecto. Un formato de `.zip` más nuevo se rechaza.
+- La descarga usa un enlace con token de 10 minutos (igual que los archivos) porque el navegador no puede mandar el encabezado de autenticación en un enlace.
+
+**Limitaciones conocidas:**
+- Exportar e importar corren dentro del pedido HTTP, sin barra de progreso: con ortomosaicos de varios GB pueden tardar minutos.
+- Con almacenamiento MinIO (Docker) los archivos viejos no se borran al reemplazar; la función es para el almacenamiento en disco de la app de escritorio.
+- Los vuelos que estaban "procesando" al exportar quedan así: la tarea de Celery no viaja en el backup.
+- La pantalla de bienvenida (D10) todavía no existe: el nombre del perfil viene del backup al reemplazar.
+
+---
+
 ### Ajustes de diseño (HU-R4-13)
 
 Cambios chicos de interfaz de la tarjeta HU-R4-13, uno por fila.

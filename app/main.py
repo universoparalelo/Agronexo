@@ -40,6 +40,7 @@ async def health_db():
 from app.ahorro.router import router as ahorro_router
 from app.archivos.router import router as archivos_router
 from app.auth.router import router as auth_router
+from app.backup.router import router as backup_router
 from app.diagnostico.router import estadios_router, productos_router, router as diagnostico_router
 from app.ingesta.router import router as ingesta_router
 from app.lotes.router import router as lotes_router
@@ -55,6 +56,7 @@ app.include_router(estadios_router, prefix="/api/v1/estadios-fenologicos", tags=
 app.include_router(reportes_router, prefix="/api/v1/lotes", tags=["reportes"])
 app.include_router(ordenes_trabajo_router, prefix="/api/v1/lotes", tags=["ordenes-trabajo"])
 app.include_router(ahorro_router, prefix="/api/v1/lotes", tags=["ahorro"])
+app.include_router(backup_router, prefix="/api/v1/backup", tags=["backup"])
 app.include_router(archivos_router, prefix="/api/v1/archivos", tags=["archivos"])
 
 if settings.frontend_dir:
