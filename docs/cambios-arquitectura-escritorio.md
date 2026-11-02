@@ -133,7 +133,7 @@ Opciones de PyInstaller nuevas para esto: `--add-data migrations;migrations`, `-
 - Definir qué pasa con la bienvenida al importar un backup.
 
 ### Datos del usuario (D5, D7, D11)
-- Endpoints y botones "Exportar todo" e "Importar": un `.zip` con el volcado de la base y los archivos.
+- ~~Endpoints y botones "Exportar todo" e "Importar"~~ Hecho (2026-11-01, D14 a D16): `app/backup/` y la tarjeta "Copia de seguridad" de Mi perfil. El `.zip` lleva los datos en JSON (no un volcado de Postgres) y los archivos.
 - Casilla "borrar también mis datos" en el desinstalador, desmarcada por defecto.
 - Copia automática de la base antes de `alembic upgrade head`, con las últimas 2 o 3 copias; falta decidir dónde se guardan y cómo se restauran.
 

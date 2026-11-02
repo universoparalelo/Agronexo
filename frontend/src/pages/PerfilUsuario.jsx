@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import PanelLayout from '../components/PanelLayout'
+import CopiaSeguridad from '../components/CopiaSeguridad'
 import {
   actualizarPerfil,
   cambiarPassword,
@@ -445,6 +446,8 @@ export default function PerfilUsuario() {
                 </div>
               </div>
             </form>
+
+            <CopiaSeguridad />
           </div>
         </div>
       </main>

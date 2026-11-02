@@ -147,6 +147,7 @@ agronexo/
 │   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
 │   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
 │   ├── archivos/           # Descarga de archivos con token firmado (almacenamiento en disco)
+│   ├── backup/             # Exportar todo / Importar (reemplazar o sumar) en un .zip, desde Mi perfil
 │   ├── core/               # Config (pydantic-settings), BD, almacenamiento (MinIO o disco), migraciones al arrancar
 │   ├── frontend.py         # Entrega el frontend compilado (app de escritorio, con FRONTEND_DIR)
 │   └── main.py             # Punto de entrada FastAPI

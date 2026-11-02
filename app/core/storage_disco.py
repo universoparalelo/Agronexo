@@ -62,6 +62,11 @@ def upload_geotiff_stream(
     return key
 
 
+def upload_stream(key: str, stream) -> str:
+    _escribir_atomico(ruta_de(key), lambda f: shutil.copyfileobj(stream, f, length=8 * 1024 * 1024))
+    return key
+
+
 def download_geotiff_to_file(key: str, destino: str) -> str:
     shutil.copyfile(ruta_de(key), destino)
     return destino
