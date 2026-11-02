@@ -7,6 +7,9 @@ const {
 } = require('./src/entorno');
 const { SesionAutomatica, RUTA_INICIAL } = require('./src/sesion');
 const { Postgres } = require('./src/postgres');
+const {
+  carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso,
+} = require('./src/copias');
 const { lanzar, detener, esperarSalud } = require('./src/procesos');
 const {
   bloquearPermisos, restringirNavegacion, crearVentana, pantallaInicial,
@@ -53,7 +56,13 @@ async function arrancar() {
   registrar(`Postgres listo en el puerto ${puertoPg}`);
 
   const env = entornoMotor({
-    secretos, puertoPg, puertoApi, carpetaArchivos, frontend: motor.frontend,
+    secretos,
+    puertoPg,
+    puertoApi,
+    carpetaArchivos,
+    frontend: motor.frontend,
+    pgBin: motor.pgBin,
+    carpetaCopias: carpetaCopias(carpetaDatos),
   });
   estado.api = lanzar({
     exe: motor.api,
@@ -63,6 +72,7 @@ async function arrancar() {
   });
   await esperarSalud(`${origen}/api/v1/health`, { timeoutMs: ESPERA_API_MS, proceso: estado.api });
   registrar(`API lista en ${origen}`);
+  borrarAviso(carpetaCopias(carpetaDatos));
 
   // El worker arranca después de la API para no competir con las migraciones.
   estado.worker = lanzar({
