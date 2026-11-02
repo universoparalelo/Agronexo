@@ -1393,3 +1393,9 @@
 .evolucion-causas { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.88rem; color: #374151; }
 .evolucion-causas li::first-letter { text-transform: uppercase; }
 .evolucion-causas strong { color: #1a3a2a; }
+
+/* Copia de seguridad (Mi perfil) */
+.backup-lista { margin: 0.5rem 0 1rem; padding-left: 1.25rem; line-height: 1.6; }
+.backup-modos { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+.backup-modo { display: flex; gap: 0.75rem; align-items: flex-start; cursor: pointer; }
+.backup-modo input { margin-top: 0.3rem; }
