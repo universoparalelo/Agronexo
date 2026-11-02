@@ -67,7 +67,9 @@ function entornoBase() {
   );
 }
 
-function entornoMotor({ secretos, puertoPg, puertoApi, carpetaArchivos, frontend }) {
+function entornoMotor({
+  secretos, puertoPg, puertoApi, carpetaArchivos, frontend, pgBin, carpetaCopias,
+}) {
   const credenciales = `${USUARIO_PG}:${secretos.pgPassword}@${HOST}:${puertoPg}/${BASE_DE_DATOS}`;
   return {
     ...entornoBase(),
@@ -89,6 +91,8 @@ function entornoMotor({ secretos, puertoPg, puertoApi, carpetaArchivos, frontend
     FRONTEND_DIR: frontend,
     AGRONEXO_HOST: HOST,
     AGRONEXO_PORT: String(puertoApi),
+    AGRONEXO_PG_BIN: pgBin,
+    AGRONEXO_COPIAS_DIR: carpetaCopias,
   };
 }
 

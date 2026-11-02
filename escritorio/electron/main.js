@@ -7,6 +7,9 @@ const {
 } = require('./src/entorno');
 const { SesionAutomatica, RUTA_INICIAL } = require('./src/sesion');
 const { Postgres } = require('./src/postgres');
+const {
+  carpetaCopias, borrarAviso, describirFallo,
+} = require('./src/copias');
 const { lanzar, detener, esperarSalud } = require('./src/procesos');
 const {
   bloquearPermisos, restringirNavegacion, crearVentana, pantallaInicial,
@@ -53,7 +56,13 @@ async function arrancar() {
   registrar(`Postgres listo en el puerto ${puertoPg}`);
 
   const env = entornoMotor({
-    secretos, puertoPg, puertoApi, carpetaArchivos, frontend: motor.frontend,
+    secretos,
+    puertoPg,
+    puertoApi,
+    carpetaArchivos,
+    frontend: motor.frontend,
+    pgBin: motor.pgBin,
+    carpetaCopias: carpetaCopias(carpetaDatos),
   });
   estado.api = lanzar({
     exe: motor.api,
@@ -63,6 +72,7 @@ async function arrancar() {
   });
   await esperarSalud(`${origen}/api/v1/health`, { timeoutMs: ESPERA_API_MS, proceso: estado.api });
   registrar(`API lista en ${origen}`);
+  borrarAviso(carpetaCopias(carpetaDatos));
 
   // El worker arranca después de la API para no competir con las migraciones.
   estado.worker = lanzar({
@@ -96,10 +106,12 @@ async function apagar() {
 
 async function fallar(error) {
   registrar(`Error al iniciar: ${error.stack || error.message}`);
-  dialog.showErrorBox(
-    'AgroNexo no pudo iniciar',
-    `${error.message}\n\nLos registros están en:\n${path.dirname(archivoLog || app.getPath('userData'))}`,
-  );
+  const { titulo, mensaje } = describirFallo({
+    error,
+    carpeta: carpetaCopias(app.getPath('userData')),
+    carpetaLogs: path.dirname(archivoLog || app.getPath('userData')),
+  });
+  dialog.showErrorBox(titulo, mensaje);
   await apagar();
   app.exit(1);
 }

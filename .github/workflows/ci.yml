@@ -118,6 +118,23 @@ jobs:
       - name: Tests pantalla de bienvenida
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_bienvenida.py -v
 
+      # pg_dump y pg_restore tienen que ser de la misma versión que el servidor (16) y el
+      # runner no la trae: se usan las de la imagen del servicio, que ya está descargada.
+      - name: Preparar pg_dump y pg_restore (versión 16)
+        run: |
+          mkdir -p "$RUNNER_TEMP/pgbin"
+          for herramienta in pg_dump pg_restore; do
+            {
+              echo '#!/bin/sh'
+              echo "exec docker run --rm --network host --user \"$(id -u):$(id -g)\" -e PGPASSWORD -v /tmp:/tmp postgis/postgis:16-3.4 $herramienta \"\$@\""
+            } > "$RUNNER_TEMP/pgbin/$herramienta"
+            chmod +x "$RUNNER_TEMP/pgbin/$herramienta"
+          done
+          echo "AGRONEXO_PG_BIN=$RUNNER_TEMP/pgbin" >> "$GITHUB_ENV"
+
+      - name: Tests copia de la base antes de actualizar
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_copia_migracion.py -v
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI
@@ -219,6 +236,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Tests de la sesión automática
+      - name: Tests del lanzador (sesión automática y copias)
         working-directory: escritorio/electron
-        run: node --test test/sesion.test.js
+        run: node --test test/sesion.test.js test/copias.test.js
