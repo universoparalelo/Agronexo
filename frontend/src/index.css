@@ -2390,8 +2390,15 @@ body {
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.modo-limite-btn:hover {
+.modo-limite-btn:hover:not(:disabled) {
   border-color: #27500a;
+}
+
+.modo-limite-btn:disabled:not(.modo-limite-btn--activo) {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
 }
 
 .modo-limite-btn--activo {
