@@ -6,8 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.models import Usuario
-from app.auth.schemas import PerfilUpdateRequest, RegisterRequest
+from app.auth.schemas import BienvenidaRequest, PerfilUpdateRequest, RegisterRequest
 from app.core.config import settings
+
+# Cuenta que siembra la migración 0006. El lanzador de escritorio inicia sesión con ella
+# hasta que la persona completa la bienvenida y la cuenta pasa a tener su correo real.
+EMAIL_PROVISORIO = "admin@agronexo.com"
 
 
 # Se llama a bcrypt directo (no vía passlib) porque passlib==1.7.4 (sin
@@ -61,8 +65,18 @@ async def obtener_usuario_por_email(db: AsyncSession, email: str) -> Usuario | N
     return result.scalar_one_or_none()
 
 
+async def obtener_cuenta_local(db: AsyncSession) -> Usuario | None:
+    result = await db.execute(select(Usuario).order_by(Usuario.created_at).limit(1))
+    return result.scalar_one_or_none()
+
+
 async def autenticar_usuario(db: AsyncSession, email: str, password: str) -> Usuario | None:
     usuario = await obtener_usuario_por_email(db, email)
+    # Tras la bienvenida la cuenta local ya no se llama admin@agronexo.com, pero el lanzador de
+    # escritorio sigue entrando con ese correo: si el lanzador no llegara a enterarse del cambio
+    # quedaría afuera para siempre.
+    if not usuario and settings.modo_escritorio and email == EMAIL_PROVISORIO:
+        usuario = await obtener_cuenta_local(db)
     if not usuario:
         return None
     if not verify_password(password, usuario.hashed_password):
@@ -75,6 +89,32 @@ async def autenticar_usuario(db: AsyncSession, email: str, password: str) -> Usu
 async def actualizar_perfil(db: AsyncSession, usuario: Usuario, data: PerfilUpdateRequest) -> Usuario:
     for campo, valor in data.model_dump(exclude_unset=True).items():
         setattr(usuario, campo, valor)
+    await db.commit()
+    await db.refresh(usuario)
+    return usuario
+
+
+class BienvenidaNoPendiente(Exception):
+    pass
+
+
+class CorreoNoDisponible(Exception):
+    pass
+
+
+def bienvenida_pendiente(usuario: Usuario) -> bool:
+    return settings.modo_escritorio and usuario.email == EMAIL_PROVISORIO
+
+
+async def completar_bienvenida(db: AsyncSession, usuario: Usuario, data: BienvenidaRequest) -> Usuario:
+    if not bienvenida_pendiente(usuario):
+        raise BienvenidaNoPendiente()
+    email = data.email.lower()
+    existente = await obtener_usuario_por_email(db, email)
+    if email == EMAIL_PROVISORIO or (existente and existente.id != usuario.id):
+        raise CorreoNoDisponible()
+    usuario.email = email
+    usuario.nombre = data.nombre
     await db.commit()
     await db.refresh(usuario)
     return usuario

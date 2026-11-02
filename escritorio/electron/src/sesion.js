@@ -57,6 +57,21 @@ class SesionAutomatica {
     this.datos = await iniciarSesion(this.origen, this.email, this.password, this.fetchFn);
   }
 
+  // La bienvenida cambia nombre y correo desde la ventana: se relee el usuario antes de
+  // inyectar para no pisar el localStorage con los datos viejos. El login sigue siendo con
+  // el correo provisorio (la API lo acepta como alias de la cuenta local).
+  async sincronizarUsuario() {
+    if (!this.datos) return;
+    try {
+      const respuesta = await this.fetchFn(`${this.origen}/api/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${this.datos.accessToken}` },
+      });
+      if (respuesta.ok) this.datos.usuario = await respuesta.json();
+    } catch (error) {
+      this.registrar(`No se pudo releer el usuario: ${error.message}`);
+    }
+  }
+
   // Solo escribe en páginas de la API local; nunca en otra URL que llegue a la ventana.
   async inyectar(contenido) {
     if (!this.datos || !esDelOrigen(contenido.getURL(), this.origen)) return false;
@@ -67,6 +82,7 @@ class SesionAutomatica {
   async alCargar(contenido) {
     try {
       if (!this.datos) await this.renovar();
+      else await this.sincronizarUsuario();
       if (!(await this.inyectar(contenido))) return;
       const { pathname } = new URL(contenido.getURL());
       if (pathname !== '/login') {

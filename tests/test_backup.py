@@ -224,7 +224,7 @@ def test_exportar_incluye_datos_y_archivos():
     assert manifiesto["conteos"]["lotes"] == 1 and manifiesto["conteos"]["vuelos"] == 1
     assert manifiesto["conteos"]["precios_productos"] == 1
     assert manifiesto["archivos"] == 2 and manifiesto["archivos_faltantes"] == []
-    assert "hashed_password" not in perfil and _EMAIL not in perfil
+    assert "hashed_password" not in perfil and _EMAIL not in perfil and "nombre" not in perfil
 
 
 def test_exportar_anota_los_archivos_que_faltan():
@@ -388,15 +388,16 @@ def test_sumar_da_de_baja_lo_que_se_dio_de_baja_en_el_backup():
     assert resumen["tablas"]["vuelos"]["actualizados"] == 1
 
 
-def test_sumar_no_pisa_el_perfil_que_ya_esta_completo():
+def test_importar_no_toca_el_perfil_del_usuario():
     _sembrar()
-    _sql("UPDATE usuarios SET nombre_empresa = 'Empresa del backup' WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"])
+    uid = _estado["usuario_id"]
+    _sql("UPDATE usuarios SET nombre = 'Admin', nombre_empresa = 'Empresa del backup' WHERE id = CAST(:u AS uuid)", u=uid)
     backup = _exportar()
-    _sql("UPDATE usuarios SET nombre_empresa = 'Empresa local' WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"])
-    _importar(backup, "sumar")
-    assert _uno("SELECT nombre_empresa FROM usuarios WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"]) == "Empresa local"
-    _importar(backup, "reemplazar")
-    assert _uno("SELECT nombre_empresa FROM usuarios WHERE id = CAST(:u AS uuid)", u=_estado["usuario_id"]) == "Empresa del backup"
+    _sql("UPDATE usuarios SET nombre = 'Ana Perez', nombre_empresa = 'Empresa local' WHERE id = CAST(:u AS uuid)", u=uid)
+    for modo in ("sumar", "reemplazar"):
+        _importar(backup, modo)
+        assert _uno("SELECT nombre FROM usuarios WHERE id = CAST(:u AS uuid)", u=uid) == "Ana Perez"
+        assert _uno("SELECT nombre_empresa FROM usuarios WHERE id = CAST(:u AS uuid)", u=uid) == "Empresa local"
 
 
 # ── Avisos y errores ──────────────────────────────────────────────────

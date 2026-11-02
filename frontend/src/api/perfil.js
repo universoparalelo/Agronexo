@@ -6,6 +6,9 @@ export const obtenerPerfil = () =>
 export const actualizarPerfil = (data) =>
   client.put('/auth/me', data).then(r => r.data)
 
+export const completarBienvenida = (data) =>
+  client.post('/auth/me/bienvenida', data).then(r => r.data)
+
 export const cambiarPassword = (passwordActual, passwordNueva) =>
   client.post('/auth/me/password', {
     password_actual: passwordActual,

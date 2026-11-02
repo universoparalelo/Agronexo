@@ -35,14 +35,6 @@ TABLAS = [
 COLUMNAS_USUARIO = {"usuario_id", "subido_por_id"}
 COLUMNAS_CLAVE_ARCHIVO = {"archivo_original", "geojson_key"}
 
-# El perfil (tabla usuarios) viaja aparte: el correo, la contraseña y el id son
-# de la instalación y no se tocan al importar.
-CAMPOS_PERFIL = [
-    "nombre", "descripcion", "cuit", "telefono_contacto", "matricula_aplicador",
-    "nombre_empresa", "avatar_key", "logo_empresa_key", "indice_preferido",
-    "unidad_area_preferida",
-]
-
 
 def tabla(nombre: str) -> Table:
     return Base.metadata.tables[nombre]

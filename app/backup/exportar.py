@@ -10,8 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.auth.models import Usuario
 from app.backup import archivos
 from app.backup.filas import (
-    CAMPOS_PERFIL, COLUMNAS_CLAVE_ARCHIVO, FORMATO, TABLAS, a_linea, columnas_select,
-    fila_a_dict, tabla,
+    COLUMNAS_CLAVE_ARCHIVO, FORMATO, TABLAS, a_linea, columnas_select, fila_a_dict, tabla,
 )
 
 APP_VERSION = "4.0.0"
@@ -46,41 +45,29 @@ async def _filas(db: AsyncSession, nombre: str) -> list[dict]:
     return filas
 
 
-async def _perfil(db: AsyncSession, usuario: Usuario) -> dict:
-    fila = (await db.execute(
-        select(*columnas_select(tabla("usuarios"), set(CAMPOS_PERFIL) | {"id", "producto_habitual_id"}))
-        .where(tabla("usuarios").c.id == usuario.id)
-    )).first()
-    perfil = fila_a_dict(fila._mapping)
-    perfil["producto_habitual_ref"] = await referencia_producto(db, perfil.pop("producto_habitual_id"))
-    return perfil
-
-
-def claves_de_archivos(filas_por_tabla: dict[str, list[dict]], perfil: dict) -> list[str]:
+def claves_de_archivos(filas_por_tabla: dict[str, list[dict]]) -> list[str]:
     claves = set()
     for filas in filas_por_tabla.values():
         for fila in filas:
             for columna in COLUMNAS_CLAVE_ARCHIVO:
                 if fila.get(columna):
                     claves.add(fila[columna])
-    for campo in ("avatar_key", "logo_empresa_key"):
-        if perfil.get(campo):
-            claves.add(perfil[campo])
     return sorted(claves)
 
 
 async def exportar(db: AsyncSession, usuario: Usuario, destino: Path) -> dict:
     """Escribe en `destino` un .zip con los datos del usuario y sus archivos."""
     datos = {nombre: await _filas(db, nombre) for nombre in TABLAS}
-    perfil = await _perfil(db, usuario)
-    claves = claves_de_archivos(datos, perfil)
+    claves = claves_de_archivos(datos)
     revision = await revision_actual(db)
 
     incluidos, faltantes = [], []
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
         for nombre, filas in datos.items():
             zf.writestr(f"datos/{nombre}.jsonl", "\n".join(a_linea(f) for f in filas))
-        zf.writestr("datos/perfil.json", json.dumps(perfil, ensure_ascii=False))
+        # Solo el id: sirve para reasignar al usuario actual lo que el backup tenía a su nombre.
+        # El perfil (nombre, empresa, logo) no viaja: se carga de nuevo en cada instalación.
+        zf.writestr("datos/perfil.json", json.dumps({"id": str(usuario.id)}))
         for clave in claves:
             (incluidos if await run_in_threadpool(archivos.agregar_al_zip, zf, clave) else faltantes).append(clave)
         manifiesto = {

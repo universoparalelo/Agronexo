@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LandingOriginal from './pages/LandingOriginal'
 import Login from './pages/Login'
+import Bienvenida from './pages/Bienvenida'
 import Dashboard from './pages/Dashboard'
 import Lotes from './pages/Lotes'
 import DetalleLote from './pages/DetalleLote'
@@ -16,6 +17,14 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingOriginal />} />
         <Route path="/login" element={<Login />} />
+        <Route
+          path="/bienvenida"
+          element={
+            <PrivateRoute esBienvenida>
+              <Bienvenida />
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={

@@ -82,6 +82,7 @@ function entornoMotor({ secretos, puertoPg, puertoApi, carpetaArchivos, frontend
     CELERY_BROKER_URL: `sqla+postgresql+psycopg2://${credenciales}`,
     CELERY_RESULT_BACKEND: `db+postgresql+psycopg2://${credenciales}`,
     ADMIN_EMAIL,
+    MODO_ESCRITORIO: 'true',
     JWT_SECRET_KEY: secretos.jwtSecret,
     STORAGE_BACKEND: 'disk',
     STORAGE_PATH: carpetaArchivos,

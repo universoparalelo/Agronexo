@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:5173"
     # Carpeta con el frontend compilado (app de escritorio). Vacío = la API no lo sirve.
     frontend_dir: str = ""
+    # Lo activa el lanzador de escritorio: habilita la pantalla de bienvenida del primer arranque.
+    modo_escritorio: bool = False
 
     # PostgreSQL
     postgres_host: str
