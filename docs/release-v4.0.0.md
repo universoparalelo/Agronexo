@@ -1236,7 +1236,9 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 
 **Probado:** 11 tests nuevos de la API (`tests/test_bienvenida.py`, base propia, agregados al CI), 2 tests nuevos del lanzador (10 en total), el flujo en el navegador (redirección, formulario, perfil) y con el motor empaquetado y el lanzador de Electron reales: primer arranque con bienvenida pendiente, guardado, entrada con el alias, segunda bienvenida rechazada, y reinicio con la misma carpeta de datos (el usuario y el login se mantienen).
 
-**Sin probar todavía:** la pantalla dentro de la ventana del instalador en una Windows limpia (Sandbox), ni a mano con la ventana de Electron a la vista; los tests del lanzador siguen sin correr en el CI.
+**Probado con el instalador en Windows Sandbox (2026-11-02):** instalación silenciosa y primer arranque con la ventana real de Electron (manejada por el puerto de depuración): aparece `/bienvenida` con la bienvenida pendiente; se llena y envía el formulario y entra a `/dashboard` con el correo (en minúsculas) y el nombre guardados; el lanzador no pisa el usuario nuevo al releerlo; Mi perfil muestra el correo real; el login con `admin@agronexo.com` (alias) sigue funcionando; una segunda bienvenida responde 409; al cerrar la app no quedan procesos y, al reabrirla, entra directo al panel sin volver a pedir la bienvenida. Scripts en `trabajo-escritorio\instalador_sandbox\probar5.ps1` (fuera del repo).
+
+**Sin probar todavía:** los tests del lanzador siguen sin correr en el CI; la bienvenida seguida de importar un backup en una PC nueva; actualizar una instalación que ya tenía datos con `admin@agronexo.com`.
 
 **Limitaciones conocidas:**
 - El correo no se puede cambiar después desde Mi perfil (solo se elige en la bienvenida).
