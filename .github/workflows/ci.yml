@@ -118,9 +118,19 @@ jobs:
       - name: Tests pantalla de bienvenida
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_bienvenida.py -v
 
-      # pg_dump y pg_restore tienen que ser de la misma versión que el servidor (16).
-      - name: Instalar el cliente de Postgres 16
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-16
+      # pg_dump y pg_restore tienen que ser de la misma versión que el servidor (16) y el
+      # runner no la trae: se usan las de la imagen del servicio, que ya está descargada.
+      - name: Preparar pg_dump y pg_restore (versión 16)
+        run: |
+          mkdir -p "$RUNNER_TEMP/pgbin"
+          for herramienta in pg_dump pg_restore; do
+            {
+              echo '#!/bin/sh'
+              echo "exec docker run --rm --network host --user \"$(id -u):$(id -g)\" -e PGPASSWORD -v /tmp:/tmp postgis/postgis:16-3.4 $herramienta \"\$@\""
+            } > "$RUNNER_TEMP/pgbin/$herramienta"
+            chmod +x "$RUNNER_TEMP/pgbin/$herramienta"
+          done
+          echo "AGRONEXO_PG_BIN=$RUNNER_TEMP/pgbin" >> "$GITHUB_ENV"
 
       - name: Tests copia de la base antes de actualizar
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_copia_migracion.py -v
