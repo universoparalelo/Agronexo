@@ -1,4 +1,5 @@
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet'
+import { MapContainer, GeoJSON } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import provincias from '../data/nea-provincias.json'
 
 // Chaco, Formosa, Corrientes y Misiones — foco geográfico del proyecto. Los
@@ -20,7 +21,7 @@ export default function MapaNEA({ aviso }) {
   return (
     <div className="mapa-nea">
       <MapContainer bounds={BOUNDS_NEA} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-        <TileLayer
+        <CapaBase
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           attribution="Tiles &copy; Esri | Límites provinciales &copy; colaboradores de OpenStreetMap"
         />

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { MapContainer, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
+import { useConexion } from '../hooks/useConexion'
 import L from 'leaflet'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
@@ -98,12 +100,14 @@ function ControlesDibujo({ onChange, initialGeoJSON }) {
 }
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search'
+const MENSAJE_SIN_CONEXION = 'Sin conexión: buscar un lugar por nombre necesita internet. Podés buscar por coordenadas (lat, lng).'
 
 // Buscador de lugares (Nominatim / OpenStreetMap) o coordenadas "lat, lng".
 // Solo se consulta al enviar (Enter / botón): la política de uso de Nominatim
 // no permite autocompletar mientras se escribe.
 function BuscadorMapa() {
   const map = useMap()
+  const hayConexion = useConexion()
   const contenedorRef = useRef(null)
   const marcadorRef = useRef(null)
   const [consulta, setConsulta] = useState('')
@@ -148,6 +152,11 @@ function BuscadorMapa() {
       return
     }
 
+    if (!hayConexion) {
+      setMensaje(MENSAJE_SIN_CONEXION)
+      return
+    }
+
     setBuscando(true)
     try {
       const resp = await fetch(`${NOMINATIM}?format=jsonv2&limit=6&accept-language=es&q=${encodeURIComponent(texto)}`)
@@ -185,12 +194,12 @@ function BuscadorMapa() {
 
   return (
     <div className="mapa-buscador" ref={contenedorRef}>
-      <form className="mapa-buscador-form" onSubmit={buscar} role="search">
+      <form className="mapa-buscador-form" onSubmit={buscar} role="search" title={hayConexion ? undefined : MENSAJE_SIN_CONEXION}>
         <input
           type="text"
           value={consulta}
           onChange={(e) => setConsulta(e.target.value)}
-          placeholder="Buscar lugar o lat, lng (ej: -27.45, -59.05)"
+          placeholder={hayConexion ? 'Buscar lugar o lat, lng (ej: -27.45, -59.05)' : 'Sin conexión: solo lat, lng (ej: -27.45, -59.05)'}
           aria-label="Buscar lugar o coordenadas"
         />
         <button type="submit" disabled={buscando || !consulta.trim()} title="Buscar">
@@ -236,13 +245,13 @@ export default function MapaDibujoLote({
         style={{ height, width: '100%', borderRadius: '8px' }}
         scrollWheelZoom
       >
-        <TileLayer
+        <CapaBase
           url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
           attribution="Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics"
           maxZoom={19}
         />
         {mostrarReferencia && (
-          <TileLayer
+          <CapaBase
             url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
             // Capa de referencia (límites político-administrativos + toponimia) sobre el

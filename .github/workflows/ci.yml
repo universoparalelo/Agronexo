@@ -192,6 +192,10 @@ jobs:
         working-directory: frontend
         run: npm install
 
+      - name: Tests del frontend
+        working-directory: frontend
+        run: npm test
+
       - name: Build de producción
         working-directory: frontend
         run: npm run build

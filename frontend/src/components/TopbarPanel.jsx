@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useConexion } from '../hooks/useConexion'
 
 function fechaHoy() {
   return new Date().toLocaleDateString('es-AR', {
@@ -12,6 +13,7 @@ function fechaHoy() {
 export default function TopbarPanel({ migas }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
+  const hayConexion = useConexion()
 
   return (
     <header className="topbar">
@@ -29,6 +31,16 @@ export default function TopbarPanel({ migas }) {
         })}
       </nav>
       <div className="topbar-actions">
+        {!hayConexion && (
+          <div
+            className="topbar-sin-conexion"
+            role="status"
+            title="No hay internet. El análisis de tus archivos, el diagnóstico, los reportes y la copia de seguridad funcionan igual; el mapa de fondo, la búsqueda de lugares y las imágenes satelitales vuelven cuando haya conexión."
+          >
+            <span className="topbar-sin-conexion-punto" aria-hidden="true" />
+            Modo sin conexión
+          </div>
+        )}
         <div className="topbar-date">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" />

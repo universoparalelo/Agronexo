@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import client from '../api/client'
 import MapaDibujoLote from './MapaDibujoLote'
 import { AREA_MIN_HA, AREA_MAX_HA, tieneAutointerseccion } from '../utils/geometria'
@@ -218,7 +219,7 @@ export default function ModalLimites({ lote, onSuccess, onClose }) {
                     zoomControl={true}
                     scrollWheelZoom={false}
                   >
-                    <TileLayer
+                    <CapaBase
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       attribution="© OpenStreetMap contributors"
                     />

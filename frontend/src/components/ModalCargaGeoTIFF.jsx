@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import { useAuth } from '../hooks/useAuth'
 import client from '../api/client'
 import CalendarioSatelital from './CalendarioSatelital'
 import MapaDibujoLote from './MapaDibujoLote'
 import MapaNEA from './MapaNEA'
 import { FlechaAtras, FlechaAdelante } from './BotonVolver'
+import { useConexion } from '../hooks/useConexion'
 import { geotiffCercaDelLote, leerLimitesGeotiff } from '../utils/geotiffLimites'
 import { AREA_MIN_HA, AREA_MAX_HA } from '../utils/geometria'
 import { TIPOS_SUELO } from '../utils/suelos'
@@ -272,6 +274,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = fal
   const [step, setStep] = useState('carga') // 'carga' | 'cultivo' | 'analisis'
   const [loteId, setLoteId] = useState(loteIdInicial ?? '')
   const [fuente, setFuente] = useState('dron') // 'dron' | 'satelite'
+  const hayConexion = useConexion()
   const [sensor, setSensor] = useState(SENSOR_POR_DEFECTO)
   const [indices, setIndices] = useState(() => indicesAutomaticos(SENSOR_POR_DEFECTO))
   const [indiceMostrado, setIndiceMostrado] = useState(indicePreferidoInicial)
@@ -394,6 +397,12 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = fal
     setEscenaSeleccionada(null)
     setErrorBusqueda('')
   }, [loteId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // si se corta internet con la imagen satelital elegida, se vuelve a subir archivo
+    // (salvo que ya se esté enviando: ahí no se pisa lo que el usuario está haciendo)
+    if (!hayConexion && fuente === 'satelite' && !loading) cambiarFuente('dron')
+  }, [hayConexion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // la imagen satelital siempre viene de Sentinel-2 — no hay selección
@@ -803,8 +812,10 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = fal
                 type="button"
                 className={`modo-limite-btn${fuente === 'satelite' ? ' modo-limite-btn--activo' : ''}`}
                 onClick={() => cambiarFuente('satelite')}
-                disabled={loading || !loteSeleccionado?.geometry}
-                title={!loteSeleccionado?.geometry ? 'Este lote no tiene límite cargado — dibujalo primero para poder usar imágenes satelitales.' : undefined}
+                disabled={loading || !loteSeleccionado?.geometry || !hayConexion}
+                title={!hayConexion
+                  ? 'Sin conexión: las imágenes satelitales necesitan internet.'
+                  : !loteSeleccionado?.geometry ? 'Este lote no tiene límite cargado — dibujalo primero para poder usar imágenes satelitales.' : undefined}
               >
                 🛰️ Imagen satelital
               </button>
@@ -1153,7 +1164,7 @@ export default function ModalCargaGeoTIFF({ lotes, loteIdInicial, loteFijo = fal
               style={{ height: '100%', width: '100%' }}
               scrollWheelZoom={false}
             >
-              <TileLayer
+              <CapaBase
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution="Tiles &copy; Esri"
               />
