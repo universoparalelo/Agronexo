@@ -1218,7 +1218,30 @@ Nueva tarjeta **"Copia de seguridad"** en Mi perfil con **Exportar todo** (gener
 - Exportar e importar corren dentro del pedido HTTP, sin barra de progreso: con ortomosaicos de varios GB pueden tardar minutos.
 - Con almacenamiento MinIO (Docker) los archivos viejos no se borran al reemplazar; la función es para el almacenamiento en disco de la app de escritorio.
 - Los vuelos que estaban "procesando" al exportar quedan así: la tarea de Celery no viaja en el backup.
-- La pantalla de bienvenida (D10) todavía no existe: el nombre del perfil viene del backup al reemplazar.
+- La pantalla de bienvenida (D10) se agregó después (ver la entrada siguiente): el nombre del perfil viene del backup al reemplazar.
+
+#### Pantalla de bienvenida (D10, D17)
+**Fecha:** 2026-11-02
+**Rama:** `feat/pantalla-bienvenida`
+
+La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide **nombre y correo** y los guarda en la cuenta local. No es un login (no pide contraseña, la sesión sigue siendo automática) y no necesita internet. Después no vuelve a mostrarse.
+
+**Cómo funciona:**
+- `POST /auth/me/bienvenida` cambia el nombre y el correo del usuario que sembró la migración `0006` (`admin@agronexo.com`). Solo vale mientras el usuario tiene ese correo y la API está en modo escritorio (`MODO_ESCRITORIO=true`, lo pone el lanzador); si no, responde 409. También responde 409 si el correo ya lo usa otra cuenta o si se intenta dejar el provisorio. El correo se guarda en minúsculas.
+- `GET /auth/me` devuelve `bienvenida_pendiente`. `PrivateRoute` manda a `/bienvenida` desde cualquier pantalla mientras esté pendiente y saca de ahí cuando ya no.
+- Los tokens llevan el id del usuario, no el correo: la sesión abierta sigue valiendo después del cambio.
+- **`admin@agronexo.com` queda como llave interna del lanzador.** En modo escritorio la API lo acepta como alias de la cuenta local (la más antigua), con la misma contraseña aleatoria. Un primer plan (que el lanzador guardara el correo nuevo en `secretos.json` y probara con los dos) tenía un hueco: si la ventana se cerraba justo después de guardar, el lanzador ya no podía entrar. Con el alias no hay forma de quedar afuera.
+- El lanzador relee `/auth/me` antes de inyectar la sesión (`SesionAutomatica.sincronizarUsuario`), para no pisar el usuario nuevo con el viejo en el `localStorage`.
+- Mi perfil ya mostraba `user.email`: ahora muestra el correo real.
+
+**Probado:** 11 tests nuevos de la API (`tests/test_bienvenida.py`, base propia, agregados al CI), 2 tests nuevos del lanzador (10 en total), el flujo en el navegador (redirección, formulario, perfil) y con el motor empaquetado y el lanzador de Electron reales: primer arranque con bienvenida pendiente, guardado, entrada con el alias, segunda bienvenida rechazada, y reinicio con la misma carpeta de datos (el usuario y el login se mantienen).
+
+**Sin probar todavía:** la pantalla dentro de la ventana del instalador en una Windows limpia (Sandbox), ni a mano con la ventana de Electron a la vista; los tests del lanzador siguen sin correr en el CI.
+
+**Limitaciones conocidas:**
+- El correo no se puede cambiar después desde Mi perfil (solo se elige en la bienvenida).
+- Un backup no trae el correo: en una PC nueva se hace primero la bienvenida y después se importa.
+- Para una instalación que ya tenía datos con `admin@agronexo.com`, la bienvenida aparece en el próximo arranque tras actualizar.
 
 ---
 
