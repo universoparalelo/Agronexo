@@ -1238,7 +1238,14 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 
 **Probado con el instalador en Windows Sandbox (2026-11-02):** instalación silenciosa y primer arranque con la ventana real de Electron (manejada por el puerto de depuración): aparece `/bienvenida` con la bienvenida pendiente; se llena y envía el formulario y entra a `/dashboard` con el correo (en minúsculas) y el nombre guardados; el lanzador no pisa el usuario nuevo al releerlo; Mi perfil muestra el correo real; el login con `admin@agronexo.com` (alias) sigue funcionando; una segunda bienvenida responde 409; al cerrar la app no quedan procesos y, al reabrirla, entra directo al panel sin volver a pedir la bienvenida. Scripts en `trabajo-escritorio\instalador_sandbox\probar5.ps1` (fuera del repo).
 
-**Sin probar todavía:** los tests del lanzador siguen sin correr en el CI; la bienvenida seguida de importar un backup en una PC nueva; actualizar una instalación que ya tenía datos con `admin@agronexo.com`.
+**Probado también en Windows Sandbox (2026-11-02, `probar6.ps1`):**
+- *Actualizar una instalación vieja:* se instala la versión anterior (sin bienvenida), se crea un lote y se exporta un backup; se instala la nueva encima. El primer arranque pide la bienvenida, el lote se conserva, se guarda el correo, entra al panel y al reiniciar no vuelve a pedirla.
+- *PC nueva con backup:* se borra la carpeta de datos, la bienvenida aparece, se completa y se importa el backup del paso anterior (reemplazar): el lote vuelve, el correo real se conserva y "sumar" después no duplica. Reinicia directo al panel.
+- **Hallazgo:** como el nombre del perfil viaja en el backup, "reemplazar" con un backup hecho *antes* de la bienvenida deja el nombre en "Admin" y pisa el que la persona escribió. Con un backup hecho después de la bienvenida (el caso normal) trae el nombre real. Además la ventana abierta sigue mostrando el nombre anterior hasta que se recarga o se reinicia la app.
+
+**Pendiente de decidir:** si "reemplazar" debe conservar el nombre y el correo de la bienvenida cuando el backup trae el nombre provisorio "Admin".
+
+**CI:** se agregó el job `test-lanzador` (corre `node --test test/sesion.test.js`, sin instalar dependencias).
 
 **Limitaciones conocidas:**
 - El correo no se puede cambiar después desde Mi perfil (solo se elige en la bienvenida).

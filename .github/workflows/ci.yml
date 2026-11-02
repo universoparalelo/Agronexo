@@ -200,3 +200,21 @@ jobs:
         run: |
           test -f frontend/dist/index.html
           echo "✓ Build frontend OK"
+
+  # ── Job 4: Lanzador de escritorio — sesión automática ────────────────────
+  # Solo usa módulos propios de Node: no hace falta instalar dependencias.
+  test-lanzador:
+    name: Lanzador de escritorio — tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+
+      - name: Tests de la sesión automática
+        working-directory: escritorio/electron
+        run: node --test test/sesion.test.js
