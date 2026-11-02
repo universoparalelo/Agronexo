@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import L from 'leaflet'
 import MapaZonas from './MapaZonas'
 
@@ -62,7 +63,7 @@ function MapaCortina({ featuresBase, featuresActual, fechaBase, fechaActual }) {
     <div className="mapa-comparacion-cortina">
       <div className="mapa-comparacion-mapa-wrap">
         <MapContainer center={[-27.47, -60.67]} zoom={13} className="mapa-comparacion-mapa" scrollWheelZoom>
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+          <CapaBase url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
           <AutoResize />
           <FitBoundsUnion featuresA={featuresBase} featuresB={featuresActual} />
           <GeoJSON key="base" data={geojsonBase} style={(f) => ({ ...estiloZona(f), fillOpacity: 0.75 })} />

@@ -1,5 +1,6 @@
 import { Component, useEffect, useMemo } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import { ETIQUETA_CLASE, etiquetaClase } from '../utils/clasesIndice'
 import PatronSinDatos, { ESTILO_SIN_DATOS, TEXTO_SIN_DATOS } from './PatronSinDatos'
 
@@ -173,7 +174,7 @@ export default function MapaIndice({ geojson, indice = 'ndvi', limite = null }) 
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom
         >
-          <TileLayer
+          <CapaBase
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />

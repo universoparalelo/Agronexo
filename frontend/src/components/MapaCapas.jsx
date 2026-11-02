@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import L from 'leaflet'
 import { obtenerZonas, obtenerResultadoIndice } from '../api/analisis'
 
@@ -324,7 +325,7 @@ export default function MapaCapas({ vuelos, indice = 'ndvi', limite }) {
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom
         >
-          <TileLayer
+          <CapaBase
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />

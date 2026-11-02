@@ -1261,6 +1261,17 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 - `signAndEditExecutable: false` se cambió por `signExecutable: false`: el primero también salteaba la edición del `.exe`, que se quedaba con el ícono de Electron. Con el segundo solo se saltea la firma.
 - Verificado extrayendo el ícono del `.exe` instalado y del instalador: los dos muestran el isotipo nuevo.
 
+#### Modo sin conexión (D6, D8, D9)
+
+La app sigue funcionando sin internet: los mapas de fondo y las funciones que lo necesitan se apagan y el resto no cambia.
+
+- **Detección:** `frontend/src/utils/conexion.js` combina el aviso del sistema (`navigator.onLine`, que solo dice si hay una red conectada) con una consulta liviana a `https://www.gstatic.com/generate_204` (el servidor de comprobación de conexión de Google; es la única consulta que se agrega y no lleva datos). Se hace al abrir, cada 5 minutos con conexión y cada 30 segundos sin ella, y de inmediato cuando el sistema avisa un cambio. Es una sola comprobación compartida por toda la app (`useConexion`).
+- **Mapas (D6):** `components/CapaBase.jsx` reemplaza a `TileLayer` en los 8 componentes de mapa. Sin conexión no se pide ningún mosaico y queda el color liso `#4a5a50` (`.leaflet-container` en `index.css`) con los polígonos de lotes y zonas encima. Los mosaicos que fallan se muestran vacíos, sin el ícono de imagen rota.
+- **Funciones online (D9):** en `ModalCargaGeoTIFF`, "Imagen satelital" queda deshabilitada con el aviso "Sin conexión: las imágenes satelitales necesitan internet" y, si se corta internet con esa opción elegida, vuelve a "Subir archivo (dron)" (salvo que ya se esté enviando). En el buscador del mapa (`MapaDibujoLote`) la búsqueda por nombre muestra el aviso y las coordenadas `lat, lng` siguen funcionando, porque no necesitan internet.
+- **Indicador:** etiqueta "Modo sin conexión" con punto naranja en la barra superior (`TopbarPanel`), con un texto al pasar el mouse que explica qué sigue funcionando.
+- **Probado:** 8 tests nuevos de la detección (`conexion.test.js`, 37 en total) y, en el navegador con la API real y el frontend compilado, simulando el corte: se sacan los mosaicos, queda el color liso con los polígonos, aparece el indicador, "Imagen satelital" se deshabilita y vuelve a "Subir archivo", la búsqueda por nombre avisa y la de coordenadas funciona; al volver la conexión se recuperan los mapas y desaparece el aviso.
+- **Sin probar todavía:** una captura de cómo se ve (la ventana del navegador de pruebas no se dibujaba) y la prueba con el instalador en Windows Sandbox con la red desactivada.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)

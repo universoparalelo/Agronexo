@@ -1399,3 +1399,25 @@
 .backup-modos { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
 .backup-modo { display: flex; gap: 0.75rem; align-items: flex-start; cursor: pointer; }
 .backup-modo input { margin-top: 0.3rem; }
+
+/* Aviso de que no hay internet (D9) */
+.topbar-sin-conexion {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fde7c2;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  cursor: help;
+}
+
+.topbar-sin-conexion-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+}

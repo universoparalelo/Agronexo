@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, GeoJSON, useMap } from 'react-leaflet'
+import CapaBase from './CapaBase'
 import L from 'leaflet'
 import { ETIQUETA_CLASE } from '../utils/clasesIndice'
 import PatronSinDatos, { ESTILO_SIN_DATOS, TEXTO_SIN_DATOS } from './PatronSinDatos'
@@ -148,7 +149,7 @@ export default function MapaZonas({ geojson, diagnostico, sinDatos = null, inter
         doubleClickZoom={interactivo}
         touchZoom={interactivo}
       >
-        <TileLayer
+        <CapaBase
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />

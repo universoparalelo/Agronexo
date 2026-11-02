@@ -4059,6 +4059,9 @@ body {
   padding: 0.85rem 1.75rem 0.75rem;
 }
 
+/* Color liso del mapa: es lo que se ve cuando no hay internet y no se baja el mapa de fondo (D6) */
+.leaflet-container { background: #4a5a50; }
+
 /* "Sin datos": rayado gris sobre las capas de Leaflet (el patrón está en PatronSinDatos.jsx) */
 .leaflet-container path.capa-sin-datos { fill: url(#patron-sin-datos); fill-opacity: 1; }
 
