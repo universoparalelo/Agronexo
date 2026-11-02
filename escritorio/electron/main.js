@@ -8,7 +8,7 @@ const {
 const { SesionAutomatica, RUTA_INICIAL } = require('./src/sesion');
 const { Postgres } = require('./src/postgres');
 const {
-  carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso,
+  carpetaCopias, borrarAviso, describirFallo,
 } = require('./src/copias');
 const { lanzar, detener, esperarSalud } = require('./src/procesos');
 const {
@@ -106,10 +106,12 @@ async function apagar() {
 
 async function fallar(error) {
   registrar(`Error al iniciar: ${error.stack || error.message}`);
-  dialog.showErrorBox(
-    'AgroNexo no pudo iniciar',
-    `${error.message}\n\nLos registros están en:\n${path.dirname(archivoLog || app.getPath('userData'))}`,
-  );
+  const { titulo, mensaje } = describirFallo({
+    error,
+    carpeta: carpetaCopias(app.getPath('userData')),
+    carpetaLogs: path.dirname(archivoLog || app.getPath('userData')),
+  });
+  dialog.showErrorBox(titulo, mensaje);
   await apagar();
   app.exit(1);
 }

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso,
+  carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso, describirFallo,
 } = require('../src/copias');
 const { entornoMotor } = require('../src/entorno');
 
@@ -57,4 +57,27 @@ test('el motor recibe dónde está pg_dump y dónde guardar la copia', () => {
   });
   assert.equal(env.AGRONEXO_PG_BIN, 'pg\bin');
   assert.equal(env.AGRONEXO_COPIAS_DIR, 'datos\copias');
+});
+
+test('si la API dejó un aviso, el error que se muestra explica la actualización', () => {
+  const carpeta = carpetaTemporal();
+  fs.writeFileSync(
+    path.join(carpeta, 'actualizacion-fallida.json'),
+    JSON.stringify({ motivo: 'migracion', restaurada: true }),
+  );
+  const { titulo, mensaje } = describirFallo({
+    error: new Error('La API se cerró antes de estar lista.'), carpeta, carpetaLogs: 'C:\logs',
+  });
+  assert.equal(titulo, 'AgroNexo no pudo actualizarse');
+  assert.match(mensaje, /como estaban/);
+  assert.match(mensaje, /C:\logs/);
+  assert.doesNotMatch(mensaje, /La API se cerró/);
+});
+
+test('sin aviso, se muestra el error de siempre', () => {
+  const { titulo, mensaje } = describirFallo({
+    error: new Error('La API se cerró antes de estar lista.'), carpeta: carpetaTemporal(), carpetaLogs: 'C:\logs',
+  });
+  assert.equal(titulo, 'AgroNexo no pudo iniciar');
+  assert.match(mensaje, /La API se cerró antes de estar lista/);
 });

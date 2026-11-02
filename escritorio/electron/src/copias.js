@@ -35,4 +35,25 @@ function mensajeDelAviso(aviso, carpeta) {
     + `No borres nada: la copia de seguridad está en:\n${carpeta}\n\nAvisanos de este error.`;
 }
 
-module.exports = { carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso };
+// Lo que se le muestra a la persona cuando la app no puede iniciar: si la API dejó un aviso de
+// que falló la actualización de la base, se explica eso; si no, el error tal cual.
+function describirFallo({ error, carpeta, carpetaLogs }) {
+  const aviso = leerAviso(carpeta);
+  const registros = `Los registros están en:
+${carpetaLogs}`;
+  if (aviso) {
+    return {
+      titulo: 'AgroNexo no pudo actualizarse',
+      mensaje: `${mensajeDelAviso(aviso, carpeta)}
+
+${registros}`,
+    };
+  }
+  return { titulo: 'AgroNexo no pudo iniciar', mensaje: `${error.message}
+
+${registros}` };
+}
+
+module.exports = {
+  carpetaCopias, leerAviso, borrarAviso, mensajeDelAviso, describirFallo,
+};
