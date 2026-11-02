@@ -1203,13 +1203,13 @@ Nueva tarjeta **"Copia de seguridad"** en Mi perfil con **Exportar todo** (gener
 
 **Aviso para probar a mano con la app dentro de Claude:** si el lanzador se abre desde la aplicación de Claude para escritorio, Windows redirige `%APPDATA%` a una carpeta del paquete de Claude y el worker falla con "Clave de almacenamiento fuera de la carpeta de datos" (la ruta de un archivo que ya existe se resuelve a otra carpeta). No pasa en una instalación normal (se vio en la Sandbox). Se evita abriendo el lanzador con `--user-data-dir=` hacia una carpeta fuera de `AppData`.
 
-**Qué lleva el `.zip`:** `manifiesto.json` (formato, versión de la app, revisión de la base, fecha, conteos), `datos/*.jsonl` (lotes, cultivos, vuelos, análisis de índices, diagnósticos, revisiones y precios cargados por el usuario), `datos/perfil.json` (sin correo ni contraseña) y `archivos/` (GeoTIFF originales, resultados, avatar y logo).
+**Qué lleva el `.zip`:** `manifiesto.json` (formato, versión de la app, revisión de la base, fecha, conteos), `datos/*.jsonl` (lotes, cultivos, vuelos, análisis de índices, diagnósticos, revisiones y precios cargados por el usuario), `datos/perfil.json` (solo el id del usuario, para reasignarle lo que el backup tenía a su nombre) y `archivos/` (GeoTIFF originales y resultados).
 
 **Decisiones tomadas:**
 - Los datos van en JSON y no como volcado de Postgres: la API empaquetada no trae `pg_dump` y "sumar" necesita leer registro por registro. Las columnas se leen del modelo, así que una columna nueva viaja sin tocar el código.
 - **Reemplazar:** pide confirmación, guarda antes una copia de lo actual (`copias/antes-de-importar-*.zip`, se conservan las últimas 2) y borra los archivos viejos recién después de confirmar la base.
 - **Sumar:** cada registro se reconoce por su id (diagnósticos por vuelo; revisiones por vuelo y zona; índices por vuelo e índice). Si está en los dos lados gana el lote, el diagnóstico o la revisión más reciente; los vuelos, cultivos e índices no tienen fecha de edición y se deja el que ya estaba, salvo que se dio de baja en el backup.
-- Todo lo del backup pasa a ser del usuario de esta instalación (se reescriben `usuario_id`, `subido_por_id` y el primer tramo de las claves de archivo). El correo, la contraseña y el id nunca se tocan. En "sumar" el perfil solo completa lo que está vacío; en "reemplazar" se copia.
+- Todo lo del backup pasa a ser del usuario de esta instalación (se reescriben `usuario_id`, `subido_por_id` y el primer tramo de las claves de archivo). El perfil (nombre, correo, contraseña, empresa, logo, preferencias) no viaja en el backup ni se toca al importar: en una PC nueva se carga de nuevo (decisión posterior, ver la entrada de la pantalla de bienvenida).
 - Los productos del catálogo se siembran con ids distintos en cada instalación: los precios y el "producto habitual" viajan con nombre, tipo y causa y se buscan por eso. Los que no se encuentran se omiten y se avisa.
 - Backup de una versión más nueva (D16): se importa con un aviso; backup más viejo: los campos que faltan quedan con el valor por defecto. Un formato de `.zip` más nuevo se rechaza.
 - La descarga usa un enlace con token de 10 minutos (igual que los archivos) porque el navegador no puede mandar el encabezado de autenticación en un enlace.
@@ -1218,7 +1218,7 @@ Nueva tarjeta **"Copia de seguridad"** en Mi perfil con **Exportar todo** (gener
 - Exportar e importar corren dentro del pedido HTTP, sin barra de progreso: con ortomosaicos de varios GB pueden tardar minutos.
 - Con almacenamiento MinIO (Docker) los archivos viejos no se borran al reemplazar; la función es para el almacenamiento en disco de la app de escritorio.
 - Los vuelos que estaban "procesando" al exportar quedan así: la tarea de Celery no viaja en el backup.
-- La pantalla de bienvenida (D10) se agregó después (ver la entrada siguiente): el nombre del perfil viene del backup al reemplazar.
+- La pantalla de bienvenida (D10) se agregó después (ver la entrada siguiente). Al principio el perfil viajaba en el backup; después se sacó.
 
 #### Pantalla de bienvenida (D10, D17)
 **Fecha:** 2026-11-02
@@ -1243,7 +1243,7 @@ La primera vez que se abre la app de escritorio aparece `/bienvenida`, que pide 
 - *PC nueva con backup:* se borra la carpeta de datos, la bienvenida aparece, se completa y se importa el backup del paso anterior (reemplazar): el lote vuelve, el correo real se conserva y "sumar" después no duplica. Reinicia directo al panel.
 - **Hallazgo:** como el nombre del perfil viaja en el backup, "reemplazar" con un backup hecho *antes* de la bienvenida deja el nombre en "Admin" y pisa el que la persona escribió. Con un backup hecho después de la bienvenida (el caso normal) trae el nombre real. Además la ventana abierta sigue mostrando el nombre anterior hasta que se recarga o se reinicia la app.
 
-**Decidido:** importar un backup (reemplazar o sumar) no toca el nombre del usuario: `_aplicar_perfil` en `app/backup/importar.py` ignora el campo `nombre`; el resto del perfil (empresa, CUIT, logo, preferencias) sigue viajando. Test: `test_reemplazar_no_cambia_el_nombre_del_usuario` en `tests/test_backup.py` (27 tests del backup pasan).
+**Decidido (Denise):** el backup trae solo los datos de trabajo (lotes, cultivos, vuelos, análisis, diagnósticos, revisiones, precios) y no el perfil. Importar no toca el perfil en ningún modo y exportar ya no guarda nombre, empresa, logo ni foto (`datos/perfil.json` lleva solo el id). Los backups viejos se siguen importando: esa parte se ignora. `_claves_locales` ya no cuenta el avatar y el logo, para que "reemplazar" no borre esos archivos del usuario. Test: `test_importar_no_toca_el_perfil_del_usuario` (53 tests de backup, bienvenida y auth pasan).
 
 **CI:** se agregó el job `test-lanzador` (corre `node --test test/sesion.test.js`, sin instalar dependencias).
 

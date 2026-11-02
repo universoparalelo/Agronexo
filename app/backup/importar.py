@@ -13,7 +13,7 @@ from app.auth.models import Usuario
 from app.backup import archivos
 from app.backup.exportar import claves_de_archivos, revision_actual
 from app.backup.filas import (
-    CAMPOS_PERFIL, COLUMNAS_CLAVE_ARCHIVO, COLUMNAS_USUARIO, FORMATO, TABLAS, tabla,
+    COLUMNAS_CLAVE_ARCHIVO, COLUMNAS_USUARIO, FORMATO, TABLAS, tabla,
     valores_para_insertar,
 )
 
@@ -191,8 +191,7 @@ async def _producto_para(db: AsyncSession, ctx: _Contexto, fila: dict, cuenta: d
 
 async def _claves_locales(db: AsyncSession) -> set[str]:
     claves = set()
-    for nombre, columnas in (("vuelos", ("archivo_original", "geojson_key")), ("analisis_indices", ("geojson_key",)),
-                             ("usuarios", ("avatar_key", "logo_empresa_key"))):
+    for nombre, columnas in (("vuelos", ("archivo_original", "geojson_key")), ("analisis_indices", ("geojson_key",))):
         t = tabla(nombre)
         for fila in (await db.execute(select(*[t.c[c] for c in columnas]))).all():
             claves.update(v for v in fila if v)
@@ -265,26 +264,6 @@ async def _sumar(db: AsyncSession, ctx: _Contexto, leido: Leido, resumen: dict) 
                 cuenta["omitidos"] += 1
 
 
-async def _aplicar_perfil(db: AsyncSession, ctx: _Contexto, leido: Leido, modo: str) -> None:
-    t = tabla("usuarios")
-    actual = (await db.execute(select(t).where(t.c.id == ctx.usuario_id))).first()._mapping
-    perfil = dict(leido.perfil)
-    perfil["avatar_key"] = ctx.clave(perfil.get("avatar_key"))
-    perfil["logo_empresa_key"] = ctx.clave(perfil.get("logo_empresa_key"))
-    cambios = {
-        campo: perfil[campo] for campo in CAMPOS_PERFIL
-        # El nombre es el que se escribió en la bienvenida de esta instalación; un
-        # backup hecho antes de ella trae "Admin" y lo pisaría.
-        if campo != "nombre" and perfil.get(campo) is not None and (modo == "reemplazar" or actual[campo] in (None, ""))
-    }
-    valores, _ = valores_para_insertar(t, cambios)
-    producto_id = await _id_de_producto(db, perfil.get("producto_habitual_ref"))
-    if producto_id is not None and (modo == "reemplazar" or actual["producto_habitual_id"] is None):
-        valores["producto_habitual_id"] = producto_id
-    if valores:
-        await db.execute(update(t).where(t.c.id == ctx.usuario_id).values(**valores))
-
-
 async def importar(db: AsyncSession, usuario: Usuario, ruta: Path, leido: Leido, modo: str) -> dict:
     """Aplica el backup. No hace commit: lo hace quien llama, y recién entonces
     puede borrar los archivos viejos que devuelve en `claves_a_borrar`."""
@@ -298,10 +277,9 @@ async def importar(db: AsyncSession, usuario: Usuario, ruta: Path, leido: Leido,
         await _reemplazar(db, ctx, leido, resumen)
     else:
         await _sumar(db, ctx, leido, resumen)
-    await _aplicar_perfil(db, ctx, leido, modo)
 
     copiados = omitidos = faltantes = 0
-    claves = claves_de_archivos(leido.datos, leido.perfil)
+    claves = claves_de_archivos(leido.datos)
     with zipfile.ZipFile(ruta) as zf:
         for origen in claves:
             destino = ctx.clave(origen)
