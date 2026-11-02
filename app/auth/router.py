@@ -27,6 +27,7 @@ async def _construir_respuesta_perfil(usuario: Usuario) -> schemas.UsuarioRespon
     data = schemas.UsuarioResponse.model_validate(usuario).model_dump()
     data["avatar_url"] = avatar_url
     data["logo_empresa_url"] = logo_url
+    data["bienvenida_pendiente"] = service.bienvenida_pendiente(usuario)
     return schemas.UsuarioResponse(**data)
 
 
@@ -105,7 +106,22 @@ async def actualizar_perfil(
     return await _construir_respuesta_perfil(usuario)
 
 
-@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/me/bienvenida", response_model=schemas.UsuarioResponse)
+async def completar_bienvenida(
+    data: schemas.BienvenidaRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        usuario = await service.completar_bienvenida(db, current_user, data)
+    except service.BienvenidaNoPendiente:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La bienvenida ya se completó")
+    except service.CorreoNoDisponible:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ese correo no se puede usar")
+    return await _construir_respuesta_perfil(usuario)
+
+
+@router.post("/me/password",status_code=status.HTTP_204_NO_CONTENT)
 async def cambiar_password(
     data: schemas.CambioPasswordRequest,
     current_user: Usuario = Depends(get_current_user),

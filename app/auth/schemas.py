@@ -60,8 +60,22 @@ class UsuarioResponse(BaseModel):
     indice_preferido: IndiceEnum | None = None
     unidad_area_preferida: UnidadAreaEnum | None = None
     producto_habitual_id: uuid.UUID | None = None
+    # Calculado en el router (depende de la configuración), no es columna.
+    bienvenida_pendiente: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class BienvenidaRequest(BaseModel):
+    nombre: str
+    email: EmailStr
+
+    @field_validator("nombre")
+    @classmethod
+    def nombre_nonempty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("El nombre no puede estar vacío")
+        return v.strip()
 
 
 _CUIT_RE = r"^\d{2}-\d{8}-\d{1}$"

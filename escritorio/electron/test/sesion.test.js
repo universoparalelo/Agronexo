@@ -6,8 +6,11 @@ const {
   iniciarSesion, scriptInyeccion, esDelOrigen, SesionAutomatica, MAX_REINTENTOS_LOGIN, RUTA_INICIAL,
 } = require('../src/sesion');
 
-function servidorFalso({ loginOk = true } = {}) {
+// loginAcepta: correos con los que el login funciona (null = cualquiera). El correo que
+// devuelve /auth/me se puede cambiar en `estado.correo` para simular la bienvenida.
+function servidorFalso({ loginOk = true, loginAcepta = null, correo = 'a@b.c' } = {}) {
   const pedidos = [];
+  const estado = { correo };
   const servidor = http.createServer((req, res) => {
     let cuerpo = '';
     req.on('data', (trozo) => { cuerpo += trozo; });
@@ -15,10 +18,11 @@ function servidorFalso({ loginOk = true } = {}) {
       pedidos.push({ url: req.url, auth: req.headers.authorization, cuerpo });
       res.setHeader('Content-Type', 'application/json');
       if (req.url === '/api/v1/auth/login') {
-        res.statusCode = loginOk ? 200 : 401;
-        res.end(JSON.stringify(loginOk ? { access_token: 'acc', refresh_token: 'ref' } : { detail: 'x' }));
+        const acepta = loginOk && (!loginAcepta || loginAcepta.includes(JSON.parse(cuerpo).email));
+        res.statusCode = acepta ? 200 : 401;
+        res.end(JSON.stringify(acepta ? { access_token: 'acc', refresh_token: 'ref' } : { detail: 'x' }));
       } else if (req.url === '/api/v1/auth/me') {
-        res.end(JSON.stringify({ email: 'a@b.c', nombre: 'Admin "x"' }));
+        res.end(JSON.stringify({ email: estado.correo, nombre: 'Admin "x"' }));
       } else {
         res.statusCode = 404;
         res.end('{}');
@@ -29,6 +33,7 @@ function servidorFalso({ loginOk = true } = {}) {
     servidor.listen(0, '127.0.0.1', () => resolve({
       origen: `http://127.0.0.1:${servidor.address().port}`,
       pedidos,
+      estado,
       cerrar: () => new Promise((r) => servidor.close(r)),
     }));
   });
@@ -124,4 +129,34 @@ test('alCargar registra el error si el login falla y no lo propaga', async () =>
   await srv.cerrar();
   assert.equal(registros.length, 1);
   assert.match(registros[0], /401/);
+});
+
+test('tras la bienvenida, alCargar inyecta el usuario nuevo y no el viejo', async () => {
+  const srv = await servidorFalso({ correo: 'admin@agronexo.com' });
+  const sesion = new SesionAutomatica({ origen: srv.origen, email: 'admin@agronexo.com', password: 'p' });
+  const contenido = contenidoFalso(`${srv.origen}/dashboard`);
+  await sesion.alCargar(contenido);
+  srv.estado.correo = 'ana@campo.com';
+  await sesion.alCargar(contenido);
+  await srv.cerrar();
+  assert.match(contenido.llamadas.scripts[1], /ana@campo\.com/);
+  assert.doesNotMatch(contenido.llamadas.scripts[1], /admin@agronexo\.com/);
+  assert.equal(sesion.email, 'admin@agronexo.com');
+});
+
+test('si no se puede releer el usuario, inyecta igual los datos que tenía', async () => {
+  const srv = await servidorFalso({ correo: 'a@b.c' });
+  const registros = [];
+  const sesion = new SesionAutomatica({
+    origen: srv.origen, email: 'a@b.c', password: 'p', registrar: (m) => registros.push(m),
+    fetchFn: (url, opciones) => (url.endsWith('/auth/me') && sesion.datos
+      ? Promise.reject(new Error('sin red'))
+      : fetch(url, opciones)),
+  });
+  const contenido = contenidoFalso(`${srv.origen}/dashboard`);
+  await sesion.alCargar(contenido);
+  await sesion.alCargar(contenido);
+  await srv.cerrar();
+  assert.equal(contenido.llamadas.scripts.length, 2);
+  assert.equal(registros.length, 1);
 });

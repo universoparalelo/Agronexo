@@ -115,6 +115,9 @@ jobs:
       - name: Tests exportar e importar backup
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_backup.py -v
 
+      - name: Tests pantalla de bienvenida
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_bienvenida.py -v
+
   # ── Job 2: Worker GIS — pipeline NDVI ────────────────────────────────────
   test-gis:
     name: Worker GIS — pipeline NDVI
