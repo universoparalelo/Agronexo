@@ -8,7 +8,7 @@ Por defecto la carpeta de trabajo es `trabajo-escritorio\`, al lado de la carpet
 
 Editar el código **no** requiere nada de esto: se sigue trabajando con Docker (`docker compose up`) como siempre. Estos scripts sirven para que cualquier integrante del equipo pueda **volver a armar el `Setup.exe`** después de cambiar código, sin depender de la PC de una sola persona.
 
-Ojo: armar el instalador desde cero **no se probó completo** (los pasos 1 a 3 quedaron sin verificar). Si alguien lo intenta y algo falla, anotarlo en `docs/release-v4.0.0.md`.
+La preparación del entorno (pasos 1 a 5) se probó desde cero en un Windows limpio (Windows Sandbox) con `preparar_entorno.ps1`. Armar el motor y el instalador (pasos 6 y 7) se probó con el entorno de una PC ya preparada. Si algo falla, anotarlo en `docs/release-v4.0.0.md`.
 
 ## Qué hace falta
 
@@ -19,6 +19,14 @@ Ojo: armar el instalador desde cero **no se probó completo** (los pasos 1 a 3 q
 ## Pasos
 
 Se hacen una sola vez, salvo el 6 y el 7, que se repiten cada vez que cambia el código.
+
+**Atajo para los pasos 1 a 5:** un solo comando que baja e instala todo (Python 3.14, Postgres con PostGIS, las librerías de Visual C++ y GTK) y recorta Postgres. Descarga unos 500 MB y tarda unos 40 minutos la primera vez; si se corre de nuevo, salta lo que ya está hecho. Si faltan las librerías de Visual C++ o hay que instalar GTK, puede pedir permisos de administrador.
+
+```powershell
+.\preparar_entorno.ps1
+```
+
+Si preferís hacerlo a mano, o algo falla, los pasos de abajo explican qué hace cada parte.
 
 **1. Entorno de Python** (con las versiones exactas de `requirements-empaquetado.txt`; no son las de Docker porque `pydantic 2.10.4` no tiene rueda para Python 3.14):
 
