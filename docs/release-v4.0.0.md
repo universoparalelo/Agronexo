@@ -1330,6 +1330,29 @@ Probado a mano en una carpeta de trabajo temporal con accesos al entorno existen
 - **Sacar "(prototipo)" del nombre de la app.** Viene del spike y ya no refleja el estado. Está en `escritorio/electron/package.json` (`productName` y `name`, también en `package-lock.json`), en el README del lanzador, en los scripts que mencionan `Setup 0.0.0.exe` y en los scripts de prueba del Sandbox (ruta `AgroNexo (prototipo)`). Cambia el nombre del programa en el menú Inicio y también la carpeta de datos (`%APPDATA%\AgroNexo (prototipo)\` pasaría a `AgroNexo`): una instalación vieja no vería sus datos, así que conviene hacerlo antes de que el equipo instale la versión actual. Alcanza con rearmar el instalador (`armar_instalador.ps1`), sin rearmar la API ni el worker, y probar que abre y entra al panel en el Sandbox.
 - **Armar el instalador en GitHub Actions.** Un workflow en runner de Windows, disparado por tag o a mano (`workflow_dispatch`), que deje el `Setup.exe` en GitHub Releases. No conviene en cada push: tarda 15 a 30 minutos, pesa unos 430 MB y gasta minutos de Windows. Depende de que `preparar_entorno.ps1` quede probado desde cero.
 - **Análisis de barbecho (para la próxima release).** El barbecho es el período sin cultivo entre una cosecha y la siguiente siembra. Un prestador lo analizaría para detectar malezas: sin nada plantado, cualquier zona con vegetación es maleza, y sirve para decidir dónde aplicar herbicida antes de sembrar (también para cortar el "puente verde" de plagas). Hoy no se puede: todo análisis exige un cultivo y un vuelo sin cultivo devuelve 409, por eso las marcas de barbecho del catálogo (Glifosato Gold, 2,4-D, Glifomax GS) nunca se sugieren. Agregar `barbecho` como tipo de cultivo no alcanza: el motor de reglas está pensado para problemas de un cultivo (agua, insectos, hongos) y haría falta un conjunto de reglas distinto, centrado en malezas. Decisión del equipo (2026-11-03): queda fuera de esta release.
+- **Actualizaciones automáticas (para la release 5).** Hoy se actualiza a mano: se instala la versión nueva por encima y los datos se conservan (viven en `%APPDATA%\AgroNexo (prototipo)\`, fuera de la carpeta del programa) y la base se migra sola con copia previa. Se puede hacer sin pagar con `electron-updater`: la app consulta si hay una versión nueva en GitHub Releases (el repositorio es público, no hace falta ninguna clave), la descarga y ofrece reiniciar. Hay que probar el flujo completo en el Sandbox, incluido si Windows muestra el aviso de SmartScreen en una actualización que baja la propia app (no se probó). Depende de publicar cada versión en GitHub Releases.
+- **Deuda técnica: el botón "Salir" (para la release siguiente).** En la app de escritorio, "Salir" (`TopbarPanel.jsx`) cierra la sesión y manda a `/login`, pero el lanzador inyecta la sesión automática y se vuelve al Dashboard. Con un solo usuario y sin contraseña, el botón no tiene un efecto claro. Hay que decidir si se saca en modo escritorio, si se reemplaza por otra acción (por ejemplo cerrar la app) o si se mantiene solo en la versión con Docker. No se tocó en esta release (decisión de Denise, 2026-11-03).
+
+#### Checklist de cierre de la v4.0.0 y publicación en GitHub Releases
+**Fecha:** 2026-11-03
+
+Hoy no hay ninguna release publicada en GitHub: existen solo los tags `v1.0.0`, `v2.0.0` y `v3.0.0`, sin archivos adjuntos. El instalador se comparte por Drive. Para publicar la `v4.0.0` (a mano, con el instalador adjunto; el límite es 2 GB por archivo):
+
+- [ ] PR de `preparar_entorno` mergeado (#158, hecho).
+- [ ] HU-R4-04 (línea de tiempo) resuelta: se completa, o el equipo decide que el calendario de vuelos alcanza.
+- [ ] El equipo está de acuerdo en dar por terminada la release 4.
+- [ ] Rama `release/v4.0.0` desde `main`, con los ajustes finales (versión y changelog).
+- [ ] Poner la versión `4.0.0` en `escritorio/electron/package.json` (hoy es `0.0.0`, por eso el instalador se llama `Setup 0.0.0.exe`) y decidir si se saca "(prototipo)" del nombre antes de armarlo.
+- [ ] Armar el instalador final desde `main` y probarlo en Windows Sandbox (instalación, análisis con un GeoTIFF, diagnóstico, PDF, backup, sin internet y reapertura).
+- [ ] PR a `main`, merge, y tag `git tag -a v4.0.0 -m "Release v4.0.0"` con push del tag.
+- [ ] Crear la release `v4.0.0` en GitHub con el instalador y las notas de abajo.
+
+**Notas de la release (borrador):**
+- *Título:* AgroNexo v4.0.0: aplicación de escritorio, comparación de vuelos y ahorro.
+- *Novedades:* app de escritorio para Windows que se instala con un doble clic, sin Docker, sin cuenta y sin conexión (bienvenida, backup, modo sin conexión, copia automática de la base antes de actualizar); comparación de dos vuelos, superposición de capas, resumen por vuelo y evolución del NDVI; trazabilidad del análisis; listado y edición de lotes y vuelos; perfil con logo de empresa; motor de diagnóstico por estadio con criterio del agrónomo y motor probabilístico experimental; catálogo de fitosanitarios con marcas y ahorro comparativo.
+- *Cómo instalarlo:* descargar el `.exe`; si Windows muestra "Windows protegió su PC", elegir "Más información" y "Ejecutar de todas formas" (el instalador no está firmado); abrir AgroNexo desde el menú Inicio.
+- *Requisitos:* Windows 10 u 11 de 64 bits, 8 GB de RAM recomendados y unos 2 GB libres.
+- *Limitaciones conocidas:* instalador sin firmar; sin mapa satelital de fondo cuando no hay internet; las actualizaciones son manuales.
 
 ---
 
