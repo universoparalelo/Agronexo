@@ -53,16 +53,17 @@ def generar_unidades_manejo(
     if not candidatas:
         return []
 
-    grupos: dict[tuple[str, str], list[tuple[int, dict]]] = {}
+    # Provisorio en la clave: una zona con causa dudosa no se mezcla con una firme.
+    grupos: dict[tuple[str, str, bool], list[tuple[int, dict]]] = {}
     for idx, feat in candidatas:
         p = feat.get("properties", {})
-        clave = (p.get("causa_indice", ""), p.get("severidad", ""))
+        clave = (p.get("causa_indice", ""), p.get("severidad", ""), bool(p.get("provisorio")))
         grupos.setdefault(clave, []).append((idx, feat))
 
     unidades: list[dict] = []
     unidad_id = 0
 
-    for (causa, severidad), miembros in grupos.items():
+    for (causa, severidad, _), miembros in grupos.items():
         if len(miembros) == 1:
             unidad_id += 1
             _, feat = miembros[0]
@@ -131,6 +132,7 @@ def _crear_unidad(
         "accion_recomendada": p0.get("accion_recomendada", ""),
         "como_confirmar_campo": p0.get("como_confirmar_campo", ""),
         "productos_sugeridos": p0.get("productos_sugeridos", []),
+        "provisorio": bool(p0.get("provisorio")),
         "area_total_ha": round(area_total, 2),
         "ndvi_promedio": ndvi_promedio,
         "n_zonas": len(features),

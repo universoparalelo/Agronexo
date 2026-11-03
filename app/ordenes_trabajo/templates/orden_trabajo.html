@@ -184,6 +184,7 @@
         <th>Severidad</th>
         <th>Área (ha)</th>
         <th>Zonas</th>
+        <th>Activo</th>
         <th>Producto</th>
         <th>Dosis/ha</th>
         <th>Volumen total</th>
@@ -198,12 +199,40 @@
         <td>{{ "%.2f"|format(item.area_ha) }}</td>
         <td>{{ item.zona_ids_texto }}</td>
         <td>{{ item.producto }}</td>
+        <td>{{ item.marca_recomendada or "—" }}</td>
         <td>{{ ("%.2f"|format(item.dosis_por_ha) + " " + item.unidad_dosis) if item.dosis_por_ha is not none else "— (completar a mano)" }}</td>
         <td>{{ ("%.2f"|format(item.volumen_total) + " " + item.unidad_volumen) if item.volumen_total is not none else "—" }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  {% if alternativas_grupos %}
+  <h2>Alternativas por unidad de manejo</h2>
+  <p style="font-size: 9pt; color: #4b5563;">Otras opciones para cada unidad, de menor a mayor costo por hectárea. No entran en los volúmenes totales ni en el ahorro: la orden de arriba se calculó con el producto recomendado.</p>
+  <table class="dosis">
+    <thead>
+      <tr>
+        <th>Unidades</th>
+        <th>Activo</th>
+        <th>Producto</th>
+        <th>Dosis/ha</th>
+        <th>Costo/ha (US$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for grupo in alternativas_grupos %}{% for alt in grupo.alternativas %}
+      <tr>
+        <td>{{ grupo.unidades }}</td>
+        <td>{{ alt.producto }}</td>
+        <td>{{ alt.marca }}</td>
+        <td>{{ alt.dosis }}</td>
+        <td>{{ alt.costo }}</td>
+      </tr>
+      {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 
   {% if items | selectattr("como_confirmar_campo") | list %}
   <h2>Cómo confirmar en campo</h2>
@@ -216,6 +245,7 @@
   <table class="totales">
     <thead>
       <tr>
+        <th>Activo</th>
         <th>Producto</th>
         <th>Área (ha)</th>
         <th>Volumen total</th>
@@ -225,12 +255,13 @@
       {% for total in totales %}
       <tr>
         <td>{{ total.producto }}</td>
+        <td>{{ total.marca_recomendada or "—" }}</td>
         <td>{{ "%.2f"|format(total.area_ha) }}</td>
         <td>{{ ("%.2f"|format(total.volumen_total) + " " + total.unidad_volumen) if total.unidad_dosis else "— (completar a mano)" }}</td>
       </tr>
       {% endfor %}
       {% if not totales %}
-      <tr><td colspan="3">Sin productos con dosis calculable.</td></tr>
+      <tr><td colspan="4">Sin productos con dosis calculable.</td></tr>
       {% endif %}
     </tbody>
   </table>

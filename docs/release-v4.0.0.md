@@ -1388,6 +1388,46 @@ No lo detectó el CI porque los tests del worker no importaban ese módulo.
 
 **Verificación:** worker reconstruido, `import jwt` y el test pasan dentro del contenedor, y el GeoTIFF multibanda de prueba (3,4 GB) se procesó completo en unos 4 minutos.
 
+
+#### Motor v1.3.0 — las zonas con empate recomiendan, como provisorio
+**Fecha:** 2026-11-03
+**Rama:** `feat/recomendar-en-zonas-ambiguas`
+
+En un lote de prueba (soja V6) la única zona con problema (15 ha, severidad crítica) caía en el empate de R80 ("estrés hídrico o déficit de nitrógeno"), quedaba con `causa_indice = "bajo_vigor_estadio"` y, como los productos salen del catálogo por `causa_indice`, sin ningún producto sugerido: el PDF no recomendaba nada y el ahorro daba $0, así que no se podía mostrar.
+
+**Qué cambió.** Con empate, `engine.py::precisar_con_bayes()` ahora usa la causa más probable (c1) para `causa_indice`, y de ahí salen los productos. El nombre sigue mostrando las dos candidatas ("X o Y") y la confianza sigue baja. La zona lleva `provisorio: true` y la acción pasa de "No aplicar productos hasta confirmar a campo" a "Recomendación provisoria según la causa más probable (X, 51%)... Confirmar a campo antes de aplicar". No se tocó el umbral de causa clara (`PROB_MIN_CAUSA_UNICA` y los 15 puntos) ni las tablas del motor probabilístico, que valida un agrónomo.
+
+- **Unidades de manejo** (`zonificacion.py`): `provisorio` entra en la clave de agrupación, así que una zona provisoria no se mezcla con una firme de la misma causa y severidad. La unidad hereda `provisorio`.
+- **Orden de trabajo y ahorro:** las unidades provisorias cuentan. `orden_trabajo.py` marca `provisorio` por ítem y por producto; `ahorro/calculo.py` agrega `estimado` por producto y en el total del vuelo y de la campaña (si algún vuelo o zona es provisorio), y la pantalla de ahorro lo avisa. El ahorro no se presenta como firme.
+- **Pantalla de Diagnóstico** (`TablaDiagnostico.jsx`): cartel "Provisorio, verificar en campo" en la tabla, en la tarjeta de la zona y en la unidad de manejo.
+- **PDF** (`reporte_ejecutivo.html`, `reportes/service.py`): el mismo cartel en el resumen ejecutivo, la tabla de zonas, el detalle técnico y las unidades de manejo.
+- **API:** campos nuevos `provisorio` (zona, unidad, ítem y total de la orden) y `estimado` (ahorro), todos con valor por defecto. No se quitó ni cambió ninguno existente.
+- **`MOTOR_VERSION` 1.2.1 → 1.3.0** (el pedido hablaba de 1.2.0, pero el código ya estaba en 1.2.1). Los diagnósticos guardados llevan la versión en su firma y se recalculan solos al abrirse.
+
+**Efecto lateral a tener en cuenta.** Antes, una zona con empate no tenía clase en el motor probabilístico (`causa_efectiva` devolvía `None`); ahora devuelve c1. En la práctica, si el agrónomo acepta o modifica esa zona en "Criterio técnico" (RFDR-04), queda como caso de entrenamiento de c1. Aceptar una zona provisoria equivale a confirmarla.
+
+**Verificación:** en el contenedor `api` pasan los tests de motor, texto, zonificación, orden de trabajo, ahorro, bayes, API de diagnóstico, revisiones, reportes y PDF (incluidos los nuevos del caso de empate), y el frontend compila con `vite build`. Pendiente: procesar un GeoTIFF multiespectral de prueba de punta a punta y ver el cartel en el navegador y en el PDF real.
+
+
+#### Orden de trabajo: columnas "Activo" y "Producto", con dosis y precio de la marca recomendada
+**Fecha:** 2026-11-03
+**Rama:** `feat/recomendar-en-zonas-ambiguas`
+
+En la tabla "Dosis por unidad de manejo" del PDF de la orden de trabajo la columna "Producto" mostraba solo el principio activo (por ejemplo "Clorpirifos"), aunque el diagnóstico ya tiene las marcas aptas con su costo por hectárea. Ahora el orden de las columnas es **Zonas | Activo | Producto | Dosis/ha | Volumen total**: "Activo" es lo que antes decía "Producto" y "Producto" es la marca recomendada ("Genérico · 48 % EC"). En el Excel del catálogo la dosis y el precio son de cada marca (la concentración cambia la dosis), así que **dosis, volumen, totales y ahorro salen de la marca recomendada**, no del activo.
+
+- **Criterio:** la marca recomendada es la de menor costo por hectárea entre las aptas para el cultivo, que es el orden que ya trae `alternativas_marca` del diagnóstico. `generar_orden_trabajo()` recibe ese diccionario (parámetro opcional) y agrega `marca_recomendada` a cada ítem; el router de la orden se lo pasa desde el diagnóstico.
+- **Cómo se elige la ganadora:** `armar_alternativas_marca()` toma las marcas cuyo campo `cultivos` incluye el cultivo del vuelo y las ordena por costo por hectárea (dosis de la marca × precio de la misma marca; desempata el nombre de la marca). Va primera la más barata. Compara solo costo: no pondera eficacia, registro ni disponibilidad. Es válido porque dosis y precio comparten unidad (L/ha con L, kg/ha con kg en las 47 presentaciones cargadas).
+- **Activo recomendado por unidad:** entre los activos que el diagnóstico sugiere para la causa, la orden y el ahorro toman el de menor costo por hectárea (el de su marca más barata). Antes tomaban el primero de la lista, que ordena por cantidad de marcas aptas y después por nombre; con una sola marca por activo eso era alfabético y no tenía criterio técnico. Los activos sin costo conocido van al final. No pondera eficacia ni registro. En el vuelo de prueba (soja V6, causa "Insecto") pasó de Clorpirifos a Thiamethoxam (USD 2,25/ha contra 5,20), así que el ahorro de ese vuelo cambió. El diagnóstico sigue mostrando todos los activos sugeridos, sin tocar.
+- **Alternativas:** cada ítem de la orden trae hasta 3 (`MAX_ALTERNATIVAS`) más, de menor a mayor costo, con su marca, dosis y costo por hectárea. El PDF las lista en la sección "Alternativas por unidad de manejo", después de la tabla de dosis, aclarando que no entran en los volúmenes totales ni en el ahorro. Las unidades con las mismas alternativas (misma causa) se agrupan en una sola fila por alternativa, con la columna "Unidades" en "#1, #2" (`agrupar_alternativas()` en `ordenes_trabajo/service.py`); antes se repetía la lista una vez por unidad. Sin alternativas (un solo activo para la causa) la sección no aparece. De los 5 insecticidas del catálogo se muestran 4: Lambda-cihalotrina (USD 20,00/ha) queda afuera.
+- **Dosis y volumen:** `generar_orden_trabajo()` usa la dosis y la unidad de la marca recomendada; si no hay marca, o la marca no trae dosis, cae a la dosis de referencia del activo. Los totales por activo llevan `dosis_por_ha` y `marca_recomendada`.
+- **Ahorro** (`ahorro/calculo.py`): la cantidad uniforme (todo el lote) se calcula con la misma dosis de la marca, para que variable y uniforme sean comparables. El precio es el de la marca (`precio_tipo = "marca"`), salvo que el usuario haya cargado a mano un precio del activo que siga vigente (menos de 90 días): ese manda. Sin marca, todo sigue como antes. La respuesta suma `marca` por producto, y la tabla del ahorro la muestra debajo del activo.
+- **Sin marca cargada** (activo sin presentaciones para ese cultivo) la celda muestra "—".
+- **"Totales por producto" del PDF:** ahora con columnas Activo | Producto | Área | Volumen total.
+- **Sin tocar:** "Seguridad y restricciones por producto" sigue por activo, porque las restricciones ambientales y las instrucciones de seguridad están cargadas en el activo y no en las marcas.
+- **Efecto previo necesario:** hay que haber corrido el importador del catálogo (`python -m app.catalogo.importador ... --aplicar`); con la tabla `presentaciones_productos` vacía no hay ni marcas ni productos sugeridos.
+
+**Verificación:** 115 tests en verde en el contenedor `api` (orden de trabajo, PDF, ahorro, diagnóstico y zonificación, con los nuevos de dosis y precio de la marca y de las alternativas). Con el vuelo de prueba de 6,95 ha (soja V6) la orden recomienda Thiamethoxam Genérico y lista Imidacloprid, Clorpirifos y Spinosad como alternativas; el PDF se genera sin errores. Pendiente: abrir el PDF y ver las columnas, los totales y la sección de alternativas, y revisar el ahorro nuevo en la pantalla.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)

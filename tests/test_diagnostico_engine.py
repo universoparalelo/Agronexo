@@ -299,7 +299,9 @@ def test_r80_con_empate_da_diferencial_y_pide_el_indice_que_falta():
     r = precisar_con_bayes(_r80(), _bayes(("estres_hidrico", 0.26), ("estres_nutricional_nitrogeno", 0.25),
                                           ("estres_nutricional_fosforo", 0.14)),
                            CultivoEnum.soja, {"ndvi"})
-    assert r.causa_indice == "bajo_vigor_estadio"
+    # La causa del catálogo es la más probable; el nombre sigue mostrando las dos.
+    assert r.causa_indice == "estres_hidrico"
+    assert r.provisorio is True
     assert r.regla_nombre == "Vigor bajo para el estadio — estrés hídrico o déficit de nitrógeno"
     assert "Calcular NDRE" in r.accion_recomendada
     assert "Para confirmar estrés hídrico:" in r.como_confirmar_campo
@@ -322,3 +324,30 @@ def test_r80_no_repite_probable_en_el_nombre():
     r = precisar_con_bayes(_r80(), _bayes(("estres_biotico_insecto", 0.6), ("estres_hidrico", 0.1)),
                            CultivoEnum.soja, {"ndvi"})
     assert r.regla_nombre == "Vigor bajo para el estadio — probable ataque de insectos"
+
+
+# ── v1.3.0: el empate recomienda, pero como provisorio ─────────────────
+
+_EMPATE = (("estres_hidrico", 0.26), ("estres_nutricional_nitrogeno", 0.25), ("estres_nutricional_fosforo", 0.14))
+
+
+def test_r80_con_empate_recomienda_la_causa_mas_probable_como_provisoria():
+    r = precisar_con_bayes(_r80(), _bayes(*_EMPATE), CultivoEnum.soja, {"ndvi", "ndre"})
+    assert r.causa_indice == "estres_hidrico"
+    assert r.provisorio is True
+    assert r.confianza.value == "baja"
+    assert r.regla_nombre == "Vigor bajo para el estadio — estrés hídrico o déficit de nitrógeno"
+    assert "Recomendación provisoria según la causa más probable (estrés hídrico" in r.accion_recomendada
+    assert "Confirmar a campo antes de aplicar" in r.accion_recomendada
+    assert "No aplicar productos" not in r.accion_recomendada
+
+
+def test_r80_con_causa_clara_no_es_provisorio():
+    r = precisar_con_bayes(_r80(), _bayes(("estres_hidrico", 0.55), ("estres_nutricional_nitrogeno", 0.20)),
+                           CultivoEnum.soja, {"ndvi", "ndre"})
+    assert r.provisorio is False
+
+
+def test_resultado_de_otras_reglas_no_es_provisorio():
+    r = evaluar_zona(_contexto(valores={"ndvi": 0.35}, patron_espacial="lineal"))
+    assert r.provisorio is False

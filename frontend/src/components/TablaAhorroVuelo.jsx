@@ -51,6 +51,12 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
             </div>
           </div>
 
+          {ahorro.estimado && (
+            <p className="ahorro-aviso-parcial">
+              Valor estimado: incluye zonas con recomendación provisoria, cuya causa todavía hay que confirmar a campo.
+            </p>
+          )}
+
           {!ahorro.todos_los_precios_cargados && (
             <p className="ahorro-aviso-parcial">
               El total es parcial: falta el precio de algún producto (marcado en la tabla).
@@ -71,7 +77,10 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
             <tbody>
               {productos.map((p) => (
                 <tr key={p.producto}>
-                  <td>{p.producto}</td>
+                  <td>
+                    {p.producto}
+                    {p.marca && <small className="ahorro-marca">{p.marca}</small>}
+                  </td>
                   <td>{fmtNum(p.cantidad_variable)} {unidadTotal(p.unidad_dosis)}</td>
                   <td>{p.cantidad_uniforme == null ? '—' : `${fmtNum(p.cantidad_uniforme)} ${unidadTotal(p.unidad_dosis)}`}</td>
                   <td>{p.ahorro_cantidad == null ? '—' : `${fmtNum(p.ahorro_cantidad)} ${unidadTotal(p.unidad_dosis)}`}</td>

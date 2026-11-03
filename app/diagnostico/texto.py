@@ -136,6 +136,8 @@ def generar_texto_zona(
         else:
             nombres_str = ", ".join(nombres)
         parts.append(f"Productos sugeridos: {nombres_str}.")
+        if props.get("provisorio"):
+            parts.append("Recomendación provisoria: verificar en campo antes de aplicar.")
 
     return " ".join(parts)
 
@@ -167,6 +169,8 @@ def generar_texto_unidad(props: dict) -> str:
         else:
             nombres_str = ", ".join(nombres)
         parts.append(f"Productos sugeridos: {nombres_str}.")
+        if props.get("provisorio"):
+            parts.append("Recomendación provisoria: verificar en campo antes de aplicar.")
 
     return " ".join(parts)
 

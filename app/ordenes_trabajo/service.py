@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.diagnostico.models import ProductoFitosanitario
+from app.diagnostico.orden_trabajo import texto_marca
 
 CULTIVO_LABEL = {"soja": "Soja", "maiz": "Maíz", "algodon": "Algodón", "sorgo": "Sorgo"}
 
@@ -96,6 +97,7 @@ def generar_pdf_orden_trabajo(orden: dict, metadata: dict, datos_aplicador: dict
         "n_unidades": len(items),
         "area_total_tratada_ha": orden.get("area_total_tratada_ha", 0.0),
         "items": items,
+        "alternativas_grupos": agrupar_alternativas(items),
         "totales": [_total_a_contexto(t) for t in orden.get("totales_por_producto", [])],
         "productos_con_seguridad": _productos_con_seguridad(items_raw),
         "productos_sin_seguridad_cargada": _productos_sin_seguridad(items_raw),
@@ -133,12 +135,43 @@ def _item_a_contexto(item: dict) -> dict:
         "area_ha": item.get("area_ha", 0.0),
         "zona_ids_texto": ", ".join(f"#{z}" for z in item.get("zona_ids", [])),
         "producto": item.get("producto") or "— (sin producto sugerido)",
+        "marca_recomendada": texto_marca(item.get("marca_recomendada")) or "—",
+        "alternativas": [_alternativa_a_contexto(a, item.get("unidad_id")) for a in item.get("alternativas", [])],
         "dosis_por_ha": item.get("dosis_por_ha"),
         "unidad_dosis": item.get("unidad_dosis") or "",
         "unidad_volumen": _unidad_volumen(item.get("unidad_dosis")),
         "como_confirmar_campo": item.get("como_confirmar_campo", ""),
         "volumen_total": item.get("volumen_total"),
         "sin_dosis_referencia": bool(item.get("sin_dosis_referencia", False)),
+    }
+
+
+def agrupar_alternativas(items: list[dict]) -> list[dict]:
+    """Las unidades con las mismas alternativas (misma causa => mismos activos) van en un
+    solo grupo, así el PDF no repite la lista una vez por unidad."""
+    grupos: dict[tuple, dict] = {}
+    for item in items:
+        alternativas = item.get("alternativas") or []
+        if not alternativas:
+            continue
+        clave = tuple((a["producto"], a["marca"], a["dosis"], a["costo"]) for a in alternativas)
+        grupo = grupos.setdefault(clave, {"unidad_ids": [], "alternativas": alternativas})
+        grupo["unidad_ids"].append(item["unidad_id"])
+    return [
+        {"unidades": ", ".join(f"#{u}" for u in g["unidad_ids"]), "alternativas": g["alternativas"]}
+        for g in grupos.values()
+    ]
+
+
+def _alternativa_a_contexto(alt: dict, unidad_id) -> dict:
+    dosis = alt.get("dosis_por_ha")
+    costo = alt.get("costo_por_ha_usd")
+    return {
+        "unidad_id": unidad_id,
+        "producto": alt.get("producto"),
+        "marca": texto_marca(alt.get("marca_recomendada")) or "—",
+        "dosis": f"{dosis:.2f} {alt.get('unidad_dosis') or ''}".strip() if dosis is not None else "—",
+        "costo": f"{costo:.2f}" if costo is not None else "—",
     }
 
 
@@ -150,6 +183,7 @@ def _unidad_volumen(unidad_dosis: str | None) -> str:
 def _total_a_contexto(total: dict) -> dict:
     return {
         "producto": total.get("producto"),
+        "marca_recomendada": texto_marca(total.get("marca_recomendada")) or "—",
         "area_ha": total.get("area_ha", 0.0),
         "volumen_total": total.get("volumen_total", 0.0),
         "unidad_dosis": total.get("unidad_dosis") or "",

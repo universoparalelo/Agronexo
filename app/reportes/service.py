@@ -205,6 +205,7 @@ def _zona_a_contexto(props: dict) -> dict:
         "causa_label": CAUSA_CORTO.get(causa, causa),
         "confianza_corto": CONFIANZA_CORTO.get(confianza, confianza),
         "excluida": bool(props.get("excluida", False)),
+        "provisorio": bool(props.get("provisorio", False)),
         "sin_problema": props.get("regla_id") == "R99",
         "texto_explicativo": props.get("texto_explicativo", ""),
         "accion_recomendada": props.get("accion_recomendada", ""),
@@ -230,6 +231,7 @@ def _unidad_a_contexto(props: dict) -> dict:
         "zona_ids": ", ".join(f"#{z}" for z in props.get("zona_ids", [])),
         "ndvi_promedio": props.get("ndvi_promedio"),
         "texto_unidad": props.get("texto_unidad", ""),
+        "provisorio": bool(props.get("provisorio", False)),
         "productos_completo": ", ".join(p["nombre"] for p in productos),
     }
 
@@ -265,7 +267,7 @@ def generar_resumen_ejecutivo(features: list[dict]) -> dict:
     for p in con_problema:
         causa = "suelo_desnudo" if p.get("regla_id") == "R01" else p.get("causa_indice", "")
         g = grupos.setdefault(causa, {
-            "area": 0.0, "n": 0, "peor": "normal", "dudosas": 0, "regla_nombre": p.get("regla_nombre", ""),
+            "area": 0.0, "n": 0, "peor": "normal", "dudosas": 0, "provisorias": 0, "regla_nombre": p.get("regla_nombre", ""),
         })
         g["area"] += p.get("area_ha", 0.0)
         g["n"] += 1
@@ -274,6 +276,8 @@ def generar_resumen_ejecutivo(features: list[dict]) -> dict:
             g["peor"] = sev
         if p.get("confianza") in ("media", "baja"):
             g["dudosas"] += 1
+        if p.get("provisorio"):
+            g["provisorias"] += 1
 
     problemas = []
     for causa, g in sorted(grupos.items(), key=lambda kv: (_ORDEN_SEVERIDAD.get(kv[1]["peor"], 9), -kv[1]["area"])):
@@ -287,6 +291,7 @@ def generar_resumen_ejecutivo(features: list[dict]) -> dict:
             "urgencia": URGENCIA.get(g["peor"], "vigilar"),
             "severidad": g["peor"],
             "que_hacer": que_hacer[0].upper() + que_hacer[1:],
+            "provisorio": g["provisorias"] > 0,
         })
 
     n_dudosas = sum(g["dudosas"] for g in grupos.values())

@@ -3404,6 +3404,18 @@ body {
 .confianza-badge-alta  { background: #fee2e2; color: #b91c1c; }
 .confianza-badge-media { background: #fef3c7; color: #b45309; }
 .confianza-badge-baja  { background: #f3f4f6; color: #6b7280; }
+.badge-provisorio {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid #f59e0b;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .diagnostico-card-meta {
   font-size: 0.76rem; color: #6b7280; display: flex; flex-wrap: wrap;
@@ -4102,6 +4114,12 @@ body {
 }
 
 /* Ahorro comparativo (HU-R4-11): aviso de total parcial por falta de precio */
+.ahorro-marca {
+  display: block;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
 .ahorro-aviso-parcial {
   background: #fff7ed;
   border: 1px solid #fed7aa;

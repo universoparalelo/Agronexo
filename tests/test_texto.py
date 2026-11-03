@@ -270,3 +270,20 @@ def test_texto_r80_nombra_las_causas_candidatas():
     texto = generar_texto_zona(props, 0.45)
     assert "Diagnóstico: vigor bajo para el estadio, estrés hídrico o déficit de nitrógeno" in texto
     assert "sin una causa puntual" not in texto
+
+
+def test_texto_zona_provisoria_avisa_que_hay_que_verificar_en_campo():
+    props = {"area_ha": 15.0, "ndvi_promedio": 0.26, "patron_espacial": "por_sectores",
+             "causa_indice": "estres_hidrico", "confianza": "baja", "regla_id": "R80",
+             "regla_nombre": "Vigor bajo para el estadio — estrés hídrico o déficit de nitrógeno",
+             "productos_sugeridos": [{"nombre": "Producto Test"}], "provisorio": True}
+    texto = generar_texto_zona(props, 0.30)
+    assert "Productos sugeridos: Producto Test." in texto
+    assert "Recomendación provisoria: verificar en campo antes de aplicar." in texto
+
+
+def test_texto_zona_firme_no_menciona_provisoria():
+    props = {"area_ha": 15.0, "ndvi_promedio": 0.26, "patron_espacial": "por_sectores",
+             "causa_indice": "estres_hidrico", "confianza": "media", "regla_id": "R40",
+             "productos_sugeridos": [{"nombre": "Producto Test"}]}
+    assert "provisoria" not in generar_texto_zona(props, 0.30)

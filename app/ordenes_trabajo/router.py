@@ -70,7 +70,7 @@ async def orden_trabajo_pdf(
         )
 
     catalogo_dosis = await cargar_catalogo_dosis(db)
-    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis)
+    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis, diagnostico.get("alternativas_marca"))
 
     try:
         # resolver_datos_aplicador descarga el logo de MinIO (sync) y

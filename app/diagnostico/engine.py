@@ -34,6 +34,9 @@ class ResultadoDiagnostico:
     accion_recomendada: str
     como_confirmar_campo: str
     excluida: bool
+    # Recomendación según la causa más probable cuando los datos no alcanzan
+    # para elegir entre dos: hay productos, pero hay que confirmar a campo.
+    provisorio: bool = False
 
 
 def evaluar_zona(contexto: ContextoZona) -> ResultadoDiagnostico:
@@ -100,8 +103,9 @@ def precisar_con_bayes(
     R80 solo sabe que la zona está por debajo de lo esperado para el estadio.
     En vez de devolver ese "no sé", usa el ranking del motor probabilístico:
     con una causa clara la adopta (confianza baja — no la confirmó ninguna
-    regla); con empate devuelve las dos más probables y cómo distinguirlas a
-    campo. "Sin problema" no es candidata: la zona ya está fuera de rango.
+    regla); con empate recomienda según la más probable pero como
+    PROVISORIO, nombra las dos y cómo distinguirlas a campo. "Sin problema"
+    no es candidata: la zona ya está fuera de rango.
     """
     if resultado.regla_id != "R80":
         return resultado
@@ -147,9 +151,10 @@ def precisar_con_bayes(
     c2, p2 = segunda
     regla2 = _regla_representativa(c2, cultivo)
     accion = (
-        f"La caída de vigor es compatible sobre todo con {etiqueta(c1)} ({p1:.0%}) o "
-        f"{etiqueta(c2)} ({p2:.0%}), sin que los datos permitan elegir una. No aplicar "
-        f"productos hasta confirmar a campo cuál de las dos es."
+        f"Recomendación provisoria según la causa más probable ({etiqueta(c1)}, {p1:.0%}). "
+        f"La caída de vigor también es compatible con {etiqueta(c2)} ({p2:.0%}) y los datos "
+        f"no permiten elegir una. Confirmar a campo antes de aplicar. "
+        f"Si se confirma {etiqueta(c1)}: {regla1.accion_recomendada}"
     )
     indice = _INDICE_QUE_DESEMPATA.get(frozenset({c1, c2}))
     if indice and indice not in indices_disponibles:
@@ -158,11 +163,13 @@ def precisar_con_bayes(
         regla_id="R80",
         regla_nombre=f"Vigor bajo para el estadio — {etiqueta(c1)} o {etiqueta(c2)}",
         confianza=ConfianzaEnum.baja,
-        causa_indice="bajo_vigor_estadio",
+        # c1 y no "bajo_vigor_estadio": de ahí salen los productos del catálogo.
+        causa_indice=c1,
         accion_recomendada=accion,
         como_confirmar_campo=(
             f"Para confirmar {etiqueta(c1)}: {regla1.como_confirmar_campo}\n\n"
             f"Para confirmar {etiqueta(c2)}: {regla2.como_confirmar_campo}"
         ),
         excluida=False,
+        provisorio=True,
     )

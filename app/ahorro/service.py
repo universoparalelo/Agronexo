@@ -72,10 +72,11 @@ async def calcular_ahorro_del_vuelo(db: AsyncSession, lote: Lote, vuelo: Vuelo) 
             "productos": [],
             "ahorro_total_pesos": 0.0,
             "todos_los_precios_cargados": True,
+            "estimado": False,
         }
 
     catalogo_dosis = await cargar_catalogo_dosis(db)
-    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis)
+    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis, diagnostico.get("alternativas_marca"))
 
     nombres = {t["producto"] for t in orden.get("totales_por_producto", [])}
     precios_por_producto = await _resolver_precios(db, nombres)
@@ -89,6 +90,7 @@ async def calcular_ahorro_del_vuelo(db: AsyncSession, lote: Lote, vuelo: Vuelo) 
         "productos": resultado["productos"],
         "ahorro_total_pesos": resultado["ahorro_total_pesos"],
         "todos_los_precios_cargados": resultado["todos_los_precios_cargados"],
+        "estimado": resultado["estimado"],
     }
 
 
@@ -126,4 +128,5 @@ async def calcular_ahorro_de_campana(db: AsyncSession, lote: Lote, cultivo: Cult
         "productos": acumulado["productos"],
         "ahorro_total_pesos": acumulado["ahorro_total_pesos"],
         "todos_los_precios_cargados": acumulado["todos_los_precios_cargados"],
+        "estimado": acumulado["estimado"],
     }

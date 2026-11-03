@@ -78,6 +78,9 @@ class OrdenTrabajoItem(BaseModel):
     restricciones_ambientales: str | None
     instrucciones_seguridad: str | None
     sin_dosis_referencia: bool
+    marca_recomendada: dict | None = None
+    alternativas: list[dict] = []
+    provisorio: bool = False
 
 
 class TotalProducto(BaseModel):
@@ -85,6 +88,9 @@ class TotalProducto(BaseModel):
     area_ha: float
     volumen_total: float
     unidad_dosis: str | None
+    dosis_por_ha: float | None = None
+    marca_recomendada: dict | None = None
+    provisorio: bool = False
 
 
 class OrdenTrabajoResponse(BaseModel):
@@ -109,6 +115,7 @@ class ZonaDiagnosticoProperties(BaseModel):
     accion_recomendada: str
     como_confirmar_campo: str
     excluida: bool
+    provisorio: bool = False
     productos_sugeridos: list[ProductoSugerido]
 
 

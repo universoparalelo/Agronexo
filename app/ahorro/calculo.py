@@ -16,6 +16,8 @@ variable vs. uniforme es aritmética").
 
 from __future__ import annotations
 
+from app.diagnostico.orden_trabajo import texto_marca
+
 
 def calcular_ahorro_vuelo(
     orden: dict,
@@ -37,11 +39,17 @@ def calcular_ahorro_vuelo(
     productos: list[dict] = []
     ahorro_total_pesos = 0.0
     todos_los_precios_cargados = True
+    estimado = False
 
     for total in orden.get("totales_por_producto", []):
         nombre = total["producto"]
         cantidad_variable = total["volumen_total"]
-        dosis_referencia = catalogo_dosis.get(nombre, {}).get("dosis_referencia")
+        marca = total.get("marca_recomendada")
+        # La dosis de la orden ya es la de la marca recomendada; el uniforme se calcula con
+        # la misma para que variable y uniforme sean comparables.
+        dosis_referencia = total.get("dosis_por_ha")
+        if dosis_referencia is None:
+            dosis_referencia = catalogo_dosis.get(nombre, {}).get("dosis_referencia")
 
         cantidad_uniforme = (
             round(area_total_lote_ha * dosis_referencia, 3) if dosis_referencia is not None else None
@@ -56,6 +64,13 @@ def calcular_ahorro_vuelo(
         )
 
         precio_info = precios_por_producto.get(nombre)
+        # Un precio que el usuario cargó a mano y sigue vigente manda; si no, el de la marca recomendada.
+        if marca and marca.get("precio_usd") is not None and not (precio_info and precio_info.get("tipo") == "usuario"):
+            precio_info = {
+                "producto_id": precio_info.get("producto_id") if precio_info else None,
+                "precio_usd": marca["precio_usd"],
+                "tipo": "marca",
+            }
         precio_usd = precio_info["precio_usd"] if precio_info else None
         ahorro_pesos = (
             round(ahorro_cantidad * precio_usd, 2)
@@ -67,9 +82,15 @@ def calcular_ahorro_vuelo(
         else:
             todos_los_precios_cargados = False
 
+        # Una unidad con recomendación provisoria (causa por confirmar a campo)
+        # entra al cálculo, pero el ahorro no puede presentarse como firme.
+        producto_estimado = bool(total.get("provisorio", False))
+        estimado = estimado or producto_estimado
+
         productos.append({
             "producto": nombre,
             "producto_id": precio_info.get("producto_id") if precio_info else None,
+            "marca": texto_marca(marca),
             "unidad_dosis": total.get("unidad_dosis"),
             "cantidad_variable": cantidad_variable,
             "cantidad_uniforme": cantidad_uniforme,
@@ -78,6 +99,7 @@ def calcular_ahorro_vuelo(
             "precio_usd": precio_usd,
             "precio_tipo": precio_info["tipo"] if precio_info else None,
             "ahorro_pesos": ahorro_pesos,
+            "estimado": producto_estimado,
         })
 
     return {
@@ -85,6 +107,7 @@ def calcular_ahorro_vuelo(
         "productos": productos,
         "ahorro_total_pesos": round(ahorro_total_pesos, 2),
         "todos_los_precios_cargados": todos_los_precios_cargados,
+        "estimado": estimado,
     }
 
 
@@ -108,7 +131,9 @@ def acumular_ahorro(vuelos_ahorro: list[dict]) -> dict:
                 "ahorro_pesos": 0.0,
                 "sin_dosis_referencia": False,
                 "sin_precio": False,
+                "estimado": False,
             })
+            entry["estimado"] = entry["estimado"] or bool(p.get("estimado", False))
             entry["cantidad_variable"] += p["cantidad_variable"] or 0.0
             if p["cantidad_uniforme"] is None:
                 entry["sin_dosis_referencia"] = True
@@ -123,6 +148,7 @@ def acumular_ahorro(vuelos_ahorro: list[dict]) -> dict:
     productos: list[dict] = []
     ahorro_total_pesos = 0.0
     todos_los_precios_cargados = True
+    estimado = False
 
     for entry in acumulado.values():
         entry["cantidad_variable"] = round(entry["cantidad_variable"], 3)
@@ -140,10 +166,12 @@ def acumular_ahorro(vuelos_ahorro: list[dict]) -> dict:
         # producto) — es plata real ahorrada en los vuelos que sí tenían
         # precio cargado, no un total "sucio" que conviene ocultar.
         ahorro_total_pesos += entry["ahorro_pesos"]
+        estimado = estimado or entry["estimado"]
         productos.append(entry)
 
     return {
         "productos": sorted(productos, key=lambda p: p["producto"]),
         "ahorro_total_pesos": round(ahorro_total_pesos, 2),
         "todos_los_precios_cargados": todos_los_precios_cargados,
+        "estimado": estimado,
     }
