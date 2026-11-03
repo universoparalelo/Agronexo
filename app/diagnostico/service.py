@@ -563,6 +563,7 @@ def _calcular_diagnostico(
             "accion_recomendada": resultado.accion_recomendada,
             "como_confirmar_campo": resultado.como_confirmar_campo,
             "excluida": resultado.excluida,
+            "provisorio": resultado.provisorio,
             "productos_sugeridos": (catalogo or {}).get(resultado.causa_indice, []),
             "evidencia": evidencia.a_dict(),
             "bayes": bayes,

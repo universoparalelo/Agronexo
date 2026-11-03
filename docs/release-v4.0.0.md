@@ -1388,6 +1388,26 @@ No lo detectó el CI porque los tests del worker no importaban ese módulo.
 
 **Verificación:** worker reconstruido, `import jwt` y el test pasan dentro del contenedor, y el GeoTIFF multibanda de prueba (3,4 GB) se procesó completo en unos 4 minutos.
 
+
+#### Motor v1.3.0 — las zonas con empate recomiendan, como provisorio
+**Fecha:** 2026-11-03
+**Rama:** `feat/recomendar-en-zonas-ambiguas`
+
+En un lote de prueba (soja V6) la única zona con problema (15 ha, severidad crítica) caía en el empate de R80 ("estrés hídrico o déficit de nitrógeno"), quedaba con `causa_indice = "bajo_vigor_estadio"` y, como los productos salen del catálogo por `causa_indice`, sin ningún producto sugerido: el PDF no recomendaba nada y el ahorro daba $0, así que no se podía mostrar.
+
+**Qué cambió.** Con empate, `engine.py::precisar_con_bayes()` ahora usa la causa más probable (c1) para `causa_indice`, y de ahí salen los productos. El nombre sigue mostrando las dos candidatas ("X o Y") y la confianza sigue baja. La zona lleva `provisorio: true` y la acción pasa de "No aplicar productos hasta confirmar a campo" a "Recomendación provisoria según la causa más probable (X, 51%)... Confirmar a campo antes de aplicar". No se tocó el umbral de causa clara (`PROB_MIN_CAUSA_UNICA` y los 15 puntos) ni las tablas del motor probabilístico, que valida un agrónomo.
+
+- **Unidades de manejo** (`zonificacion.py`): `provisorio` entra en la clave de agrupación, así que una zona provisoria no se mezcla con una firme de la misma causa y severidad. La unidad hereda `provisorio`.
+- **Orden de trabajo y ahorro:** las unidades provisorias cuentan. `orden_trabajo.py` marca `provisorio` por ítem y por producto; `ahorro/calculo.py` agrega `estimado` por producto y en el total del vuelo y de la campaña (si algún vuelo o zona es provisorio), y la pantalla de ahorro lo avisa. El ahorro no se presenta como firme.
+- **Pantalla de Diagnóstico** (`TablaDiagnostico.jsx`): cartel "Provisorio, verificar en campo" en la tabla, en la tarjeta de la zona y en la unidad de manejo.
+- **PDF** (`reporte_ejecutivo.html`, `reportes/service.py`): el mismo cartel en el resumen ejecutivo, la tabla de zonas, el detalle técnico y las unidades de manejo.
+- **API:** campos nuevos `provisorio` (zona, unidad, ítem y total de la orden) y `estimado` (ahorro), todos con valor por defecto. No se quitó ni cambió ninguno existente.
+- **`MOTOR_VERSION` 1.2.1 → 1.3.0** (el pedido hablaba de 1.2.0, pero el código ya estaba en 1.2.1). Los diagnósticos guardados llevan la versión en su firma y se recalculan solos al abrirse.
+
+**Efecto lateral a tener en cuenta.** Antes, una zona con empate no tenía clase en el motor probabilístico (`causa_efectiva` devolvía `None`); ahora devuelve c1. En la práctica, si el agrónomo acepta o modifica esa zona en "Criterio técnico" (RFDR-04), queda como caso de entrenamiento de c1. Aceptar una zona provisoria equivale a confirmarla.
+
+**Verificación:** en el contenedor `api` pasan los tests de motor, texto, zonificación, orden de trabajo, ahorro, bayes, API de diagnóstico, revisiones, reportes y PDF (incluidos los nuevos del caso de empate), y el frontend compila con `vite build`. Pendiente: procesar un GeoTIFF multiespectral de prueba de punta a punta y ver el cartel en el navegador y en el PDF real.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)

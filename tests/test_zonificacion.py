@@ -199,3 +199,29 @@ class TestGenerarUnidadesManejo:
 if __name__ == "__main__":
     import sys
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+class TestUnidadesProvisorias:
+    def _provisoria(self, zona_id, lon, lat):
+        f = _feature(zona_id, lon, lat, regla_id="R80")
+        f["properties"]["provisorio"] = True
+        return f
+
+    def test_la_unidad_hereda_el_provisorio_de_sus_zonas(self):
+        unidades = generar_unidades_manejo([self._provisoria(0, LON0, LAT0)], LON0, LAT0)
+        assert unidades[0]["properties"]["provisorio"] is True
+        assert unidades[0]["properties"]["productos_sugeridos"]
+        assert "Recomendación provisoria" in unidades[0]["properties"]["texto_unidad"]
+
+    def test_zona_firme_y_provisoria_contiguas_no_se_mezclan(self):
+        firme = _feature(1, LON0 + 0.0015, LAT0)
+        unidades = generar_unidades_manejo([self._provisoria(0, LON0, LAT0), firme], LON0, LAT0)
+        assert len(unidades) == 2
+        assert sorted(u["properties"]["provisorio"] for u in unidades) == [False, True]
+
+    def test_zonas_provisorias_contiguas_si_se_agrupan(self):
+        unidades = generar_unidades_manejo(
+            [self._provisoria(0, LON0, LAT0), self._provisoria(1, LON0 + 0.0015, LAT0)], LON0, LAT0,
+        )
+        assert len(unidades) == 1
+        assert unidades[0]["properties"]["provisorio"] is True

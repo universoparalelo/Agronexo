@@ -51,6 +51,12 @@ export default function TablaAhorroVuelo({ ahorro, onCargarPrecio }) {
             </div>
           </div>
 
+          {ahorro.estimado && (
+            <p className="ahorro-aviso-parcial">
+              Valor estimado: incluye zonas con recomendación provisoria, cuya causa todavía hay que confirmar a campo.
+            </p>
+          )}
+
           {!ahorro.todos_los_precios_cargados && (
             <p className="ahorro-aviso-parcial">
               El total es parcial: falta el precio de algún producto (marcado en la tabla).

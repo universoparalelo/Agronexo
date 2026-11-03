@@ -132,3 +132,35 @@ def test_acumular_ahorro_lista_vacia():
     assert acumulado["ahorro_total_pesos"] == 0.0
     assert acumulado["todos_los_precios_cargados"] is True
     print("✓ acumular_ahorro con lista vacía no rompe (campaña sin vuelos completados)")
+
+
+# ── Recomendaciones provisorias: el ahorro cuenta pero se marca como estimado ──
+
+def test_ahorro_con_zona_provisoria_cuenta_y_queda_estimado():
+    orden = _orden({**_total("Glifosato", 15.0, 45.0), "provisorio": True})
+    precios = {"Glifosato": {"precio_usd": 3.5, "tipo": "referencia"}}
+
+    resultado = calcular_ahorro_vuelo(orden, _CATALOGO, area_total_lote_ha=100.0, precios_por_producto=precios)
+
+    assert resultado["ahorro_total_pesos"] == round((300.0 - 45.0) * 3.5, 2)
+    assert resultado["productos"][0]["estimado"] is True
+    assert resultado["estimado"] is True
+
+
+def test_ahorro_sin_zonas_provisorias_no_es_estimado():
+    orden = _orden(_total("Glifosato", 20.0, 60.0))
+    resultado = calcular_ahorro_vuelo(orden, _CATALOGO, area_total_lote_ha=100.0, precios_por_producto={})
+    assert resultado["productos"][0]["estimado"] is False
+    assert resultado["estimado"] is False
+
+
+def test_acumulado_de_campana_es_estimado_si_algun_vuelo_lo_es():
+    precios = {"Glifosato": {"precio_usd": 3.5, "tipo": "referencia"}}
+    firme = calcular_ahorro_vuelo(_orden(_total("Glifosato", 20.0, 60.0)), _CATALOGO, 100.0, precios)
+    provisorio = calcular_ahorro_vuelo(
+        _orden({**_total("Glifosato", 15.0, 45.0), "provisorio": True}), _CATALOGO, 100.0, precios,
+    )
+    assert acumular_ahorro([firme])["estimado"] is False
+    acumulado = acumular_ahorro([firme, provisorio])
+    assert acumulado["estimado"] is True
+    assert acumulado["productos"][0]["estimado"] is True

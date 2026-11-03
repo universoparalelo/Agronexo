@@ -33,6 +33,9 @@ const SEVERIDAD_LABELS = {
 
 const REVISION_ICONO = { aceptado: '✓', modificado: '✎', rechazado: '✕' }
 
+// Zona con empate entre dos causas: se recomienda según la más probable, sin confirmarla.
+const TEXTO_PROVISORIO = 'Provisorio, verificar en campo'
+
 // Causa de la regla en las clases del motor probabilístico — espejo de
 // app/diagnostico/bayes.py::causa_efectiva.
 function causaEfectiva(p) {
@@ -244,7 +247,10 @@ export default function TablaDiagnostico({
                         {CONFIANZA_CORTO[p.confianza] || p.confianza || '—'}
                       </span>
                     </td>
-                    <td className="stats-producto">{sinProblema ? '—' : producto}</td>
+                    <td className="stats-producto">
+                      {sinProblema ? '—' : producto}
+                      {p.provisorio && producto !== '—' && <span className="badge-provisorio">{TEXTO_PROVISORIO}</span>}
+                    </td>
                     <td>
                       {revisiones[p.zona_id]
                         ? (
@@ -285,6 +291,7 @@ export default function TablaDiagnostico({
                         {SEVERIDAD_LABELS[severidad] || severidad}
                       </span>
                     )}
+                    {p.provisorio && <span className="diagnostico-badge badge-provisorio">{TEXTO_PROVISORIO}</span>}
                     <span className={`diagnostico-badge confianza-badge-${p.confianza || 'media'}`}>
                       {CONFIANZA_LABELS[p.confianza] || p.confianza}
                     </span>
@@ -362,6 +369,7 @@ export default function TablaDiagnostico({
                   <div className="unidad-card-cuerpo">
                     <div>
                       <p className="unidad-card-causa">{p.regla_nombre}</p>
+                      {p.provisorio && <span className="badge-provisorio">{TEXTO_PROVISORIO}</span>}
                       <div className="unidad-card-meta">
                         <span>{p.n_zonas} zona{p.n_zonas !== 1 ? 's' : ''}</span>
                         {p.ndvi_promedio != null && (

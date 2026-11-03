@@ -145,3 +145,16 @@ class TestGenerarOrdenTrabajo:
 if __name__ == "__main__":
     import sys
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+class TestProvisorio:
+    def test_la_unidad_provisoria_entra_a_la_orden_y_marca_el_item_y_el_total(self):
+        unidad = _unidad(1, area_ha=15.0)
+        unidad["properties"]["provisorio"] = True
+        orden = generar_orden_trabajo([unidad, _unidad(2, area_ha=1.0, producto="Glifosato")], CATALOGO_BASE)
+        assert orden["items"][0]["provisorio"] is True
+        assert orden["items"][0]["volumen_total"] == 1500.0
+        assert orden["items"][1]["provisorio"] is False
+        totales = {t["producto"]: t for t in orden["totales_por_producto"]}
+        assert totales["Urea 46% N"]["provisorio"] is True
+        assert totales["Glifosato"]["provisorio"] is False

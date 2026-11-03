@@ -21,6 +21,7 @@ class AhorroProducto(BaseModel):
     precio_usd: float | None
     precio_tipo: str | None
     ahorro_pesos: float | None
+    estimado: bool = False
 
 
 class AhorroVueloResponse(BaseModel):
@@ -31,6 +32,7 @@ class AhorroVueloResponse(BaseModel):
     productos: list[AhorroProducto]
     ahorro_total_pesos: float
     todos_los_precios_cargados: bool
+    estimado: bool = False
 
 
 class AhorroProductoAcumulado(BaseModel):
@@ -46,6 +48,7 @@ class AhorroProductoAcumulado(BaseModel):
     ahorro_pesos: float
     sin_dosis_referencia: bool
     sin_precio: bool
+    estimado: bool = False
 
 
 class AhorroCampanaResponse(BaseModel):
@@ -59,6 +62,7 @@ class AhorroCampanaResponse(BaseModel):
     productos: list[AhorroProductoAcumulado]
     ahorro_total_pesos: float
     todos_los_precios_cargados: bool
+    estimado: bool = False
 
 
 class AhorroComparativoResponse(BaseModel):

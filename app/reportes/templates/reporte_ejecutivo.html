@@ -89,6 +89,8 @@
   .badge-leve     { background: #fbbf24; color: #1f2937; }
   .badge-normal   { background: #86efac; color: #14532d; }
   .badge-vigorosa { background: #3b82f6; }
+  .badge-provisorio { background: #fef3c7; color: #92400e; border: 0.3mm solid #f59e0b; }
+  .aviso-provisorio { margin: 1.5mm 0; padding: 1.5mm 2.5mm; background: #fef3c7; color: #92400e; border-left: 1mm solid #f59e0b; font-size: 9pt; }
 
   .zona-detalle {
     margin-bottom: 4mm;
@@ -170,7 +172,7 @@
           <td><strong>{{ p.que_es }}</strong></td>
           <td>{{ "%.1f"|format(p.area_ha) }} ha{% if p.n_zonas > 1 %} ({{ p.n_zonas }} zonas){% endif %}</td>
           <td><span class="badge badge-{{ p.severidad }}">{{ p.urgencia }}</span></td>
-          <td>{{ p.que_hacer }}</td>
+          <td>{{ p.que_hacer }}{% if p.provisorio %}<br><span class="badge badge-provisorio">Provisorio, verificar en campo</span>{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -231,7 +233,7 @@
         <td><span class="badge badge-{{ zona.severidad }}">{{ zona.severidad_label }}</span></td>
         <td>{{ zona.causa_label }}</td>
         <td>{{ zona.confianza_corto }}</td>
-        <td>{{ zona.productos_texto }}</td>
+        <td>{{ zona.productos_texto }}{% if zona.provisorio and zona.productos_texto %}<br><span class="badge badge-provisorio">Provisorio, verificar en campo</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -243,6 +245,7 @@
     <div class="zona-detalle {{ zona.severidad }}">
       <h3>Zona #{{ zona.zona_id }} — {{ zona.regla_nombre or zona.causa_label }} · {{ zona.severidad_label }} ({{ "%.2f"|format(zona.area_ha) }} ha)</h3>
       <p class="meta">Patrón: {{ zona.patron_label or '—' }} · NDVI {{ "%.3f"|format(zona.ndvi_promedio) }} · {{ zona.confianza_label }}</p>
+      {% if zona.provisorio %}<p class="aviso-provisorio"><strong>Provisorio, verificar en campo:</strong> la causa no está confirmada; la recomendación se basa en la más probable.</p>{% endif %}
       <p>{{ zona.texto_explicativo }}</p>
       {% if zona.accion_recomendada %}
       <p><strong>Acción recomendada:</strong> {{ zona.accion_recomendada }}</p>
@@ -267,6 +270,7 @@
   <div class="zona-detalle {{ u.severidad }}">
     <h3>Unidad #{{ u.unidad_id }} — {{ u.regla_nombre }} · {{ u.severidad_label }}</h3>
     <p class="meta">{{ u.area_total_ha }} ha · {{ u.n_zonas }} zona{{ 's' if u.n_zonas != 1 else '' }} ({{ u.zona_ids }}){% if u.ndvi_promedio is not none %} · NDVI {{ "%.3f"|format(u.ndvi_promedio) }}{% endif %}</p>
+    {% if u.provisorio %}<p class="aviso-provisorio"><strong>Provisorio, verificar en campo:</strong> la causa no está confirmada; la recomendación se basa en la más probable.</p>{% endif %}
     {% if u.texto_unidad %}<p>{{ u.texto_unidad }}</p>{% endif %}
     {% if u.productos_completo %}<p class="productos"><strong>Productos sugeridos:</strong> {{ u.productos_completo }}</p>{% endif %}
   </div>

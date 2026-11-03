@@ -106,3 +106,50 @@ def test_pdf_incluye_como_confirmar_en_campo_y_unidades():
     assert "Unidad #1" in html
     assert "DM 46i20" in html
     assert "NDVI, NDRE" in html
+
+
+def test_pdf_marca_como_provisoria_la_zona_con_causa_sin_confirmar():
+    diagnostico = {
+        "features": [
+            _zona(
+                1, "R80", "estres_hidrico", "critica", 15.0, confianza="baja", provisorio=True,
+                regla_nombre="Vigor bajo para el estadio — estrés hídrico o déficit de nitrógeno",
+                patron_espacial="por_sectores", texto_explicativo="Texto técnico.",
+                accion_recomendada="Recomendación provisoria según la causa más probable (estrés hídrico, 51%).",
+                productos_sugeridos=[{"nombre": "Prod A"}],
+            ),
+            _zona(2, "R40", "estres_biotico_insecto", "moderada", 2.0, productos_sugeridos=[{"nombre": "Prod B"}]),
+        ],
+        "unidades_manejo": [{"properties": {
+            "unidad_id": 1, "severidad": "critica", "regla_nombre": "Vigor bajo para el estadio",
+            "area_total_ha": 15.0, "n_zonas": 1, "zona_ids": [1], "ndvi_promedio": 0.26,
+            "texto_unidad": "Unidad.", "productos_sugeridos": [{"nombre": "Prod A"}], "provisorio": True,
+        }}],
+        "metadata": {"lote_nombre": "Lote X", "cultivo": "soja", "indices_disponibles": ["ndvi"]},
+    }
+    capturado = {}
+
+    class _HTMLFalso:
+        def __init__(self, string, base_url):
+            capturado["html"] = string
+
+        def write_pdf(self):
+            return b"%PDF"
+
+    with patch.object(service, "generar_imagen_mapa_zonas", return_value=b"png"),          patch("weasyprint.HTML", _HTMLFalso):
+        service.generar_pdf_reporte(diagnostico)
+
+    html = capturado["html"]
+    # Solo la zona 1: resumen ejecutivo, tabla, detalle técnico y unidad de manejo; la zona firme no suma cartel.
+    assert html.count("Provisorio, verificar en campo") == 4
+    assert "la causa no está confirmada" in html
+
+
+def test_resumen_ejecutivo_marca_el_grupo_con_zonas_provisorias():
+    r = generar_resumen_ejecutivo([
+        _zona(1, "R80", "estres_hidrico", "critica", 15.0, confianza="baja", provisorio=True),
+        _zona(2, "R05", "estres_biotico_insecto", "leve", 2.0),
+    ])
+    por_severidad = {p["severidad"]: p for p in r["problemas"]}
+    assert por_severidad["critica"]["provisorio"] is True
+    assert por_severidad["leve"]["provisorio"] is False

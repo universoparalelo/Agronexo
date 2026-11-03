@@ -59,6 +59,7 @@ def generar_orden_trabajo(
             "restricciones_ambientales": info_producto.get("restricciones_ambientales"),
             "instrucciones_seguridad": info_producto.get("instrucciones_seguridad"),
             "sin_dosis_referencia": sin_dosis,
+            "provisorio": bool(props.get("provisorio", False)),
         })
 
     return {
@@ -81,7 +82,9 @@ def _totales_por_producto(items: list[dict]) -> list[dict]:
             "area_ha": 0.0,
             "volumen_total": 0.0,
             "unidad_dosis": item["unidad_dosis"],
+            "provisorio": False,
         })
+        acumulado["provisorio"] = acumulado["provisorio"] or item["provisorio"]
         acumulado["area_ha"] += item["area_ha"]
         if item["volumen_total"] is not None:
             acumulado["volumen_total"] += item["volumen_total"]
