@@ -97,6 +97,7 @@ def generar_pdf_orden_trabajo(orden: dict, metadata: dict, datos_aplicador: dict
         "n_unidades": len(items),
         "area_total_tratada_ha": orden.get("area_total_tratada_ha", 0.0),
         "items": items,
+        "alternativas_grupos": agrupar_alternativas(items),
         "totales": [_total_a_contexto(t) for t in orden.get("totales_por_producto", [])],
         "productos_con_seguridad": _productos_con_seguridad(items_raw),
         "productos_sin_seguridad_cargada": _productos_sin_seguridad(items_raw),
@@ -143,6 +144,23 @@ def _item_a_contexto(item: dict) -> dict:
         "volumen_total": item.get("volumen_total"),
         "sin_dosis_referencia": bool(item.get("sin_dosis_referencia", False)),
     }
+
+
+def agrupar_alternativas(items: list[dict]) -> list[dict]:
+    """Las unidades con las mismas alternativas (misma causa => mismos activos) van en un
+    solo grupo, así el PDF no repite la lista una vez por unidad."""
+    grupos: dict[tuple, dict] = {}
+    for item in items:
+        alternativas = item.get("alternativas") or []
+        if not alternativas:
+            continue
+        clave = tuple((a["producto"], a["marca"], a["dosis"], a["costo"]) for a in alternativas)
+        grupo = grupos.setdefault(clave, {"unidad_ids": [], "alternativas": alternativas})
+        grupo["unidad_ids"].append(item["unidad_id"])
+    return [
+        {"unidades": ", ".join(f"#{u}" for u in g["unidad_ids"]), "alternativas": g["alternativas"]}
+        for g in grupos.values()
+    ]
 
 
 def _alternativa_a_contexto(alt: dict, unidad_id) -> dict:

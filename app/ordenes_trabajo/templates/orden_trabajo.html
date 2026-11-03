@@ -207,13 +207,13 @@
     </tbody>
   </table>
 
-  {% if items | selectattr("alternativas") | list %}
+  {% if alternativas_grupos %}
   <h2>Alternativas por unidad de manejo</h2>
   <p style="font-size: 9pt; color: #4b5563;">Otras opciones para cada unidad, de menor a mayor costo por hectárea. No entran en los volúmenes totales ni en el ahorro: la orden de arriba se calculó con el producto recomendado.</p>
   <table class="dosis">
     <thead>
       <tr>
-        <th>Unidad</th>
+        <th>Unidades</th>
         <th>Activo</th>
         <th>Producto</th>
         <th>Dosis/ha</th>
@@ -221,9 +221,9 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in items %}{% for alt in item.alternativas %}
+      {% for grupo in alternativas_grupos %}{% for alt in grupo.alternativas %}
       <tr>
-        <td>#{{ alt.unidad_id }}</td>
+        <td>{{ grupo.unidades }}</td>
         <td>{{ alt.producto }}</td>
         <td>{{ alt.marca }}</td>
         <td>{{ alt.dosis }}</td>

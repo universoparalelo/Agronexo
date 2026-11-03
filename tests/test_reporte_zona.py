@@ -164,11 +164,15 @@ def _html_orden_con_alternativas(productos):
         "Barato": [{"marca": "Genérico", "concentracion": "48 % EC", "dosis_por_ha": 0.8, "unidad_dosis": "L/ha", "costo_por_ha_usd": 5.2}],
         "Medio": [{"marca": "Marca M", "concentracion": "10 %", "dosis_por_ha": 0.15, "unidad_dosis": "L/ha", "costo_por_ha_usd": 9.0}],
     }
-    orden = generar_orden_trabajo([unidad], {}, marcas)
+    return _render_orden_con_alternativas(generar_orden_trabajo([unidad], {}, marcas))
+
+
+def _render_orden_con_alternativas(orden):
+    items = [_item_a_contexto(i) for i in orden["items"]]
     return _env_orden.get_template("orden_trabajo.html").render(
         lote_nombre="L", cultivo_label="Soja", fecha_vuelo="—", generado_en="—",
-        n_unidades=1, area_total_tratada_ha=orden["area_total_tratada_ha"],
-        items=[_item_a_contexto(i) for i in orden["items"]],
+        n_unidades=len(items), area_total_tratada_ha=orden["area_total_tratada_ha"],
+        items=items, alternativas_grupos=agrupar_alternativas(items),
         totales=[_total_a_contexto(t) for t in orden["totales_por_producto"]],
         productos_con_seguridad=[], productos_sin_seguridad_cargada=[], hay_items_sin_dosis=False,
     )
@@ -186,3 +190,36 @@ def test_orden_lista_las_alternativas_aparte_y_sin_entrar_en_los_totales():
 
 def test_orden_con_un_solo_activo_no_muestra_la_seccion_de_alternativas():
     assert "Alternativas por unidad de manejo" not in _html_orden_con_alternativas(["Barato"])
+
+
+from app.ordenes_trabajo.service import agrupar_alternativas  # noqa: E402
+
+_MARCAS_ALT = {
+    n: [{"marca": "Genérico", "concentracion": "x", "dosis_por_ha": 1.0, "unidad_dosis": "L/ha", "costo_por_ha_usd": c}]
+    for n, c in (("Barato", 1.0), ("Medio", 2.0), ("Caro", 3.0), ("Otro", 4.0))
+}
+
+
+def test_unidades_con_las_mismas_alternativas_van_en_una_sola_fila_por_alternativa():
+    unidades = [
+        _unidad(unidad_id=1, productos_sugeridos=[{"nombre": n} for n in ("Barato", "Medio", "Caro")]),
+        _unidad(unidad_id=2, productos_sugeridos=[{"nombre": n} for n in ("Barato", "Medio", "Caro")]),
+    ]
+    html = _render_orden_con_alternativas(generar_orden_trabajo(unidades, {}, _MARCAS_ALT))
+    alternativas = html.split("Alternativas por unidad de manejo")[1].split("</table>")[0]
+    assert alternativas.count("<td>#1, #2</td>") == 2          # Medio y Caro, una vez cada una
+    assert alternativas.count("<td>Medio</td>") == 1 and alternativas.count("<td>Caro</td>") == 1
+
+
+def test_unidades_con_alternativas_distintas_quedan_en_grupos_separados():
+    unidades = [
+        _unidad(unidad_id=1, productos_sugeridos=[{"nombre": n} for n in ("Barato", "Medio")]),
+        _unidad(unidad_id=2, productos_sugeridos=[{"nombre": n} for n in ("Barato", "Caro")]),
+    ]
+    items = [_item_a_contexto(i) for i in generar_orden_trabajo(unidades, {}, _MARCAS_ALT)["items"]]
+    assert [g["unidades"] for g in agrupar_alternativas(items)] == ["#1", "#2"]
+
+
+def test_sin_alternativas_no_hay_grupos():
+    items = [_item_a_contexto(i) for i in generar_orden_trabajo([_unidad()], {}, _MARCAS_ALT)["items"]]
+    assert agrupar_alternativas(items) == []
