@@ -164,3 +164,45 @@ def test_acumulado_de_campana_es_estimado_si_algun_vuelo_lo_es():
     acumulado = acumular_ahorro([firme, provisorio])
     assert acumulado["estimado"] is True
     assert acumulado["productos"][0]["estimado"] is True
+
+
+# ── Dosis y precio de la marca recomendada ──
+
+_MARCA = {"marca": "Genérico", "concentracion": "48 % EC", "dosis_por_ha": 0.8, "unidad_dosis": "L/ha", "precio_usd": 6.5}
+
+
+def test_ahorro_usa_la_dosis_y_el_precio_de_la_marca():
+    # lote de 100 ha, 20 ha tratadas con la marca a 0.8 L/ha -> 16 L; uniforme 80 L; ahorro 64 L a USD 6.5
+    orden = _orden({**_total("Glifosato", 20.0, 16.0), "dosis_por_ha": 0.8, "marca_recomendada": _MARCA})
+    precios = {"Glifosato": {"producto_id": "x", "precio_usd": 3.5, "tipo": "referencia"}}
+
+    producto = calcular_ahorro_vuelo(orden, _CATALOGO, 100.0, precios)["productos"][0]
+
+    assert producto["cantidad_uniforme"] == 80.0       # y no 100 * 3.0 del activo
+    assert producto["ahorro_cantidad"] == 64.0
+    assert producto["precio_usd"] == 6.5               # y no los 3.5 del activo
+    assert producto["precio_tipo"] == "marca"
+    assert producto["ahorro_pesos"] == round(64.0 * 6.5, 2)
+    assert producto["marca"] == "Genérico · 48 % EC"
+    assert producto["producto_id"] == "x"
+
+
+def test_un_precio_cargado_por_el_usuario_manda_sobre_el_de_la_marca():
+    orden = _orden({**_total("Glifosato", 20.0, 16.0), "dosis_por_ha": 0.8, "marca_recomendada": _MARCA})
+    precios = {"Glifosato": {"producto_id": "x", "precio_usd": 9.0, "tipo": "usuario"}}
+
+    producto = calcular_ahorro_vuelo(orden, _CATALOGO, 100.0, precios)["productos"][0]
+
+    assert producto["precio_usd"] == 9.0
+    assert producto["precio_tipo"] == "usuario"
+
+
+def test_sin_marca_el_ahorro_sigue_con_el_activo():
+    orden = _orden(_total("Glifosato", 20.0, 60.0))
+    precios = {"Glifosato": {"producto_id": "x", "precio_usd": 3.5, "tipo": "referencia"}}
+
+    producto = calcular_ahorro_vuelo(orden, _CATALOGO, 100.0, precios)["productos"][0]
+
+    assert producto["cantidad_uniforme"] == 300.0
+    assert producto["precio_tipo"] == "referencia"
+    assert producto["marca"] is None

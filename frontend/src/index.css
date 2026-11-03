@@ -4114,6 +4114,12 @@ body {
 }
 
 /* Ahorro comparativo (HU-R4-11): aviso de total parcial por falta de precio */
+.ahorro-marca {
+  display: block;
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
 .ahorro-aviso-parcial {
   background: #fff7ed;
   border: 1px solid #fed7aa;

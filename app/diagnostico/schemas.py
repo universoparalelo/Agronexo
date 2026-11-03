@@ -87,6 +87,8 @@ class TotalProducto(BaseModel):
     area_ha: float
     volumen_total: float
     unidad_dosis: str | None
+    dosis_por_ha: float | None = None
+    marca_recomendada: dict | None = None
     provisorio: bool = False
 
 

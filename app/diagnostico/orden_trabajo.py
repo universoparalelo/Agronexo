@@ -31,9 +31,11 @@ def generar_orden_trabajo(
     sin_dosis_referencia=True — la cantidad queda pendiente de completar
     a mano en vez de descartarse silenciosamente.
 
-    alternativas_marca: la del diagnóstico (activo -> marcas aptas, de menor a mayor
-    costo por ha). La primera es la marca recomendada de la unidad; es solo informativa:
-    la dosis y el volumen siguen saliendo del activo, así el ahorro no cambia según la marca.
+    alternativas_marca: la del diagnóstico (activo -> marcas aptas para el cultivo, de
+    menor a mayor costo por ha). La primera es la marca recomendada: la dosis y el volumen
+    salen de ESA marca, porque en el catálogo la dosis y el precio son de cada marca (la
+    concentración cambia la dosis). Sin marca cargada, o con una marca sin dosis, se usa la
+    dosis de referencia del activo.
     """
     items: list[dict] = []
 
@@ -47,8 +49,13 @@ def generar_orden_trabajo(
         dosis_referencia = info_producto.get("dosis_referencia")
         unidad_dosis = info_producto.get("unidad")
 
-        sin_dosis = dosis_referencia is None
         marcas = (alternativas_marca or {}).get(nombre_producto) if nombre_producto else None
+        marca = marcas[0] if marcas else None
+        if marca and marca.get("dosis_por_ha") is not None:
+            dosis_referencia = marca["dosis_por_ha"]
+            unidad_dosis = marca.get("unidad_dosis") or unidad_dosis
+
+        sin_dosis = dosis_referencia is None
         volumen_total = None if sin_dosis else round(area_ha * dosis_referencia, 3)
 
         items.append({
@@ -65,7 +72,7 @@ def generar_orden_trabajo(
             "restricciones_ambientales": info_producto.get("restricciones_ambientales"),
             "instrucciones_seguridad": info_producto.get("instrucciones_seguridad"),
             "sin_dosis_referencia": sin_dosis,
-            "marca_recomendada": marcas[0] if marcas else None,
+            "marca_recomendada": marca,
             "provisorio": bool(props.get("provisorio", False)),
         })
 
@@ -74,6 +81,13 @@ def generar_orden_trabajo(
         "totales_por_producto": _totales_por_producto(items),
         "area_total_tratada_ha": round(sum(item["area_ha"] for item in items), 2),
     }
+
+
+def texto_marca(marca: dict | None) -> str | None:
+    """"Genérico · 48 % EC": la marca con su concentración, o None si no hay marca."""
+    if not marca:
+        return None
+    return " · ".join(p for p in (marca.get("marca"), marca.get("concentracion")) if p) or None
 
 
 def _totales_por_producto(items: list[dict]) -> list[dict]:
@@ -89,6 +103,8 @@ def _totales_por_producto(items: list[dict]) -> list[dict]:
             "area_ha": 0.0,
             "volumen_total": 0.0,
             "unidad_dosis": item["unidad_dosis"],
+            "dosis_por_ha": item["dosis_por_ha"],
+            "marca_recomendada": item["marca_recomendada"],
             "provisorio": False,
         })
         acumulado["provisorio"] = acumulado["provisorio"] or item["provisorio"]

@@ -16,6 +16,8 @@ variable vs. uniforme es aritmética").
 
 from __future__ import annotations
 
+from app.diagnostico.orden_trabajo import texto_marca
+
 
 def calcular_ahorro_vuelo(
     orden: dict,
@@ -42,7 +44,12 @@ def calcular_ahorro_vuelo(
     for total in orden.get("totales_por_producto", []):
         nombre = total["producto"]
         cantidad_variable = total["volumen_total"]
-        dosis_referencia = catalogo_dosis.get(nombre, {}).get("dosis_referencia")
+        marca = total.get("marca_recomendada")
+        # La dosis de la orden ya es la de la marca recomendada; el uniforme se calcula con
+        # la misma para que variable y uniforme sean comparables.
+        dosis_referencia = total.get("dosis_por_ha")
+        if dosis_referencia is None:
+            dosis_referencia = catalogo_dosis.get(nombre, {}).get("dosis_referencia")
 
         cantidad_uniforme = (
             round(area_total_lote_ha * dosis_referencia, 3) if dosis_referencia is not None else None
@@ -57,6 +64,13 @@ def calcular_ahorro_vuelo(
         )
 
         precio_info = precios_por_producto.get(nombre)
+        # Un precio que el usuario cargó a mano y sigue vigente manda; si no, el de la marca recomendada.
+        if marca and marca.get("precio_usd") is not None and not (precio_info and precio_info.get("tipo") == "usuario"):
+            precio_info = {
+                "producto_id": precio_info.get("producto_id") if precio_info else None,
+                "precio_usd": marca["precio_usd"],
+                "tipo": "marca",
+            }
         precio_usd = precio_info["precio_usd"] if precio_info else None
         ahorro_pesos = (
             round(ahorro_cantidad * precio_usd, 2)
@@ -76,6 +90,7 @@ def calcular_ahorro_vuelo(
         productos.append({
             "producto": nombre,
             "producto_id": precio_info.get("producto_id") if precio_info else None,
+            "marca": texto_marca(marca),
             "unidad_dosis": total.get("unidad_dosis"),
             "cantidad_variable": cantidad_variable,
             "cantidad_uniforme": cantidad_uniforme,

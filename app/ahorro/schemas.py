@@ -13,6 +13,7 @@ class AhorroProducto(BaseModel):
 
     producto: str
     producto_id: uuid.UUID | None
+    marca: str | None = None
     unidad_dosis: str | None
     cantidad_variable: float
     cantidad_uniforme: float | None

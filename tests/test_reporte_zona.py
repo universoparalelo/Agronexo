@@ -138,3 +138,21 @@ def test_orden_muestra_activo_y_producto_con_la_marca_recomendada():
 def test_orden_sin_marca_cargada_muestra_guion_en_producto():
     html = _orden_html([_unidad()])
     assert "<td>Azoxistrobina</td>\n        <td>—</td>" in html
+
+
+def test_orden_totales_y_dosis_usan_la_marca_recomendada():
+    catalogo = {"Azoxistrobina": {"dosis_referencia": 0.4, "unidad": "L/ha"}}
+    marcas = {"Azoxistrobina": [{"marca": "Genérico", "concentracion": "25 % SC", "dosis_por_ha": 0.5, "unidad_dosis": "L/ha"}]}
+    orden = generar_orden_trabajo([_unidad()], catalogo, marcas)   # 3.72 ha
+    html = _env_orden.get_template("orden_trabajo.html").render(
+        lote_nombre="L", cultivo_label="Soja", fecha_vuelo="—", generado_en="—",
+        n_unidades=1, area_total_tratada_ha=orden["area_total_tratada_ha"],
+        items=[_item_a_contexto(i) for i in orden["items"]],
+        totales=[_total_a_contexto(t) for t in orden["totales_por_producto"]],
+        productos_con_seguridad=[], productos_sin_seguridad_cargada=[], hay_items_sin_dosis=False,
+    )
+    assert "<td>0.50 L/ha</td>" in html            # dosis de la marca, no los 0.40 del activo
+    totales = html.split("<h2>Totales por producto</h2>")[1].split("</table>")[0]
+    assert "<th>Activo</th>" in totales and "<th>Producto</th>" in totales
+    assert "<td>Genérico · 25 % SC</td>" in totales
+    assert "<td>1.86 L</td>" in totales            # 3.72 ha x 0.5 L/ha

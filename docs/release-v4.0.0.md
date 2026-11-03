@@ -1409,19 +1409,22 @@ En un lote de prueba (soja V6) la única zona con problema (15 ha, severidad cr�
 **Verificación:** en el contenedor `api` pasan los tests de motor, texto, zonificación, orden de trabajo, ahorro, bayes, API de diagnóstico, revisiones, reportes y PDF (incluidos los nuevos del caso de empate), y el frontend compila con `vite build`. Pendiente: procesar un GeoTIFF multiespectral de prueba de punta a punta y ver el cartel en el navegador y en el PDF real.
 
 
-#### Orden de trabajo: columnas "Activo" y "Producto" (marca recomendada)
+#### Orden de trabajo: columnas "Activo" y "Producto", con dosis y precio de la marca recomendada
 **Fecha:** 2026-11-03
 **Rama:** `feat/recomendar-en-zonas-ambiguas`
 
-En la tabla "Dosis por unidad de manejo" del PDF de la orden de trabajo la columna "Producto" mostraba solo el principio activo (por ejemplo "Clorpirifos"), aunque el diagnóstico ya tiene las marcas aptas con su costo por hectárea. Ahora el orden de las columnas es **Zonas | Activo | Producto | Dosis/ha | Volumen total**: "Activo" es lo que antes decía "Producto" y "Producto" es la marca recomendada ("Genérico · 48 % EC").
+En la tabla "Dosis por unidad de manejo" del PDF de la orden de trabajo la columna "Producto" mostraba solo el principio activo (por ejemplo "Clorpirifos"), aunque el diagnóstico ya tiene las marcas aptas con su costo por hectárea. Ahora el orden de las columnas es **Zonas | Activo | Producto | Dosis/ha | Volumen total**: "Activo" es lo que antes decía "Producto" y "Producto" es la marca recomendada ("Genérico · 48 % EC"). En el Excel del catálogo la dosis y el precio son de cada marca (la concentración cambia la dosis), así que **dosis, volumen, totales y ahorro salen de la marca recomendada**, no del activo.
 
 - **Criterio:** la marca recomendada es la de menor costo por hectárea entre las aptas para el cultivo, que es el orden que ya trae `alternativas_marca` del diagnóstico. `generar_orden_trabajo()` recibe ese diccionario (parámetro opcional) y agrega `marca_recomendada` a cada ítem; el router de la orden se lo pasa desde el diagnóstico.
-- **La marca es informativa:** la dosis y el volumen siguen saliendo del principio activo, así el ahorro y los totales por producto no cambian según la marca elegida. Si la marca tuviera una dosis distinta (otra concentración), la tabla no la usa.
+- **Cómo se elige la ganadora:** `armar_alternativas_marca()` toma las marcas cuyo campo `cultivos` incluye el cultivo del vuelo y las ordena por costo por hectárea (dosis de la marca × precio de la misma marca; desempata el nombre de la marca). Va primera la más barata. Compara solo costo: no pondera eficacia, registro ni disponibilidad. Es válido porque dosis y precio comparten unidad (L/ha con L, kg/ha con kg en las 47 presentaciones cargadas).
+- **Dosis y volumen:** `generar_orden_trabajo()` usa la dosis y la unidad de la marca recomendada; si no hay marca, o la marca no trae dosis, cae a la dosis de referencia del activo. Los totales por activo llevan `dosis_por_ha` y `marca_recomendada`.
+- **Ahorro** (`ahorro/calculo.py`): la cantidad uniforme (todo el lote) se calcula con la misma dosis de la marca, para que variable y uniforme sean comparables. El precio es el de la marca (`precio_tipo = "marca"`), salvo que el usuario haya cargado a mano un precio del activo que siga vigente (menos de 90 días): ese manda. Sin marca, todo sigue como antes. La respuesta suma `marca` por producto, y la tabla del ahorro la muestra debajo del activo.
 - **Sin marca cargada** (activo sin presentaciones para ese cultivo) la celda muestra "—".
-- **Sin tocar:** las tablas "Totales por producto" y "Seguridad y restricciones" siguen hablando por activo, con el encabezado y el título que tenían.
+- **"Totales por producto" del PDF:** ahora con columnas Activo | Producto | Área | Volumen total.
+- **Sin tocar:** "Seguridad y restricciones por producto" sigue por activo, porque las restricciones ambientales y las instrucciones de seguridad están cargadas en el activo y no en las marcas.
 - **Efecto previo necesario:** hay que haber corrido el importador del catálogo (`python -m app.catalogo.importador ... --aplicar`); con la tabla `presentaciones_productos` vacía no hay ni marcas ni productos sugeridos.
 
-**Verificación:** 60 tests en verde en el contenedor `api` (orden de trabajo, PDF, ahorro, incluidos los nuevos del orden de columnas y de la marca). Pendiente: descargar el PDF real de un vuelo y ver la columna.
+**Verificación:** 85 tests en verde en el contenedor `api` (orden de trabajo, PDF, ahorro y diagnóstico, con los nuevos de dosis y precio de la marca). Con el vuelo de prueba de 6,95 ha (soja V6) la orden toma Clorpirifos Genérico a 0,8 L/ha y el ahorro da USD 18,17 con el precio de la marca. Pendiente: descargar el PDF real y ver las columnas y los totales.
 
 ---
 

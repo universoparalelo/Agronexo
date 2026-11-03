@@ -162,18 +162,38 @@ class TestProvisorio:
 
 class TestMarcaRecomendada:
     _MARCAS = {"Urea 46% N": [
-        {"marca": "Barata", "concentracion": "46 %", "costo_por_ha_usd": 40.0},
-        {"marca": "Cara", "concentracion": "46 %", "costo_por_ha_usd": 55.0},
+        {"marca": "Barata", "concentracion": "46 %", "dosis_por_ha": 120.0, "unidad_dosis": "kg/ha",
+         "precio_usd": 0.4, "costo_por_ha_usd": 48.0},
+        {"marca": "Cara", "concentracion": "46 %", "dosis_por_ha": 100.0, "unidad_dosis": "kg/ha",
+         "precio_usd": 0.55, "costo_por_ha_usd": 55.0},
     ]}
 
     def test_la_marca_recomendada_es_la_primera_alternativa(self):
         orden = generar_orden_trabajo([_unidad(1)], CATALOGO_BASE, self._MARCAS)
         assert orden["items"][0]["marca_recomendada"]["marca"] == "Barata"
 
-    def test_la_marca_no_cambia_dosis_ni_volumen(self):
-        con = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE, self._MARCAS)["items"][0]
-        sin = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE)["items"][0]
-        assert (con["dosis_por_ha"], con["volumen_total"]) == (sin["dosis_por_ha"], sin["volumen_total"])
+    def test_dosis_y_volumen_salen_de_la_marca_recomendada(self):
+        item = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE, self._MARCAS)["items"][0]
+        # el activo dice 100 kg/ha; la marca recomendada, 120
+        assert item["dosis_por_ha"] == 120.0
+        assert item["volumen_total"] == 240.0
+        assert item["producto"] == "Urea 46% N"
+
+    def test_sin_marca_se_usa_la_dosis_del_activo(self):
+        item = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE)["items"][0]
+        assert (item["dosis_por_ha"], item["volumen_total"]) == (100.0, 200.0)
+
+    def test_marca_sin_dosis_cae_a_la_del_activo(self):
+        marcas = {"Urea 46% N": [{"marca": "Sin dosis", "dosis_por_ha": None}]}
+        item = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE, marcas)["items"][0]
+        assert item["dosis_por_ha"] == 100.0
+
+    def test_el_total_por_activo_lleva_la_dosis_y_la_marca(self):
+        total = generar_orden_trabajo([_unidad(1, area_ha=2.0), _unidad(2, area_ha=3.0)], CATALOGO_BASE, self._MARCAS)[
+            "totales_por_producto"][0]
+        assert total["volumen_total"] == 600.0
+        assert total["dosis_por_ha"] == 120.0
+        assert total["marca_recomendada"]["marca"] == "Barata"
 
     def test_sin_marcas_cargadas_no_hay_recomendada(self):
         assert generar_orden_trabajo([_unidad(1)], CATALOGO_BASE)["items"][0]["marca_recomendada"] is None

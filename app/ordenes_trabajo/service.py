@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.diagnostico.models import ProductoFitosanitario
+from app.diagnostico.orden_trabajo import texto_marca
 
 CULTIVO_LABEL = {"soja": "Soja", "maiz": "Maíz", "algodon": "Algodón", "sorgo": "Sorgo"}
 
@@ -133,7 +134,7 @@ def _item_a_contexto(item: dict) -> dict:
         "area_ha": item.get("area_ha", 0.0),
         "zona_ids_texto": ", ".join(f"#{z}" for z in item.get("zona_ids", [])),
         "producto": item.get("producto") or "— (sin producto sugerido)",
-        "marca_recomendada": _texto_marca(item.get("marca_recomendada")),
+        "marca_recomendada": texto_marca(item.get("marca_recomendada")) or "—",
         "dosis_por_ha": item.get("dosis_por_ha"),
         "unidad_dosis": item.get("unidad_dosis") or "",
         "unidad_volumen": _unidad_volumen(item.get("unidad_dosis")),
@@ -141,12 +142,6 @@ def _item_a_contexto(item: dict) -> dict:
         "volumen_total": item.get("volumen_total"),
         "sin_dosis_referencia": bool(item.get("sin_dosis_referencia", False)),
     }
-
-
-def _texto_marca(marca: dict | None) -> str:
-    if not marca:
-        return "—"
-    return " · ".join(p for p in (marca.get("marca"), marca.get("concentracion")) if p)
 
 
 def _unidad_volumen(unidad_dosis: str | None) -> str:
@@ -157,6 +152,7 @@ def _unidad_volumen(unidad_dosis: str | None) -> str:
 def _total_a_contexto(total: dict) -> dict:
     return {
         "producto": total.get("producto"),
+        "marca_recomendada": texto_marca(total.get("marca_recomendada")) or "—",
         "area_ha": total.get("area_ha", 0.0),
         "volumen_total": total.get("volumen_total", 0.0),
         "unidad_dosis": total.get("unidad_dosis") or "",

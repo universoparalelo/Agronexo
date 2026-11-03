@@ -218,6 +218,7 @@
   <table class="totales">
     <thead>
       <tr>
+        <th>Activo</th>
         <th>Producto</th>
         <th>Área (ha)</th>
         <th>Volumen total</th>
@@ -227,12 +228,13 @@
       {% for total in totales %}
       <tr>
         <td>{{ total.producto }}</td>
+        <td>{{ total.marca_recomendada or "—" }}</td>
         <td>{{ "%.2f"|format(total.area_ha) }}</td>
         <td>{{ ("%.2f"|format(total.volumen_total) + " " + total.unidad_volumen) if total.unidad_dosis else "— (completar a mano)" }}</td>
       </tr>
       {% endfor %}
       {% if not totales %}
-      <tr><td colspan="3">Sin productos con dosis calculable.</td></tr>
+      <tr><td colspan="4">Sin productos con dosis calculable.</td></tr>
       {% endif %}
     </tbody>
   </table>

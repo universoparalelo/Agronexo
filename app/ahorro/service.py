@@ -76,7 +76,7 @@ async def calcular_ahorro_del_vuelo(db: AsyncSession, lote: Lote, vuelo: Vuelo) 
         }
 
     catalogo_dosis = await cargar_catalogo_dosis(db)
-    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis)
+    orden = generar_orden_trabajo(unidades_manejo, catalogo_dosis, diagnostico.get("alternativas_marca"))
 
     nombres = {t["producto"] for t in orden.get("totales_por_producto", [])}
     precios_por_producto = await _resolver_precios(db, nombres)
