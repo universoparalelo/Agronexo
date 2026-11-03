@@ -12,7 +12,15 @@
 | Sprint 15 | 3/10 al 13/10 | `sprint15` |
 | Sprint 16 | 14/10 al 22/10 | `sprint16` |
 
-El trabajo hecho después del 22/10 (motor de diagnóstico, catálogo, ajustes de diseño y toda la app de escritorio) se ubica en el sprint 16. Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada de esta bitácora y en el historial de git. Asignación de las historias: HU-R4-01 a 04 y la tarjeta de seguridad y mantenimiento en el sprint 14; HU-R4-05, 07 a 10 y 13 (ajustes de diseño) en el sprint 15; HU-R4-06 (con 06.1 a 06.3), 11, 12, 14, el catálogo y el motor de diagnóstico en el sprint 16.
+Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada de esta bitácora y en el historial de git. La asignación de historias a sprints es la de las etiquetas de Trello, que sigue el plan original y reparte la carga (la app instalable, HU-R4-06, queda en el sprint 16). Son 17 historias y 84 puntos (escala Fibonacci):
+
+| Sprint | Puntos | Historias (puntos) |
+|---|---|---|
+| 14 | 24 | HU-R4-01 (3), 02 (3), 03 (2), 04 (5), 05 (3), 14 (3), 16 (5) |
+| 15 | 29 | HU-R4-07 (3), 08 (5), 09 (8), 10 (3), 13 (5), 17 (5) |
+| 16 | 31 | HU-R4-06 (13), 11 (8), 12 (2), 15 (8) |
+
+HU-R4-15 es el motor de diagnóstico (8 puntos), HU-R4-16 la seguridad y el mantenimiento (5) y HU-R4-17 el catálogo de fitosanitarios (5). HU-R4-06 tiene 13 puntos tras cambiar su alcance de despliegue en servidor a app instalable. En Trello quedan en revisión la HU-R4-04 y la HU-R4-15.
 
 > **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
 >
