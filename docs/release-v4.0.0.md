@@ -1408,6 +1408,21 @@ En un lote de prueba (soja V6) la única zona con problema (15 ha, severidad cr�
 
 **Verificación:** en el contenedor `api` pasan los tests de motor, texto, zonificación, orden de trabajo, ahorro, bayes, API de diagnóstico, revisiones, reportes y PDF (incluidos los nuevos del caso de empate), y el frontend compila con `vite build`. Pendiente: procesar un GeoTIFF multiespectral de prueba de punta a punta y ver el cartel en el navegador y en el PDF real.
 
+
+#### Orden de trabajo: columnas "Activo" y "Producto" (marca recomendada)
+**Fecha:** 2026-11-03
+**Rama:** `feat/recomendar-en-zonas-ambiguas`
+
+En la tabla "Dosis por unidad de manejo" del PDF de la orden de trabajo la columna "Producto" mostraba solo el principio activo (por ejemplo "Clorpirifos"), aunque el diagnóstico ya tiene las marcas aptas con su costo por hectárea. Ahora el orden de las columnas es **Zonas | Activo | Producto | Dosis/ha | Volumen total**: "Activo" es lo que antes decía "Producto" y "Producto" es la marca recomendada ("Genérico · 48 % EC").
+
+- **Criterio:** la marca recomendada es la de menor costo por hectárea entre las aptas para el cultivo, que es el orden que ya trae `alternativas_marca` del diagnóstico. `generar_orden_trabajo()` recibe ese diccionario (parámetro opcional) y agrega `marca_recomendada` a cada ítem; el router de la orden se lo pasa desde el diagnóstico.
+- **La marca es informativa:** la dosis y el volumen siguen saliendo del principio activo, así el ahorro y los totales por producto no cambian según la marca elegida. Si la marca tuviera una dosis distinta (otra concentración), la tabla no la usa.
+- **Sin marca cargada** (activo sin presentaciones para ese cultivo) la celda muestra "—".
+- **Sin tocar:** las tablas "Totales por producto" y "Seguridad y restricciones" siguen hablando por activo, con el encabezado y el título que tenían.
+- **Efecto previo necesario:** hay que haber corrido el importador del catálogo (`python -m app.catalogo.importador ... --aplicar`); con la tabla `presentaciones_productos` vacía no hay ni marcas ni productos sugeridos.
+
+**Verificación:** 60 tests en verde en el contenedor `api` (orden de trabajo, PDF, ahorro, incluidos los nuevos del orden de columnas y de la marca). Pendiente: descargar el PDF real de un vuelo y ver la columna.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)

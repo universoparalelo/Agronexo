@@ -18,6 +18,7 @@ from __future__ import annotations
 def generar_orden_trabajo(
     unidades_manejo: list[dict],
     catalogo_dosis: dict[str, dict],
+    alternativas_marca: dict[str, list[dict]] | None = None,
 ) -> dict:
     """
     unidades_manejo: salida de generar_unidades_manejo() — Features con
@@ -29,6 +30,10 @@ def generar_orden_trabajo(
     tiene dosis_referencia cargada, se incluye igual en la orden con
     sin_dosis_referencia=True — la cantidad queda pendiente de completar
     a mano en vez de descartarse silenciosamente.
+
+    alternativas_marca: la del diagnóstico (activo -> marcas aptas, de menor a mayor
+    costo por ha). La primera es la marca recomendada de la unidad; es solo informativa:
+    la dosis y el volumen siguen saliendo del activo, así el ahorro no cambia según la marca.
     """
     items: list[dict] = []
 
@@ -43,6 +48,7 @@ def generar_orden_trabajo(
         unidad_dosis = info_producto.get("unidad")
 
         sin_dosis = dosis_referencia is None
+        marcas = (alternativas_marca or {}).get(nombre_producto) if nombre_producto else None
         volumen_total = None if sin_dosis else round(area_ha * dosis_referencia, 3)
 
         items.append({
@@ -59,6 +65,7 @@ def generar_orden_trabajo(
             "restricciones_ambientales": info_producto.get("restricciones_ambientales"),
             "instrucciones_seguridad": info_producto.get("instrucciones_seguridad"),
             "sin_dosis_referencia": sin_dosis,
+            "marca_recomendada": marcas[0] if marcas else None,
             "provisorio": bool(props.get("provisorio", False)),
         })
 

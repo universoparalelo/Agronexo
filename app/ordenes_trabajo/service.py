@@ -133,6 +133,7 @@ def _item_a_contexto(item: dict) -> dict:
         "area_ha": item.get("area_ha", 0.0),
         "zona_ids_texto": ", ".join(f"#{z}" for z in item.get("zona_ids", [])),
         "producto": item.get("producto") or "— (sin producto sugerido)",
+        "marca_recomendada": _texto_marca(item.get("marca_recomendada")),
         "dosis_por_ha": item.get("dosis_por_ha"),
         "unidad_dosis": item.get("unidad_dosis") or "",
         "unidad_volumen": _unidad_volumen(item.get("unidad_dosis")),
@@ -140,6 +141,12 @@ def _item_a_contexto(item: dict) -> dict:
         "volumen_total": item.get("volumen_total"),
         "sin_dosis_referencia": bool(item.get("sin_dosis_referencia", False)),
     }
+
+
+def _texto_marca(marca: dict | None) -> str:
+    if not marca:
+        return "—"
+    return " · ".join(p for p in (marca.get("marca"), marca.get("concentracion")) if p)
 
 
 def _unidad_volumen(unidad_dosis: str | None) -> str:

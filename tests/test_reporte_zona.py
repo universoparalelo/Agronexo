@@ -115,3 +115,26 @@ def test_orden_lleva_el_logo_de_agronexo():
     import app.ordenes_trabajo.service as servicio
     assert 'src="agronexo-logo.svg"' in _orden_html([_unidad()])
     assert (Path(servicio.__file__).parent / "templates" / "agronexo-logo.svg").is_file()
+
+
+def test_orden_muestra_activo_y_producto_con_la_marca_recomendada():
+    import re
+    catalogo = {"Azoxistrobina": {"dosis_referencia": 0.4, "unidad": "L/ha"}}
+    marcas = {"Azoxistrobina": [{"marca": "Genérico", "concentracion": "25 % SC"}]}
+    orden = generar_orden_trabajo([_unidad()], catalogo, marcas)
+    html = _env_orden.get_template("orden_trabajo.html").render(
+        lote_nombre="L", cultivo_label="Soja", fecha_vuelo="—", generado_en="—",
+        n_unidades=1, area_total_tratada_ha=orden["area_total_tratada_ha"],
+        items=[_item_a_contexto(i) for i in orden["items"]],
+        totales=[_total_a_contexto(t) for t in orden["totales_por_producto"]],
+        productos_con_seguridad=[], productos_sin_seguridad_cargada=[], hay_items_sin_dosis=False,
+    )
+    encabezados = re.findall(r"<th>([^<]*)</th>", html.split("Dosis por unidad de manejo")[1].split("</thead>")[0])
+    assert encabezados[encabezados.index("Zonas"):][:3] == ["Zonas", "Activo", "Producto"]
+    assert "<td>Azoxistrobina</td>" in html
+    assert "<td>Genérico · 25 % SC</td>" in html
+
+
+def test_orden_sin_marca_cargada_muestra_guion_en_producto():
+    html = _orden_html([_unidad()])
+    assert "<td>Azoxistrobina</td>\n        <td>—</td>" in html

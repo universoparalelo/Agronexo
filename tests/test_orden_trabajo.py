@@ -158,3 +158,27 @@ class TestProvisorio:
         totales = {t["producto"]: t for t in orden["totales_por_producto"]}
         assert totales["Urea 46% N"]["provisorio"] is True
         assert totales["Glifosato"]["provisorio"] is False
+
+
+class TestMarcaRecomendada:
+    _MARCAS = {"Urea 46% N": [
+        {"marca": "Barata", "concentracion": "46 %", "costo_por_ha_usd": 40.0},
+        {"marca": "Cara", "concentracion": "46 %", "costo_por_ha_usd": 55.0},
+    ]}
+
+    def test_la_marca_recomendada_es_la_primera_alternativa(self):
+        orden = generar_orden_trabajo([_unidad(1)], CATALOGO_BASE, self._MARCAS)
+        assert orden["items"][0]["marca_recomendada"]["marca"] == "Barata"
+
+    def test_la_marca_no_cambia_dosis_ni_volumen(self):
+        con = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE, self._MARCAS)["items"][0]
+        sin = generar_orden_trabajo([_unidad(1, area_ha=2.0)], CATALOGO_BASE)["items"][0]
+        assert (con["dosis_por_ha"], con["volumen_total"]) == (sin["dosis_por_ha"], sin["volumen_total"])
+
+    def test_sin_marcas_cargadas_no_hay_recomendada(self):
+        assert generar_orden_trabajo([_unidad(1)], CATALOGO_BASE)["items"][0]["marca_recomendada"] is None
+        assert generar_orden_trabajo([_unidad(1)], CATALOGO_BASE, {"Otro": []})["items"][0]["marca_recomendada"] is None
+
+    def test_unidad_sin_producto_no_tiene_marca(self):
+        orden = generar_orden_trabajo([_unidad(1, producto=None)], CATALOGO_BASE, self._MARCAS)
+        assert orden["items"][0]["marca_recomendada"] is None

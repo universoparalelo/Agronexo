@@ -78,6 +78,7 @@ class OrdenTrabajoItem(BaseModel):
     restricciones_ambientales: str | None
     instrucciones_seguridad: str | None
     sin_dosis_referencia: bool
+    marca_recomendada: dict | None = None
     provisorio: bool = False
 
 

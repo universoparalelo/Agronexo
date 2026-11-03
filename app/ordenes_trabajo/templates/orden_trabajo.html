@@ -184,6 +184,7 @@
         <th>Severidad</th>
         <th>Área (ha)</th>
         <th>Zonas</th>
+        <th>Activo</th>
         <th>Producto</th>
         <th>Dosis/ha</th>
         <th>Volumen total</th>
@@ -198,6 +199,7 @@
         <td>{{ "%.2f"|format(item.area_ha) }}</td>
         <td>{{ item.zona_ids_texto }}</td>
         <td>{{ item.producto }}</td>
+        <td>{{ item.marca_recomendada or "—" }}</td>
         <td>{{ ("%.2f"|format(item.dosis_por_ha) + " " + item.unidad_dosis) if item.dosis_por_ha is not none else "— (completar a mano)" }}</td>
         <td>{{ ("%.2f"|format(item.volumen_total) + " " + item.unidad_volumen) if item.volumen_total is not none else "—" }}</td>
       </tr>
