@@ -4,6 +4,16 @@
 **Rama principal:** `main`
 **Inicio:** Sprint 14
 
+**Fechas de referencia de los sprints (definidas por el equipo el 2026-11-03, para el seguimiento y el retrospective).** La release 4 se toma como iniciada el 22 de septiembre y cerrada el 22 de octubre de 2026:
+
+| Sprint | Fechas | Etiqueta en Trello |
+|---|---|---|
+| Sprint 14 | 22/9 al 2/10 | `sprint14` |
+| Sprint 15 | 3/10 al 13/10 | `sprint15` |
+| Sprint 16 | 14/10 al 22/10 | `sprint16` |
+
+El trabajo hecho después del 22/10 (motor de diagnóstico, catálogo, ajustes de diseño y toda la app de escritorio) se ubica en el sprint 16. Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada de esta bitácora y en el historial de git. Asignación de las historias: HU-R4-01 a 04 y la tarjeta de seguridad y mantenimiento en el sprint 14; HU-R4-05 y 07 a 10 en el sprint 15; HU-R4-06 (con 06.1 a 06.3), 11 a 14, el catálogo y el motor de diagnóstico en el sprint 16.
+
 > **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
 >
 > **Primer cambio de código (2026-10-29, rama `feat/almacenamiento-en-disco`, sin mergear):** backend de almacenamiento en disco (`STORAGE_BACKEND=disk`) y endpoint `GET /api/v1/archivos/{token}`, paso 1 de la decisión D3 (MinIO sigue disponible hasta el paso 2). Probado con 37 tests nuevos, con las suites de auth, lotes, cultivos y exportación sobre el backend de disco, y con el flujo completo (subir un GeoTIFF, worker Celery sobre Postgres sin Redis, diagnóstico y PDF) en Windows. Detalle en "Hecho" de `docs/cambios-arquitectura-escritorio.md`.
