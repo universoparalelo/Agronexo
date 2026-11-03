@@ -1316,7 +1316,7 @@ Probado a mano en una carpeta de trabajo temporal con accesos al entorno existen
 - El objetivo es que los compañeros puedan volver a armar el instalador sin depender de una sola PC. Para editar código no hace falta: se sigue con Docker. Armar desde cero queda documentado pero no probado de punta a punta.
 - `armar_motor.ps1` generaba valores fijos de relleno (`solo-para-armar`) para poder importar la configuración; GitGuardian los marcó como contraseña filtrada (falso positivo). Ahora genera una clave al azar en cada corrida y no queda ninguna escrita en el repo.
 
-**Problema abierto:** el primer commit del PR #157 todavía contiene el valor fijo, y GitGuardian revisa todos los commits del PR. Se resuelve juntando los commits en uno y haciendo force-push de la rama, o marcando la alerta como falso positivo en el panel de GitGuardian.
+**Problema resuelto:** el primer commit del PR #157 todavía contenía el valor fijo, y GitGuardian revisa todos los commits del PR, así que seguía en rojo aunque el archivo ya estuviera arreglado. Se juntaron los commits en uno y se hizo `git push --force-with-lease` de la rama (con una rama de respaldo previa); GitGuardian quedó en verde. Cuando un escáner de secretos marque un valor en un commit viejo, arreglar el archivo no alcanza: hay que sacarlo también del historial del PR.
 
 ---
 
