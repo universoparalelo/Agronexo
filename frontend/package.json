@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@geoman-io/leaflet-geoman-free": "^2.20.2",
+    "@geoman-io/leaflet-geoman-free": "^2.20.4",
     "axios": "^1.20.0",
     "geotiff": "^3.0.5",
     "leaflet": "^1.9.4",
