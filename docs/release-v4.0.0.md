@@ -1356,6 +1356,20 @@ Hoy no hay ninguna release publicada en GitHub: existen solo los tags `v1.0.0`, 
 
 ---
 
+#### Fix: el worker de Docker no podía procesar GeoTIFF (falta `PyJWT`)
+**Fecha:** 2026-11-03
+**Rama:** `fix/worker-pyjwt`
+
+Al levantar el entorno de desarrollo con `docker compose up` y subir un GeoTIFF, el análisis quedaba "pendiente" para siempre. El log del worker mostraba `ModuleNotFoundError: No module named 'jwt'`: desde el PR #129 (almacenamiento en disco) `app/core/storage.py` importa `storage_disco.py`, que usa `jwt` para firmar los links de archivos, pero `docker/requirements.worker.txt` no declaraba `PyJWT` (la API sí, en `docker/requirements.api.txt`). Sin eso el worker no puede subir ningún resultado, aunque se use MinIO. La app de escritorio no se veía afectada porque su motor empaquetado sí trae `PyJWT`.
+
+No lo detectó el CI porque los tests del worker no importaban ese módulo.
+
+**Fix:** `PyJWT==2.15.1` (la misma versión que la API) en `docker/requirements.worker.txt`, un test nuevo (`tests/test_storage_importable.py`) que importa `app.core.storage` con las dependencias del worker, y un paso en el job `test-gis` del CI que lo corre.
+
+**Verificación:** worker reconstruido, `import jwt` y el test pasan dentro del contenedor, y el GeoTIFF multibanda de prueba (3,4 GB) se procesó completo en unos 4 minutos.
+
+---
+
 ### Ajustes de diseño (HU-R4-13)
 
 Cambios chicos de interfaz de la tarjeta HU-R4-13, uno por fila.
