@@ -179,6 +179,9 @@ jobs:
       - name: Tests "sin datos" real (píxeles sin dato registrados por el worker)
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_sin_datos.py -v
 
+      - name: Tests el worker puede importar el almacenamiento (dependencias completas)
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_storage_importable.py -v
+
       - name: Tests configuración Celery
         run: |
           PYTHONPATH=$(pwd) python3 -c "

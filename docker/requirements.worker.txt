@@ -22,6 +22,9 @@ psycopg2-binary==2.9.13
 # MinIO
 minio==7.2.20
 
+# Firma de los links de archivos: app.core.storage importa storage_disco, que usa jwt
+PyJWT==2.15.1
+
 # GIS raster — GDAL y numpy vienen de la imagen base (osgeo/gdal), no reinstalar
 rasterio==1.5.2
 
