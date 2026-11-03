@@ -20,7 +20,7 @@ Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada d
 | 15 | 29 | HU-R4-07 (3), 08 (5), 09 (8), 10 (3), 13 (5), 17 (5) |
 | 16 | 31 | HU-R4-06 (13), 11 (8), 12 (2), 15 (8) |
 
-HU-R4-15 (motor de diagnóstico), 16 (seguridad y mantenimiento) y 17 (catálogo) corresponden a trabajo que no tenía historia numerada y se sumó al tablero el 2026-11-03; sus puntos (8, 5 y 5) los puso el equipo en esa fecha. HU-R4-06 pasó de 8 a 13 puntos al cambiar su alcance de despliegue en servidor a app instalable. En Trello quedan en revisión la HU-R4-04 y la HU-R4-15.
+HU-R4-15 es el motor de diagnóstico (8 puntos), HU-R4-16 la seguridad y el mantenimiento (5) y HU-R4-17 el catálogo de fitosanitarios (5). HU-R4-06 tiene 13 puntos tras cambiar su alcance de despliegue en servidor a app instalable. En Trello quedan en revisión la HU-R4-04 y la HU-R4-15.
 
 > **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
 >
