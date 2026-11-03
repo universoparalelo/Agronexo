@@ -1382,7 +1382,8 @@ Hoy no hay ninguna release publicada en GitHub: existen solo los tags `v1.0.0`, 
 - [ ] HU-R4-04 (línea de tiempo) resuelta: se completa, o el equipo decide que el calendario de vuelos alcanza.
 - [ ] El equipo está de acuerdo en dar por terminada la release 4.
 - [ ] Rama `release/v4.0.0` desde `main`, con los ajustes finales (versión y changelog).
-- [ ] Poner la versión `4.0.0` en `escritorio/electron/package.json` (hoy es `0.0.0`, por eso el instalador se llama `Setup 0.0.0.exe`) y decidir si se saca "(prototipo)" del nombre antes de armarlo.
+- [x] Versión `4.0.0` en `escritorio/electron/package.json` y `package-lock.json` (estaba en `0.0.0` desde el spike, por eso el instalador se llamaba `Setup 0.0.0.exe`). Hecho el 2026-11-03.
+- [ ] Decidir si se saca "(prototipo)" del nombre antes de armar el instalador final.
 - [ ] Armar el instalador final desde `main` y probarlo en Windows Sandbox (instalación, análisis con un GeoTIFF, diagnóstico, PDF, backup, sin internet y reapertura).
 - [ ] PR a `main`, merge, y tag `git tag -a v4.0.0 -m "Release v4.0.0"` con push del tag.
 - [ ] Crear la release `v4.0.0` en GitHub con el instalador y las notas de abajo.
