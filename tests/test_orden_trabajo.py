@@ -202,3 +202,58 @@ class TestMarcaRecomendada:
     def test_unidad_sin_producto_no_tiene_marca(self):
         orden = generar_orden_trabajo([_unidad(1, producto=None)], CATALOGO_BASE, self._MARCAS)
         assert orden["items"][0]["marca_recomendada"] is None
+
+
+def _marca(nombre, costo, dosis=1.0):
+    return [{"marca": f"Marca {nombre}", "concentracion": "10 %", "dosis_por_ha": dosis, "unidad_dosis": "L/ha",
+             "precio_usd": costo / dosis, "costo_por_ha_usd": costo}]
+
+
+def _unidad_con(*activos):
+    u = _unidad(1, area_ha=2.0)
+    u["properties"]["productos_sugeridos"] = [{"nombre": a, "tipo": "insecticida"} for a in activos]
+    return u
+
+
+class TestAlternativas:
+    _MARCAS = {"A": _marca("A", 9.0), "B": _marca("B", 3.0), "C": _marca("C", 5.0), "D": _marca("D", 7.0), "E": _marca("E", 8.0)}
+
+    def test_el_recomendado_es_el_de_menor_costo_por_ha_y_no_el_primero_de_la_lista(self):
+        item = generar_orden_trabajo([_unidad_con("A", "B", "C")], {}, self._MARCAS)["items"][0]
+        assert item["producto"] == "B"
+        assert item["marca_recomendada"]["marca"] == "Marca B"
+
+    def test_hasta_tres_alternativas_de_menor_a_mayor_costo(self):
+        item = generar_orden_trabajo([_unidad_con("A", "B", "C", "D", "E")], {}, self._MARCAS)["items"][0]
+        assert item["producto"] == "B"
+        assert [a["producto"] for a in item["alternativas"]] == ["C", "D", "E"]
+        assert [a["costo_por_ha_usd"] for a in item["alternativas"]] == [5.0, 7.0, 8.0]
+
+    def test_con_dos_activos_hay_una_sola_alternativa(self):
+        item = generar_orden_trabajo([_unidad_con("A", "B")], {}, self._MARCAS)["items"][0]
+        assert [a["producto"] for a in item["alternativas"]] == ["A"]
+
+    def test_los_totales_y_el_volumen_son_solo_del_recomendado(self):
+        orden = generar_orden_trabajo([_unidad_con("A", "B", "C")], {}, self._MARCAS)
+        assert [t["producto"] for t in orden["totales_por_producto"]] == ["B"]
+        assert orden["items"][0]["volumen_total"] == 2.0   # 2 ha x 1.0 L/ha de la marca B
+
+    def test_los_sin_costo_conocido_van_despues_de_los_que_tienen(self):
+        marcas = {"B": _marca("B", 3.0)}
+        item = generar_orden_trabajo([_unidad_con("X", "B", "Y")], {}, marcas)["items"][0]
+        assert item["producto"] == "B"
+        assert [a["producto"] for a in item["alternativas"]] == ["X", "Y"]   # conservan su orden
+        assert item["alternativas"][0]["costo_por_ha_usd"] is None
+
+    def test_sin_marcas_cargadas_se_mantiene_el_primero_de_la_lista(self):
+        item = generar_orden_trabajo([_unidad_con("A", "B")], {})["items"][0]
+        assert item["producto"] == "A"
+        assert [a["producto"] for a in item["alternativas"]] == ["B"]
+
+    def test_la_alternativa_toma_la_dosis_del_catalogo_si_no_tiene_marca(self):
+        catalogo = {"Y": {"dosis_referencia": 0.3, "unidad": "kg/ha"}}
+        item = generar_orden_trabajo([_unidad_con("B", "Y")], catalogo, {"B": _marca("B", 3.0)})["items"][0]
+        assert (item["alternativas"][0]["dosis_por_ha"], item["alternativas"][0]["unidad_dosis"]) == (0.3, "kg/ha")
+
+    def test_unidad_con_un_solo_activo_no_tiene_alternativas(self):
+        assert generar_orden_trabajo([_unidad_con("A")], {}, self._MARCAS)["items"][0]["alternativas"] == []

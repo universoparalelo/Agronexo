@@ -156,3 +156,33 @@ def test_orden_totales_y_dosis_usan_la_marca_recomendada():
     assert "<th>Activo</th>" in totales and "<th>Producto</th>" in totales
     assert "<td>Genérico · 25 % SC</td>" in totales
     assert "<td>1.86 L</td>" in totales            # 3.72 ha x 0.5 L/ha
+
+
+def _html_orden_con_alternativas(productos):
+    unidad = _unidad(productos_sugeridos=[{"nombre": n, "tipo": "insecticida"} for n in productos])
+    marcas = {
+        "Barato": [{"marca": "Genérico", "concentracion": "48 % EC", "dosis_por_ha": 0.8, "unidad_dosis": "L/ha", "costo_por_ha_usd": 5.2}],
+        "Medio": [{"marca": "Marca M", "concentracion": "10 %", "dosis_por_ha": 0.15, "unidad_dosis": "L/ha", "costo_por_ha_usd": 9.0}],
+    }
+    orden = generar_orden_trabajo([unidad], {}, marcas)
+    return _env_orden.get_template("orden_trabajo.html").render(
+        lote_nombre="L", cultivo_label="Soja", fecha_vuelo="—", generado_en="—",
+        n_unidades=1, area_total_tratada_ha=orden["area_total_tratada_ha"],
+        items=[_item_a_contexto(i) for i in orden["items"]],
+        totales=[_total_a_contexto(t) for t in orden["totales_por_producto"]],
+        productos_con_seguridad=[], productos_sin_seguridad_cargada=[], hay_items_sin_dosis=False,
+    )
+
+
+def test_orden_lista_las_alternativas_aparte_y_sin_entrar_en_los_totales():
+    html = _html_orden_con_alternativas(["Medio", "Barato"])
+    assert "Alternativas por unidad de manejo" in html
+    alternativas = html.split("Alternativas por unidad de manejo")[1].split("</table>")[0]
+    assert "<td>Medio</td>" in alternativas and "<td>Marca M · 10 %</td>" in alternativas
+    assert "<td>0.15 L/ha</td>" in alternativas and "<td>9.00</td>" in alternativas
+    totales = html.split("<h2>Totales por producto</h2>")[1].split("</table>")[0]
+    assert "<td>Barato</td>" in totales and "Medio" not in totales
+
+
+def test_orden_con_un_solo_activo_no_muestra_la_seccion_de_alternativas():
+    assert "Alternativas por unidad de manejo" not in _html_orden_con_alternativas(["Barato"])

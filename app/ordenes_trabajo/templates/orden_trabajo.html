@@ -207,6 +207,33 @@
     </tbody>
   </table>
 
+  {% if items | selectattr("alternativas") | list %}
+  <h2>Alternativas por unidad de manejo</h2>
+  <p style="font-size: 9pt; color: #4b5563;">Otras opciones para cada unidad, de menor a mayor costo por hectárea. No entran en los volúmenes totales ni en el ahorro: la orden de arriba se calculó con el producto recomendado.</p>
+  <table class="dosis">
+    <thead>
+      <tr>
+        <th>Unidad</th>
+        <th>Activo</th>
+        <th>Producto</th>
+        <th>Dosis/ha</th>
+        <th>Costo/ha (US$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}{% for alt in item.alternativas %}
+      <tr>
+        <td>#{{ alt.unidad_id }}</td>
+        <td>{{ alt.producto }}</td>
+        <td>{{ alt.marca }}</td>
+        <td>{{ alt.dosis }}</td>
+        <td>{{ alt.costo }}</td>
+      </tr>
+      {% endfor %}{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   {% if items | selectattr("como_confirmar_campo") | list %}
   <h2>Cómo confirmar en campo</h2>
   {% for texto, grupo in items | selectattr("como_confirmar_campo") | groupby("como_confirmar_campo") %}

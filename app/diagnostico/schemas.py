@@ -79,6 +79,7 @@ class OrdenTrabajoItem(BaseModel):
     instrucciones_seguridad: str | None
     sin_dosis_referencia: bool
     marca_recomendada: dict | None = None
+    alternativas: list[dict] = []
     provisorio: bool = False
 
 
