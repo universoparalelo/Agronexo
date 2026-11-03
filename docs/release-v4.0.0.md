@@ -12,7 +12,7 @@
 | Sprint 15 | 3/10 al 13/10 | `sprint15` |
 | Sprint 16 | 14/10 al 22/10 | `sprint16` |
 
-El trabajo hecho después del 22/10 (motor de diagnóstico, catálogo, ajustes de diseño y toda la app de escritorio) se ubica en el sprint 16. Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada de esta bitácora y en el historial de git. Asignación de las historias: HU-R4-01 a 04 y la tarjeta de seguridad y mantenimiento en el sprint 14; HU-R4-05 y 07 a 10 en el sprint 15; HU-R4-06 (con 06.1 a 06.3), 11 a 14, el catálogo y el motor de diagnóstico en el sprint 16.
+El trabajo hecho después del 22/10 (motor de diagnóstico, catálogo, ajustes de diseño y toda la app de escritorio) se ubica en el sprint 16. Las fechas de cada tarea siguen siendo las reales, que figuran en cada entrada de esta bitácora y en el historial de git. Asignación de las historias: HU-R4-01 a 04 y la tarjeta de seguridad y mantenimiento en el sprint 14; HU-R4-05, 07 a 10 y 13 (ajustes de diseño) en el sprint 15; HU-R4-06 (con 06.1 a 06.3), 11, 12, 14, el catálogo y el motor de diagnóstico en el sprint 16.
 
 > **Empaquetado como aplicación de escritorio:** todos los cambios que esto produce en el proyecto (arquitectura, código, configuración, infraestructura y documentación) se registran en [`docs/cambios-arquitectura-escritorio.md`](cambios-arquitectura-escritorio.md). **Mirar ese documento** antes de tocar el almacenamiento, la autenticación, el docker-compose o el CI. Las decisiones están en `docs/decisiones-app-escritorio.md`.
 >
