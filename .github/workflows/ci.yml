@@ -112,6 +112,9 @@ jobs:
       - name: Tests almacenamiento en disco y endpoint de archivos
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_almacenamiento_disco.py -v
 
+      - name: Tests catalogo de fitosanitarios cargado por migracion
+        run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_catalogo_migracion.py -v
+
       - name: Tests exportar e importar backup
         run: PYTHONPATH=$(pwd) python3 -m pytest tests/test_backup.py -v
 
