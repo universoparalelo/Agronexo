@@ -1302,6 +1302,22 @@ Instalador armado desde `main` (con #152 a #155) y probado en Windows Sandbox co
 
 Con esto, el empaquetado queda cerrado para el alcance de proyecto académico: no se firma el instalador, no se actualizan las librerías GTK ni se hace la fase 2 del lanzador, porque la app no se va a repartir. Si cambia el alcance, esos tres puntos se retoman.
 
+#### Scripts para armar el instalador desde el repo
+**Fecha:** 2026-11-02
+**Rama:** `chore/scripts-empaquetado`
+
+Los scripts que armaban el motor y el instalador vivían solo en `trabajo-escritorio\`, fuera del repo, y apuntaban a rutas de una sola PC. Ahora están en `escritorio/empaquetado/` con un README paso a paso: `armar_motor.ps1` (API y worker con PyInstaller), `preparar_postgres.ps1` (recorte y librerías de Visual C++), `preparar_gtk.ps1` + `gtk_cierre.py` (las 26 DLL de GTK) y `armar_instalador.ps1`, más `requirements-empaquetado.txt` con las versiones exactas para Python 3.14. Los programas grandes siguen fuera del repo.
+
+Probado a mano en una carpeta de trabajo temporal con accesos al entorno existente: salieron las mismas 26 DLL, Postgres de 384 MB, la API de 138 MB y un `Setup.exe` de 434 MB. No se probó armar el entorno de Python ni bajar Postgres desde cero (los pasos 1 a 3 del README quedan sin verificar), ni instalar el `Setup.exe` resultante.
+
+**Decisiones tomadas:**
+- El motor se arma con el código de la rama activa del repo, sin el `git worktree` `arbol` que se usaba antes.
+- Los scripts solo usan ASCII: Windows PowerShell 5.1 lee mal UTF-8 sin BOM.
+- El objetivo es que los compañeros puedan volver a armar el instalador sin depender de una sola PC. Para editar código no hace falta: se sigue con Docker. Armar desde cero queda documentado pero no probado de punta a punta.
+- `armar_motor.ps1` generaba valores fijos de relleno (`solo-para-armar`) para poder importar la configuración; GitGuardian los marcó como contraseña filtrada (falso positivo). Ahora genera una clave al azar en cada corrida y no queda ninguna escrita en el repo.
+
+**Problema resuelto:** el primer commit del PR #157 todavía contenía el valor fijo, y GitGuardian revisa todos los commits del PR, así que seguía en rojo aunque el archivo ya estuviera arreglado. Se juntaron los commits en uno y se hizo `git push --force-with-lease` de la rama (con una rama de respaldo previa); GitGuardian quedó en verde. Cuando un escáner de secretos marque un valor en un commit viejo, arreglar el archivo no alcanza: hay que sacarlo también del historial del PR.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)

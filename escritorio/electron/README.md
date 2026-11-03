@@ -29,6 +29,8 @@ La primera vez crea la base de datos en `%APPDATA%\AgroNexo (prototipo)\`, que t
 
 ## Armar el instalador
 
+Para armar todo desde cero (entorno de Python, Postgres, GTK, motor e instalador) están los scripts y el paso a paso en `escritorio/empaquetado/README.md`. Lo de abajo es solo el último paso.
+
 Genera `dist\AgroNexo (prototipo) Setup 0.0.0.exe` (unos 430 MB) con el motor adentro. Necesita la carpeta `trabajo-escritorio\` con `pg-min\` (Postgres sin pgAdmin, documentación ni StackBuilder), y `motor2\dist\` con la API y el worker empaquetados. La ruta va relativa a esta carpeta (electron-builder no acepta absolutas en `extraResources`):
 
 ```powershell
