@@ -47,7 +47,7 @@ openpyxl==3.1.5
 pyshp==3.1.6
 
 # Uploads
-python-multipart==0.0.32
+python-multipart==0.0.33
 
 # GIS (validación de geometrías en schemas Pydantic)
 shapely==2.1.2
