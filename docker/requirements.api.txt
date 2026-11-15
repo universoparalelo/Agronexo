@@ -44,7 +44,7 @@ openpyxl==3.1.5
 
 # Exportación de zonas (GeoJSON / Shapefile) — pyshp es Python puro, sin
 # GDAL/Fiona (ver app/diagnostico/service.py: FastAPI no lleva GIS pesado)
-pyshp==3.1.6
+pyshp==3.1.7
 
 # Uploads
 python-multipart==0.0.32
