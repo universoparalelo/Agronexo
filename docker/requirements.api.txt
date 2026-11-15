@@ -16,7 +16,7 @@ greenlet==3.5.6
 # 0.15.2 instancia expression.ColumnCollection() directo en before_create —
 # SQLAlchemy 2.1 lo hizo abstracto (TypeError al crear CUALQUIER tabla,
 # no solo las que tienen columna de geometría). 0.20.0 ya usa la API nueva.
-geoalchemy2==0.20.0
+geoalchemy2==0.21.0
 asyncpg==0.32.0
 alembic==1.20.1
 psycopg2-binary==2.9.13
