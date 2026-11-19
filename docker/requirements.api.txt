@@ -1,5 +1,5 @@
 # Web framework
-fastapi==0.162.2
+fastapi==0.162.5
 uvicorn[standard]==0.54.0
 
 # Validación y configuración
@@ -44,13 +44,13 @@ openpyxl==3.1.5
 
 # Exportación de zonas (GeoJSON / Shapefile) — pyshp es Python puro, sin
 # GDAL/Fiona (ver app/diagnostico/service.py: FastAPI no lleva GIS pesado)
-pyshp==3.1.7
+pyshp==3.1.8
 
 # Uploads
 python-multipart==0.0.33
 
 # GIS (validación de geometrías en schemas Pydantic)
-shapely==2.1.2
+shapely==2.2.0
 
 # Utils
 httpx==0.28.1
