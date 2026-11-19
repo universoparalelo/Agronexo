@@ -36,4 +36,4 @@ shapely==2.1.2
 scikit-image==0.26.0
 
 # Tests
-pytest==9.1.1
+pytest==9.2.0
