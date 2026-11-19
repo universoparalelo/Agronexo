@@ -2,7 +2,7 @@
 # Sustituye al Dockerfile.frontend de desarrollo (que corre el dev server de Vite,
 # pensado para HMR, no para servir tráfico real).
 
-FROM node:25-slim AS build
+FROM node:26-slim AS build
 
 WORKDIR /app
 
