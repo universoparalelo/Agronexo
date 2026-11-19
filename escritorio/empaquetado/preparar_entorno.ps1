@@ -13,7 +13,7 @@ New-Item -ItemType Directory $descargas -Force | Out-Null
 $urlPython = "https://www.python.org/ftp/python/3.14.4/python-3.14.4-amd64.exe"
 $urlVcredist = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 $urlPostgres ="https://get.enterprisedb.com/postgresql/postgresql-16.15-1-windows-x64-binaries.zip"
-$urlPostgis = "https://download.osgeo.org/postgis/windows/pg16/postgis-bundle-pg16-3.6.2x64.zip"
+$urlPostgis = "https://download.osgeo.org/postgis/windows/pg16/archive/postgis-bundle-pg16-3.6.2x64.zip"
 $urlGtk = "https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases/download/2022-01-04/gtk3-runtime-3.24.31-2022-01-04-ts-win64.exe"
 
 function Bajar($url) {
@@ -50,7 +50,11 @@ Write-Host "2) Postgres con PostGIS"
 if (-not (Test-Path "$Base\pg\pgsql\bin\postgres.exe")) {
     Remove-Item "$Base\pg" -Recurse -Force -ErrorAction SilentlyContinue
     Expand-Archive (Bajar $urlPostgres) "$Base\pg" -Force
+}
+# Aparte de Postgres: si una corrida anterior fallo bajando PostGIS, se completa solo esto.
+if (-not (Test-Path "$Base\pg\pgsql\share\extension\postgis.control")) {
     $bundle = "$Base\pg\postgis-bundle"
+    Remove-Item $bundle -Recurse -Force -ErrorAction SilentlyContinue
     Expand-Archive (Bajar $urlPostgis) $bundle -Force
     $raiz = Get-ChildItem $bundle -Directory | Select-Object -First 1
     foreach ($carpeta in "bin", "lib", "share") {
