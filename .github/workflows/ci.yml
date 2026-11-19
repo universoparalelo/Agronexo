@@ -242,6 +242,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Tests del lanzador (sesión automática y copias)
+      - name: Tests del lanzador (sesión, copias, carpeta de datos y actualizaciones)
         working-directory: escritorio/electron
-        run: node --test test/sesion.test.js test/copias.test.js
+        run: npm test
