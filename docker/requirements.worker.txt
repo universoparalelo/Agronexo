@@ -29,8 +29,8 @@ PyJWT==2.15.1
 rasterio==1.5.2
 
 # GIS vectorial
-geopandas==1.1.4
-shapely==2.1.2
+geopandas==1.2.0
+shapely==2.2.0
 
 # Procesamiento de imágenes
 scikit-image==0.26.0
