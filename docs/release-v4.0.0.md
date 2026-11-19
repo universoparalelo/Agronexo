@@ -1474,6 +1474,17 @@ Publicar una versión: `escritorio/empaquetado/publicar_release.ps1` sube con `g
 
 **Pendiente (no probado):** el ciclo completo de actualización, porque esta PC no tiene el motor armado (`trabajo-escritorio`). Hace falta armar dos versiones (por ejemplo 4.0.0 y 4.0.1) y probar en Windows Sandbox: buscar, descargar, instalar, reabrir, que la base migre y que los datos sigan; también instalar la 4.0.0 encima de un "AgroNexo (prototipo)" para ver el renombre de la carpeta y si quedan dos accesos en el menú Inicio. Para no publicar versiones de prueba en el repo real se puede apuntar el armado a un repo de prueba (`--config.publish.repo=<repo>`). Tampoco se probó si SmartScreen avisa en una actualización sin firma.
 
+#### Dependabot: un PR semanal por ecosistema
+**Fecha:** 2026-11-19
+**Rama:** `chore/dependabot-agrupado`
+
+Se revisaron los 16 PR abiertos de Dependabot: 15 se mergearon (5 habían fallado solo porque los jobs del CI no llegaron a arrancar el 8/11; con `@dependabot recreate` pasaron) y se cerró el de la imagen `python:3.12-slim` → `3.15-slim` (#173), que no compila porque shapely y pydantic-core no tienen ruedas para 3.15. Para no volver a tener 16 PR por semana, `.github/dependabot.yml` agrupa las actualizaciones.
+
+**Decisiones tomadas:**
+- **Un PR por semana y por ecosistema** (pip, npm, docker, actions): como máximo 4 por semana. Se descartó mensual por dejar pasar mucho tiempo entre parches de seguridad. Dependabot no puede juntar ecosistemas distintos en un mismo PR.
+- **Solo las menores y de parche van agrupadas.** Las mayores llegan de a una: si rompen algo, no frenan al resto del grupo.
+- **La versión de Python de la imagen se ignora** (cambios menores y mayores): se cambia a mano cuando las librerías la soporten.
+
 ---
 
 ### Ajustes de diseño (HU-R4-13)
