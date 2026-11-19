@@ -1,6 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { app, dialog, Menu } = require('electron');
+const { autoUpdater } = require('electron-updater');
+
+const { resolverCarpetaDatos, describirResolucion } = require('./src/carpeta-datos');
+const { Actualizaciones } = require('./src/actualizaciones');
 
 const {
   HOST, ADMIN_EMAIL, localizarMotor, cargarSecretos, puertoLibre, entornoMotor,
@@ -18,9 +22,18 @@ const {
 const ESPERA_API_MS = 120000;
 
 const estado = {
-  ventana: null, postgres: null, api: null, worker: null, sesion: null, apagando: false,
+  ventana: null,
+  postgres: null,
+  api: null,
+  worker: null,
+  sesion: null,
+  actualizaciones: null,
+  apagando: false,
 };
 let archivoLog = null;
+
+const carpetaDatosResuelta = resolverCarpetaDatos(app.getPath('userData'));
+app.setPath('userData', carpetaDatosResuelta.carpeta);
 
 function registrar(mensaje) {
   if (!archivoLog) return;
@@ -37,6 +50,8 @@ async function arrancar() {
   fs.mkdirSync(carpetaLogs, { recursive: true });
   fs.mkdirSync(carpetaArchivos, { recursive: true });
   archivoLog = path.join(carpetaLogs, 'lanzador.log');
+  const aviso = describirResolucion(carpetaDatosResuelta);
+  if (aviso) registrar(aviso);
 
   const motor = localizarMotor(app.isPackaged);
   const secretos = cargarSecretos(carpetaDatos);
@@ -84,12 +99,26 @@ async function arrancar() {
   });
   estado.sesion.adjuntar(estado.ventana);
   await estado.ventana.loadURL(`${origen}${RUTA_INICIAL}`);
+
+  // Sin instalar no hay app-update.yml (lo genera electron-builder) ni nada que actualizar.
+  if (app.isPackaged) {
+    estado.actualizaciones = new Actualizaciones({
+      updater: autoUpdater,
+      dialog,
+      ventana: () => estado.ventana,
+      apagar,
+      versionActual: app.getVersion(),
+      registrar,
+    });
+    estado.actualizaciones.iniciar();
+  }
 }
 
 async function apagar() {
   if (estado.apagando) return;
   estado.apagando = true;
   if (estado.sesion) estado.sesion.detener();
+  if (estado.actualizaciones) estado.actualizaciones.detener();
   const pasos = [
     ['worker', () => detener(estado.worker)],
     ['API', () => detener(estado.api)],
@@ -129,7 +158,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', (evento) => {
     if (estado.apagando) return;
     evento.preventDefault();
-    apagar().finally(() => app.exit(0));
+    apagar().finally(() => {
+      if (!estado.actualizaciones?.instalarSiQuedoPendiente()) app.exit(0);
+    });
   });
   app.whenReady().then(arrancar).catch(fallar);
 }

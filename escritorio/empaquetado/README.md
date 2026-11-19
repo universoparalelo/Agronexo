@@ -18,7 +18,7 @@ La preparación del entorno (pasos 1 a 5) se probó desde cero en un Windows lim
 
 ## Pasos
 
-Se hacen una sola vez, salvo el 6 y el 7, que se repiten cada vez que cambia el código.
+Se hacen una sola vez, salvo el 6, el 7 y el 8, que se repiten cada vez que cambia el código.
 
 **Atajo para los pasos 1 a 5:** un solo comando que baja e instala todo (Python 3.14, Postgres con PostGIS, las librerías de Visual C++ y GTK) y recorta Postgres. Descarga unos 500 MB y tarda unos 40 minutos la primera vez; si se corre de nuevo, salta lo que ya está hecho. Si faltan las librerías de Visual C++ o hay que instalar GTK, puede pedir permisos de administrador.
 
@@ -68,7 +68,21 @@ cd ..\..\frontend; npm ci; npm run build; cd ..\escritorio\empaquetado
 .\armar_instalador.ps1
 ```
 
-El resultado queda en `escritorio\electron\dist\AgroNexo (prototipo) Setup 0.0.0.exe` (unos 430 MB). Es por usuario, sin administrador y sin firmar: Windows muestra "editor desconocido" y hay que elegir "Ejecutar de todas formas".
+El resultado queda en `escritorio\electron\dist\`: `AgroNexo-Setup-<versión>.exe` (unos 430 MB), su `.blockmap` y `latest.yml`. Los tres hacen falta para las actualizaciones automáticas. Es por usuario, sin administrador y sin firmar: Windows muestra "editor desconocido" y hay que elegir "Ejecutar de todas formas".
+
+**8. Publicar en GitHub Releases** (necesita [GitHub CLI](https://cli.github.com) con `gh auth login`):
+
+1. Subir la versión en `escritorio\electron\package.json` (y `npm install` para que se actualice `package-lock.json`), mergear a `main` por PR y armar el instalador (pasos 6 y 7) desde `main`.
+2. Crear el tag y subirlo: `git tag -a v4.0.1 -m "Release v4.0.1"; git push origin v4.0.1`.
+3. Subir la release como borrador:
+
+```powershell
+.\publicar_release.ps1 -Notas notas.md
+```
+
+Sin `-Notas` usa las notas automáticas de GitHub (la lista de PR). La release queda como **borrador**: revisarla en GitHub y publicarla con "Publish release". Desde ese momento las apps instaladas la ofrecen la próxima vez que se abren (con internet). Con `-Publicar` se salta el borrador.
+
+Las apps instaladas solo ven releases publicadas y que no sean "pre-release". Una versión con un error se arregla publicando otra más nueva: borrar una release no desinstala nada.
 
 ## Cuándo repetir qué
 
@@ -77,6 +91,7 @@ El resultado queda en `escritorio\electron\dist\AgroNexo (prototipo) Setup 0.0.0
 | Código de `app/`, `workers/` o `migrations/` | paso 6 y 7 |
 | Solo el frontend | `npm run build` en `frontend\`, y pasos 6 (`-Que api`) y 7 |
 | Solo el lanzador (`escritorio\electron`) | paso 7 |
+| Hay que entregar una versión nueva | subir la versión, pasos 6 a 8 |
 
 ## Probarlo en una Windows limpia
 

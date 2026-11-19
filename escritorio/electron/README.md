@@ -1,4 +1,4 @@
-# Lanzador de la app de escritorio (prototipo)
+# Lanzador de la app de escritorio
 
 Abre una ventana de Electron que arranca Postgres, la API y el worker de AgroNexo, espera a que la API responda y muestra la aplicación. Al cerrar la ventana frena todo en orden (worker, API, Postgres).
 
@@ -17,7 +17,7 @@ npm start
 
 El segundo comando descarga el binario de Electron (unos 200 MB, desde GitHub, verificado con `checksums.json`): esta versión no lo baja sola al instalar. Hay que repetirlo en cada máquina nueva.
 
-La primera vez crea la base de datos en `%APPDATA%\AgroNexo (prototipo)\`, que también guarda los archivos (`archivos\`), los registros (`logs\`) y los secretos (`secretos.json`). Para entrar a la app, el usuario es `admin@agronexo.com` y la contraseña es el valor `adminPassword` de `secretos.json`. Para empezar de cero, cerrar la app y borrar esa carpeta. (`pg_ctl stop` no hace falta: la app detiene Postgres al cerrar. Si la app se cierra a la fuerza, el próximo arranque detiene el Postgres que haya quedado.)
+La primera vez crea la base de datos en `%APPDATA%\AgroNexo\` (las versiones anteriores a la 4.0.0 usaban `AgroNexo (prototipo)`: el lanzador renombra esa carpeta al arrancar, ver `src/carpeta-datos.js`), que también guarda los archivos (`archivos\`), los registros (`logs\`) y los secretos (`secretos.json`). Para entrar a la app, el usuario es `admin@agronexo.com` y la contraseña es el valor `adminPassword` de `secretos.json`. Para empezar de cero, cerrar la app y borrar esa carpeta. (`pg_ctl stop` no hace falta: la app detiene Postgres al cerrar. Si la app se cierra a la fuerza, el próximo arranque detiene el Postgres que haya quedado.)
 
 ## Seguridad
 
@@ -31,7 +31,7 @@ La primera vez crea la base de datos en `%APPDATA%\AgroNexo (prototipo)\`, que t
 
 Para armar todo desde cero (entorno de Python, Postgres, GTK, motor e instalador) están los scripts y el paso a paso en `escritorio/empaquetado/README.md`. Lo de abajo es solo el último paso.
 
-Genera `dist\AgroNexo (prototipo) Setup 0.0.0.exe` (unos 430 MB) con el motor adentro. Necesita la carpeta `trabajo-escritorio\` con `pg-min\` (Postgres sin pgAdmin, documentación ni StackBuilder), y `motor2\dist\` con la API y el worker empaquetados. La ruta va relativa a esta carpeta (electron-builder no acepta absolutas en `extraResources`):
+Genera `dist\AgroNexo-Setup-<versión>.exe` (unos 430 MB), su `.blockmap` y `latest.yml`, con el motor adentro. Necesita la carpeta `trabajo-escritorio\` con `pg-min\` (Postgres sin pgAdmin, documentación ni StackBuilder), y `motor2\dist\` con la API y el worker empaquetados. La ruta va relativa a esta carpeta (electron-builder no acepta absolutas en `extraResources`):
 
 ```powershell
 $env:AGRONEXO_MOTOR_DIR='../../../trabajo-escritorio'
@@ -39,6 +39,10 @@ npm run dist
 ```
 
 El instalador es por usuario (no pide administrador: Postgres no arranca con permisos elevados) y todavía **no está firmado**, así que Windows avisa de "editor desconocido". Al desinstalar pregunta si se borran también los datos (por defecto no, decisión D7; ver `instalador\installer.nsh`). `npm audit` marca 15 avisos moderados, todos de `minimatch` dentro de electron-builder: es una herramienta de armado que corre solo en la PC de desarrollo y no viaja en la app.
+
+## Actualizaciones automáticas
+
+La app instalada busca versiones nuevas en las releases de GitHub (`universoparalelo/Agronexo`, configurado en `build.publish` de `package.json`) con `electron-updater`, 15 segundos después de abrir. Si hay una, pregunta antes de descargar; al terminar ofrece reiniciar e instalar o instalar al cerrar, y en los dos casos apaga Postgres, la API y el worker antes. Sin internet no hace nada. Solo corre en la app instalada (`npm start` no busca actualizaciones). Cómo publicar una versión: paso 8 de `escritorio/empaquetado/README.md`.
 
 ## Qué falta (fases siguientes)
 
