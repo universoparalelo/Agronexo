@@ -1386,7 +1386,7 @@ Hoy no hay ninguna release publicada en GitHub: existen solo los tags `v1.0.0`, 
 - [ ] Rama `release/v4.0.0` desde `main`, con los ajustes finales (versión y changelog).
 - [x] Versión `4.0.0` en `escritorio/electron/package.json` y `package-lock.json` (estaba en `0.0.0` desde el spike, por eso el instalador se llamaba `Setup 0.0.0.exe`). Hecho el 2026-11-03.
 - [x] Decidir si se saca "(prototipo)" del nombre antes de armar el instalador final. Se saca (D19, 2026-11-19, rama `feat/actualizaciones-automaticas`).
-- [ ] Probar el ciclo de actualización automática en Windows Sandbox con dos versiones (ver "Actualizaciones automáticas desde GitHub Releases").
+- [x] Probar el ciclo de actualización automática con dos versiones (2026-11-19, con un repo de prueba; ver "Actualizaciones automáticas desde GitHub Releases").
 - [ ] Armar el instalador final desde `main` y probarlo en Windows Sandbox (instalación, análisis con un GeoTIFF, diagnóstico, PDF, backup, sin internet y reapertura).
 - [ ] PR a `main`, merge, y tag `git tag -a v4.0.0 -m "Release v4.0.0"` con push del tag.
 - [ ] Crear la release `v4.0.0` en GitHub con el instalador y las notas de abajo: `escritorio\empaquetado\publicar_release.ps1 -Notas <archivo>` (queda como borrador hasta publicarla en la web).
@@ -1472,7 +1472,18 @@ Publicar una versión: `escritorio/empaquetado/publicar_release.ps1` sube con `g
 
 **Verificación:** 15 tests nuevos del lanzador (`test/carpeta-datos.test.js`, `test/actualizaciones.test.js`; 33 en total con `npm test`, que ahora corre el CI). Se armó un instalador de prueba con un motor de relleno: salen `AgroNexo-Setup-4.0.0.exe`, `.blockmap` y `latest.yml` con el mismo nombre, `app-update.yml` apunta a `universoparalelo/Agronexo` y `electron-updater` viaja dentro de `app.asar`. `publicar_release.ps1` se interpreta bien en PowerShell 5.1 y frena si falta el instalador.
 
-**Pendiente (no probado):** el ciclo completo de actualización, porque esta PC no tiene el motor armado (`trabajo-escritorio`). Hace falta armar dos versiones (por ejemplo 4.0.0 y 4.0.1) y probar en Windows Sandbox: buscar, descargar, instalar, reabrir, que la base migre y que los datos sigan; también instalar la 4.0.0 encima de un "AgroNexo (prototipo)" para ver el renombre de la carpeta y si quedan dos accesos en el menú Inicio. Para no publicar versiones de prueba en el repo real se puede apuntar el armado a un repo de prueba (`--config.publish.repo=<repo>`). Tampoco se probó si SmartScreen avisa en una actualización sin firma.
+**Prueba del ciclo completo (2026-11-19).** Entorno armado desde cero en otra PC con `preparar_entorno.ps1`; instaladores apuntando a un repo público de prueba (`universoparalelo/agronexo-pruebas-update`, cambiando `build.publish[0].repo` solo para el armado). Probado en la PC directamente, sin Sandbox:
+- 4.0.0 → 4.0.1 con "Instalar al cerrar la app": encontró la versión, la bajó completa (434 MB, no había `.blockmap` de la 4.0.0 publicado), se instaló al cerrar y el lote con su ortomosaico siguió ahí. Encontró el error de abajo.
+- 4.0.2 → 4.0.3 (ya con el arreglo) con "Reiniciar e instalar ahora": **descarga diferencial de 962 KB** en vez de 434 MB (el `.blockmap` de la 4.0.2 estaba publicado), instalación silenciosa en ~70 s, la app se reabrió sola en la 4.0.3 y el lote siguió ahí.
+
+**Error encontrado — abrir la app mientras se instala la actualización**
+Con "Instalar al cerrar" el instalador corría en silencio (sin ventana, ~1 minuto) y no reabría la app. Se abrió a mano durante la instalación: la primera vez arrancó con archivos de la versión vieja a medio reemplazar, y la segunda falló con `No se encontró el motor empaquetado. Faltan: ...\resources\motor\pg\pgsql\bin`. La instalación terminó bien igual y los datos no se tocaron. Arreglo: las dos opciones reabren la app al terminar (`quitAndInstall(true, true)`), y antes de instalar el lanzador deja `actualizando.json` en la carpeta de datos (`src/instalacion-en-curso.js`). Si la app se abre con la marca y otra versión, muestra "AgroNexo se está actualizando" y se cierra sin arrancar nada; la versión nueva borra la marca, y pasados 10 minutos se ignora (instalación fallida). 5 tests nuevos (38 en total). El caso "abrirla durante la instalación" con el arreglo quedó cubierto solo por los tests, no se repitió a mano.
+
+**Error encontrado — `preparar_entorno.ps1` desde cero**
+- `404 Not Found` al bajar `postgis-bundle-pg16-3.6.2x64.zip`: OSGeo mueve las versiones viejas a `archive/` cuando sale una nueva. La URL apunta ahora a `.../pg16/archive/`, que no cambia.
+- Después de ese fallo, la segunda corrida tiraba `PostGIS no quedo instalado en Postgres`: el paso salteaba también PostGIS si Postgres ya estaba descomprimido. Ahora cada parte se completa por separado.
+
+**Sin probar:** instalar la 4.0.0 encima de un "AgroNexo (prototipo)" (renombre de la carpeta de datos y accesos del menú Inicio) y el aviso de SmartScreen (en esta PC no apareció en ninguna de las dos actualizaciones).
 
 #### Dependabot: un PR semanal por ecosistema
 **Fecha:** 2026-11-19

@@ -38,6 +38,7 @@ function armar({ respuestas = [], updater = new UpdaterFalso() } = {}) {
   const progreso = [];
   const log = [];
   let apagados = 0;
+  const marcas = [];
   const ventana = {
     isDestroyed: () => false,
     setProgressBar: (valor) => progreso.push(valor),
@@ -53,13 +54,14 @@ function armar({ respuestas = [], updater = new UpdaterFalso() } = {}) {
     dialog,
     ventana: () => ventana,
     apagar: async () => { apagados += 1; },
+    marcarInstalacion: (version) => marcas.push(version),
     versionActual: '4.0.0',
     registrar: (m) => log.push(m),
   });
   actualizaciones.iniciar({ demoraMs: 60000 });
   actualizaciones.detener();
   return {
-    actualizaciones, updater, dialogos, progreso, log, apagados: () => apagados,
+    actualizaciones, updater, dialogos, progreso, log, marcas, apagados: () => apagados,
   };
 }
 
@@ -115,19 +117,26 @@ test('el progreso de la descarga va a la barra de la ventana', () => {
   assert.deepEqual(progreso, [0.42]);
 });
 
-test('"Reiniciar e instalar ahora" apaga el motor antes de instalar y reabre la app', async () => {
-  const { actualizaciones, updater, apagados } = armar({ respuestas: [0] });
+test('"Reiniciar e instalar ahora" apaga el motor, marca la instalación y reabre la app', async () => {
+  const {
+    actualizaciones, updater, apagados, marcas,
+  } = armar({ respuestas: [0] });
   await actualizaciones.ofrecerInstalacion({ version: '4.1.0' });
   assert.equal(apagados(), 1);
+  assert.deepEqual(marcas, ['4.1.0']);
   assert.deepEqual(updater.instalaciones, [{ silencioso: true, reabrir: true }]);
 });
 
-test('"Instalar al cerrar" instala al salir sin reabrir', async () => {
-  const { actualizaciones, updater, apagados } = armar({ respuestas: [1] });
+test('"Instalar al cerrar" instala al salir, marca la instalación y también reabre la app', async () => {
+  const {
+    actualizaciones, updater, apagados, marcas,
+  } = armar({ respuestas: [1] });
   await actualizaciones.ofrecerInstalacion({ version: '4.1.0' });
   assert.equal(updater.instalaciones.length, 0);
+  assert.deepEqual(marcas, []);
   assert.equal(actualizaciones.instalarSiQuedoPendiente(), true);
-  assert.deepEqual(updater.instalaciones, [{ silencioso: true, reabrir: false }]);
+  assert.deepEqual(marcas, ['4.1.0']);
+  assert.deepEqual(updater.instalaciones, [{ silencioso: true, reabrir: true }]);
   assert.equal(apagados(), 0);
 });
 

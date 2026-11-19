@@ -13,12 +13,13 @@ function tamanoDescarga(info) {
 
 class Actualizaciones {
   constructor({
-    updater, dialog, ventana, apagar, versionActual, registrar,
+    updater, dialog, ventana, apagar, marcarInstalacion, versionActual, registrar,
   }) {
     this.updater = updater;
     this.dialog = dialog;
     this.ventana = ventana;
     this.apagar = apagar;
+    this.marcarInstalacion = marcarInstalacion;
     this.versionActual = versionActual;
     this.registrar = registrar;
     this.descargando = false;
@@ -104,8 +105,9 @@ class Actualizaciones {
       type: 'info',
       title: 'Actualización lista',
       message: `La versión ${info.version} está lista para instalarse.`,
-      detail: 'Para instalarla AgroNexo se cierra y vuelve a abrirse solo en uno o dos minutos.'
-        + ' Antes de actualizar la base se guarda una copia.',
+      detail: 'Para instalarla AgroNexo se cierra y vuelve a abrirse solo en uno o dos minutos'
+        + ' (si elegís instalar al cerrar, pasa cuando cierres la app). Mientras tanto no hace'
+        + ' falta abrirla. Antes de actualizar la base se guarda una copia.',
       buttons: ['Reiniciar e instalar ahora', 'Instalar al cerrar la app'],
       defaultId: 0,
       cancelId: 1,
@@ -116,7 +118,7 @@ class Actualizaciones {
   async instalarAhora() {
     this.registrar(`Se instala la versión ${this.pendiente} y se reabre la app`);
     await this.apagar();
-    this.updater.quitAndInstall(true, true);
+    this.instalar();
   }
 
   // Lo llama el lanzador al salir, con todo ya detenido. Devuelve true si el instalador
@@ -124,8 +126,15 @@ class Actualizaciones {
   instalarSiQuedoPendiente() {
     if (!this.pendiente) return false;
     this.registrar(`Se instala la versión ${this.pendiente} al cerrar`);
-    this.updater.quitAndInstall(true, false);
+    this.instalar();
     return true;
+  }
+
+  // El instalador corre en silencio, así que siempre reabre la app al terminar: si no, quien
+  // la abre a mano antes de que termine la encuentra a medio instalar.
+  instalar() {
+    this.marcarInstalacion(this.pendiente);
+    this.updater.quitAndInstall(true, true);
   }
 
   async alFallar(error) {

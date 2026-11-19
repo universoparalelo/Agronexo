@@ -5,6 +5,7 @@ const { autoUpdater } = require('electron-updater');
 
 const { resolverCarpetaDatos, describirResolucion } = require('./src/carpeta-datos');
 const { Actualizaciones } = require('./src/actualizaciones');
+const { marcarInstalacion, instalacionEnCurso } = require('./src/instalacion-en-curso');
 
 const {
   HOST, ADMIN_EMAIL, localizarMotor, cargarSecretos, puertoLibre, entornoMotor,
@@ -52,6 +53,22 @@ async function arrancar() {
   archivoLog = path.join(carpetaLogs, 'lanzador.log');
   const aviso = describirResolucion(carpetaDatosResuelta);
   if (aviso) registrar(aviso);
+
+  // Antes de tocar el motor: durante una actualización sus archivos se están reemplazando.
+  const instalando = instalacionEnCurso(carpetaDatos, app.getVersion());
+  if (instalando) {
+    registrar(`Se abrió mientras se instalaba la versión ${instalando}: se cierra sin arrancar`);
+    await dialog.showMessageBox({
+      type: 'info',
+      title: 'AgroNexo se está actualizando',
+      message: `Se está instalando la versión ${instalando}.`,
+      detail: 'AgroNexo se abre solo cuando termina, en uno o dos minutos.',
+      buttons: ['Aceptar'],
+    });
+    estado.apagando = true;
+    app.exit(0);
+    return;
+  }
 
   const motor = localizarMotor(app.isPackaged);
   const secretos = cargarSecretos(carpetaDatos);
@@ -107,6 +124,7 @@ async function arrancar() {
       dialog,
       ventana: () => estado.ventana,
       apagar,
+      marcarInstalacion: (version) => marcarInstalacion(carpetaDatos, version),
       versionActual: app.getVersion(),
       registrar,
     });
