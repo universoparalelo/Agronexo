@@ -44,6 +44,8 @@
 | Tests unitarios del motor de diagnóstico | ✅ | engine, forma, texto, zonificación, bayes, revisiones, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py tests/test_bayes.py tests/test_revisiones_api.py` |
 | Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
 | Exportación Shapefile | ❌ | Pendiente |
+| App de escritorio para Windows | ✅ | Instalador sin Docker: `escritorio/electron` (lanzador Electron que arranca Postgres, la API y el worker) y `escritorio/empaquetado` (scripts para armar el instalador, README paso a paso). Decisiones en `docs/decisiones-app-escritorio.md`, cambios de arquitectura en `docs/cambios-arquitectura-escritorio.md` |
+| Actualizaciones automáticas + GitHub Releases | ✅ | La app instalada busca versiones nuevas en las releases de `universoparalelo/Agronexo` (`electron-updater`). v4.0.0 publicada. Cómo publicar: paso 8 de `escritorio/empaquetado/README.md` |
 
 ### Credenciales de desarrollo
 
@@ -69,6 +71,17 @@
 - `tipo_suelo` en tabla `lotes` es un PostgreSQL enum (`tiposueloenum`) — asyncpg no auto-castea VARCHAR a enum, así que las migraciones crean enums con SQL directo y `DO/EXCEPTION` para idempotencia.
 - `productos_fitosanitarios` tiene su propio router (`productos_router`) montado en `/api/v1/productos-fitosanitarios` — no puede ir bajo `/api/v1/lotes/` porque FastAPI interpreta el segmento como `{lote_id}` UUID y falla.
 - El servicio de diagnóstico (`app/diagnostico/service.py`) carga productos desde BD en cada request vía `_cargar_catalogo_productos()`.
+
+### App de escritorio — lo que hay que saber antes de cambiar código
+
+Hay usuarios con la app instalada que reciben cada versión publicada por actualización automática. Para desarrollar se sigue usando Docker; esto importa al entregar.
+
+- **Un cambio no llega a la app instalada hasta que se publica una release:** subir `version` en `escritorio/electron/package.json`, armar el instalador desde `main`, tag `vX.Y.Z` y `escritorio/empaquetado/publicar_release.ps1`. Una versión con un error se arregla publicando otra más nueva: borrar la release no desinstala nada.
+- **No cambiar `appId` ni `productName`** en `escritorio/electron/package.json`: con otro `appId` el instalador no reconoce la instalación anterior, y con otro `productName` cambia la carpeta de datos (`%APPDATA%\AgroNexo\`) y los usuarios dejan de ver sus lotes.
+- **El motor empaquetado tiene su propia lista de dependencias:** `escritorio/empaquetado/requirements-empaquetado.txt` (Python 3.14), no `docker/requirements.*.txt`. Una librería nueva del backend o del worker va en los dos, si no la app instalada falla al importarla.
+- **Las migraciones corren solas al abrir la app instalada** (`app/core/migraciones.py`, con copia previa de la base por D11), sobre bases con datos reales de usuarios: tienen que funcionar sobre una base con datos, no solo sobre una vacía. Los datos que la app necesita (como el catálogo de fitosanitarios, migración 0029) van en una migración: el importador manual de Docker no corre en la app instalada.
+- **La app instalada funciona sin internet** (D8): una función que necesita conexión tiene que quedar deshabilitada con aviso cuando no la hay, no romper.
+- **Los scripts `.ps1` de `escritorio/empaquetado/` van solo en ASCII** (PowerShell 5.1 lee mal UTF-8 sin BOM) y llaman a programas externos sin `$ErrorActionPreference = "Stop"`, mirando el código de salida: con "Stop", cualquier aviso en stderr corta el script.
 
 ---
 
