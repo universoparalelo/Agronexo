@@ -1380,16 +1380,16 @@ La migración `0029_cargar_catalogo_fitosanitarios.py` carga esos datos en cualq
 
 Hoy no hay ninguna release publicada en GitHub: existen solo los tags `v1.0.0`, `v2.0.0` y `v3.0.0`, sin archivos adjuntos. El instalador se comparte por Drive. Para publicar la `v4.0.0` (a mano, con el instalador adjunto; el límite es 2 GB por archivo):
 
-- [ ] PR de `preparar_entorno` mergeado (#158, hecho).
-- [ ] HU-R4-04 (línea de tiempo) resuelta: se completa, o el equipo decide que el calendario de vuelos alcanza.
-- [ ] El equipo está de acuerdo en dar por terminada la release 4.
-- [ ] Rama `release/v4.0.0` desde `main`, con los ajustes finales (versión y changelog).
+- [x] PR de `preparar_entorno` mergeado (#158, hecho).
+- [ ] HU-R4-04 (línea de tiempo) resuelta: se completa, o el equipo decide que el calendario de vuelos alcanza. **Se publicó sin resolverla** (decisión de universoparalelo, 2026-11-19): lo que falte llega en una versión siguiente por actualización automática.
+- [ ] El equipo está de acuerdo en dar por terminada la release 4. Pendiente de confirmar con el equipo: la v4.0.0 ya está publicada.
+- [x] ~~Rama `release/v4.0.0`~~: no hizo falta, la versión ya estaba en `main` (#166). El tag sale de `main` (`08fc74f`, con el PR #190).
 - [x] Versión `4.0.0` en `escritorio/electron/package.json` y `package-lock.json` (estaba en `0.0.0` desde el spike, por eso el instalador se llamaba `Setup 0.0.0.exe`). Hecho el 2026-11-03.
 - [x] Decidir si se saca "(prototipo)" del nombre antes de armar el instalador final. Se saca (D19, 2026-11-19, rama `feat/actualizaciones-automaticas`).
 - [x] Probar el ciclo de actualización automática con dos versiones (2026-11-19, con un repo de prueba; ver "Actualizaciones automáticas desde GitHub Releases").
-- [ ] Armar el instalador final desde `main` y probarlo en Windows Sandbox (instalación, análisis con un GeoTIFF, diagnóstico, PDF, backup, sin internet y reapertura).
-- [ ] PR a `main`, merge, y tag `git tag -a v4.0.0 -m "Release v4.0.0"` con push del tag.
-- [ ] Crear la release `v4.0.0` en GitHub con el instalador y las notas de abajo: `escritorio\empaquetado\publicar_release.ps1 -Notas <archivo>` (queda como borrador hasta publicarla en la web).
+- [x] Armar el instalador final desde `main` (2026-11-19, motor con el frontend de `main`). Probado instalándolo encima de una versión de prueba 4.0.3 en la PC (no en Sandbox): instala aunque el número sea menor, arranca, conserva los datos y apunta a `universoparalelo/Agronexo`. El flujo completo (GeoTIFF, diagnóstico, PDF, backup, sin internet) se había probado el 2026-11-02 y en la prueba de actualizaciones.
+- [x] Tag `v4.0.0` sobre `main` con push (2026-11-19).
+- [x] Release `v4.0.0` publicada en GitHub (2026-11-19) con `publicar_release.ps1 -Publicar`: instalador (433 MB), `.blockmap` y `latest.yml`. https://github.com/universoparalelo/Agronexo/releases/tag/v4.0.0
 
 **Notas de la release (borrador):**
 - *Título:* AgroNexo v4.0.0: aplicación de escritorio, comparación de vuelos y ahorro.
@@ -1482,6 +1482,9 @@ Con "Instalar al cerrar" el instalador corría en silencio (sin ventana, ~1 minu
 **Error encontrado — `preparar_entorno.ps1` desde cero**
 - `404 Not Found` al bajar `postgis-bundle-pg16-3.6.2x64.zip`: OSGeo mueve las versiones viejas a `archive/` cuando sale una nueva. La URL apunta ahora a `.../pg16/archive/`, que no cambia.
 - Después de ese fallo, la segunda corrida tiraba `PostGIS no quedo instalado en Postgres`: el paso salteaba también PostGIS si Postgres ya estaba descomprimido. Ahora cada parte se completa por separado.
+
+**Error encontrado — `publicar_release.ps1` no llegaba a publicar**
+Al publicar la v4.0.0 el script cortó con `release not found` (`NativeCommandError`): con `$ErrorActionPreference = "Stop"`, PowerShell 5.1 toma como error cualquier línea que un programa escriba en stderr, y `gh release view` avisa así justamente cuando la release todavía no existe (el caso normal). Las llamadas a `gh.exe` pasan ahora por una función que corre en "Continue" y mira solo el código de salida. Al armarla apareció otra trampa: una función llamada `Gh` se llamaba a sí misma, porque PowerShell no distingue mayúsculas y la función tapa a `gh.exe`; por eso se llama `Invocar-GitHub` y llama a `gh.exe` con extensión. La prueba anterior del script solo había llegado hasta la verificación de archivos.
 
 **Sin probar:** instalar la 4.0.0 encima de un "AgroNexo (prototipo)" (renombre de la carpeta de datos y accesos del menú Inicio) y el aviso de SmartScreen (en esta PC no apareció en ninguna de las dos actualizaciones).
 
