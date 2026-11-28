@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import useResumenVuelo from '../hooks/useResumenVuelo'
 
 const SEVERIDAD_LABELS = {
@@ -22,8 +23,9 @@ export default function ResumenVuelo({ loteId, vueloId }) {
   const {
     stats, loading, error,
     descargando, descargaError,
-    descargarInforme, descargarOrden, descargarPrescripcion,
+    descargarInforme, descargarOrden, descargarPrescripcion, descargarZonasShp,
   } = useResumenVuelo(loteId, vueloId)
+  const [maquina, setMaquina] = useState('mosquito')
 
   if (loading) {
     return (
@@ -109,11 +111,32 @@ export default function ResumenVuelo({ loteId, vueloId }) {
         </button>
         <button
           type="button"
-          onClick={descargarPrescripcion}
-          disabled={descargando === 'prescripcion' || !stats.hayZonas}
-          title={stats.hayZonas ? undefined : 'Sin zonas clasificadas para exportar'}
+          onClick={descargarZonasShp}
+          disabled={descargando === 'zonas' || !stats.hayZonas}
+          title={stats.hayZonas ? 'Zonas del diagnóstico, sin dosis, para abrir en QGIS' : 'Sin zonas clasificadas para exportar'}
         >
-          {descargando === 'prescripcion' ? 'Generando...' : '🗂️ Prescripción (SHP)'}
+          {descargando === 'zonas' ? 'Generando...' : '🗂️ Zonas (SHP)'}
+        </button>
+      </div>
+      <div className="resumen-vuelo-acciones resumen-vuelo-prescripcion">
+        <select
+          value={maquina}
+          onChange={e => setMaquina(e.target.value)}
+          aria-label="Máquina para la prescripción"
+          disabled={!stats.hayUnidadesManejo}
+        >
+          <option value="mosquito">Mosquito (pulverizadora)</option>
+          <option value="dron">Dron pulverizador</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => descargarPrescripcion(maquina)}
+          disabled={descargando === 'prescripcion' || !stats.hayUnidadesManejo}
+          title={stats.hayUnidadesManejo
+            ? 'Mapa de prescripción (Shapefile e ISO-XML) por producto y recorrido sugerido, en un .zip'
+            : 'No hay zonas para tratar'}
+        >
+          {descargando === 'prescripcion' ? 'Generando...' : '🚜 Prescripción para maquinaria'}
         </button>
       </div>
       {descargaError && <p className="empty-hint resumen-vuelo-error">{descargaError}</p>}

@@ -45,6 +45,7 @@ from app.diagnostico.router import estadios_router, productos_router, router as 
 from app.ingesta.router import router as ingesta_router
 from app.lotes.router import router as lotes_router
 from app.ordenes_trabajo.router import router as ordenes_trabajo_router
+from app.prescripcion.router import router as prescripcion_router
 from app.reportes.router import router as reportes_router
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
@@ -55,6 +56,7 @@ app.include_router(productos_router, prefix="/api/v1/productos-fitosanitarios", 
 app.include_router(estadios_router, prefix="/api/v1/estadios-fenologicos", tags=["diagnostico"])
 app.include_router(reportes_router, prefix="/api/v1/lotes", tags=["reportes"])
 app.include_router(ordenes_trabajo_router, prefix="/api/v1/lotes", tags=["ordenes-trabajo"])
+app.include_router(prescripcion_router, prefix="/api/v1/lotes", tags=["prescripcion"])
 app.include_router(ahorro_router, prefix="/api/v1/lotes", tags=["ahorro"])
 app.include_router(backup_router, prefix="/api/v1/backup", tags=["backup"])
 app.include_router(archivos_router, prefix="/api/v1/archivos", tags=["archivos"])

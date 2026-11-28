@@ -130,7 +130,7 @@ POST /api/v1/lotes/{id}/vuelos                       → subir GeoTIFF (con cult
 GET  /api/v1/lotes/{id}/vuelos/{id}/estado           → polling de progreso (%)
 GET  /api/v1/lotes/{id}/vuelos/{id}/diagnostico      → diagnóstico agronómico por zona
 GET  /api/v1/productos-fitosanitarios                → catálogo de productos (?causa=...&tipo=...)
-GET  /api/v1/analisis/{id}/reportes/shapefile        → .zip para maquinaria agrícola
+GET  /api/v1/lotes/{id}/vuelos/{id}/prescripcion     → .zip para maquinaria (?maquina=dron|mosquito): Shapefile e ISO-XML por producto + recorrido
 ```
 
 Todos los endpoints (excepto `/auth/login` y `/auth/register`) requieren `Authorization: Bearer <token>`.
@@ -144,7 +144,9 @@ agronexo/
 │   ├── lotes/              # CRUD de lotes agrícolas con geometrías PostGIS
 │   ├── ingesta/            # Upload GeoTIFF, validación, encolado Celery
 │   ├── diagnostico/        # Motor de reglas (20 reglas), texto explicativo, severidad, zonificación de manejo
-│   ├── reportes/           # PDF (WeasyPrint), Shapefile, ISO-XML
+│   ├── reportes/           # Reporte ejecutivo PDF (WeasyPrint), zonas en Shapefile y GeoJSON
+│   ├── ordenes_trabajo/    # Orden de trabajo en PDF (dosis por unidad de manejo)
+│   ├── prescripcion/       # Paquete para maquinaria: mapa por producto (Shapefile, ISO-XML) y recorrido sugerido
 │   ├── catalogo/           # Importador del catálogo de fitosanitarios desde Excel (dosis, precios)
 │   ├── archivos/           # Descarga de archivos con token firmado (almacenamiento en disco)
 │   ├── backup/             # Exportar todo / Importar (reemplazar o sumar) en un .zip, desde Mi perfil

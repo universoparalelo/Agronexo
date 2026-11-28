@@ -43,7 +43,8 @@
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
 | Tests unitarios del motor de diagnóstico | ✅ | engine, forma, texto, zonificación, bayes, revisiones, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py tests/test_bayes.py tests/test_revisiones_api.py` |
 | Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
-| Exportación Shapefile | ❌ | Pendiente |
+| Exportación de zonas (Shapefile / GeoJSON) | ✅ | `app/reportes/exportacion.py`: zonas del diagnóstico **sin dosis**, para QGIS. No es una prescripción |
+| Paquete de prescripción para maquinaria (RFSA-02) | ✅ | `GET /lotes/{id}/vuelos/{id}/prescripcion?maquina=dron\|mosquito` → .zip con un mapa por producto (Shapefile + `TASKDATA/TASKDATA.XML` ISO 11783-10 v3), recorrido sugerido (GeoJSON/KML), `resumen.json` y `LEEME.txt`. `app/prescripcion/`. Dosis de la orden de trabajo; margen y ancho de labor por máquina (`maquinas.py`). Sin máquina real: la verificación es `tests/test_prescripcion.py` (cantidades = orden de trabajo, simulación de cobertura del recorrido, control estructural del ISO-XML) |
 | App de escritorio para Windows | ✅ | Instalador sin Docker: `escritorio/electron` (lanzador Electron que arranca Postgres, la API y el worker) y `escritorio/empaquetado` (scripts para armar el instalador, README paso a paso). Decisiones en `docs/decisiones-app-escritorio.md`, cambios de arquitectura en `docs/cambios-arquitectura-escritorio.md` |
 | Actualizaciones automáticas + GitHub Releases | ✅ | La app instalada busca versiones nuevas en las releases de `universoparalelo/Agronexo` (`electron-updater`). v4.0.0 publicada. Cómo publicar: paso 8 de `escritorio/empaquetado/README.md` |
 
@@ -135,7 +136,7 @@ POST /lotes/{id}/vuelos → subir GeoTIFF → encola Celery → 202 Accepted
 GET  /lotes/{id}/vuelos/{id}/estado → polling progreso
 GET  /lotes/{id}/vuelos/{id}/diagnostico → diagnóstico agronómico por zona
 GET  /productos-fitosanitarios → catálogo de productos (?causa=...&tipo=...)
-GET  /analisis/{id}/reportes/shapefile → .zip para maquinaria
+GET  /lotes/{id}/vuelos/{id}/prescripcion?maquina=dron|mosquito → .zip para maquinaria
 ```
 
 ---
