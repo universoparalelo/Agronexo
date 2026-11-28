@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { obtenerDiagnostico, obtenerZonas } from '../api/analisis'
 import { obtenerAhorroVuelo } from '../api/ahorro'
-import { descargarOrdenTrabajoPdf } from '../api/reportes'
-import { extraerMensajeErrorBlob } from '../utils/descargarArchivo'
+import { descargarOrdenTrabajoPdf, descargarPaquetePrescripcion } from '../api/reportes'
+import { descargarBlob, extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 
 // Carga zonas + diagnóstico de UN vuelo y expone las acciones sobre él
 // (recalcular, generar orden de trabajo). Se usa una vez por panel visible —
@@ -23,6 +23,8 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
   const [generandoOrden, setGenerandoOrden] = useState(false)
   const [ordenError, setOrdenError] = useState('')
   const [previewPdf, setPreviewPdf] = useState(null) // { titulo, blob, filename } | null
+  const [generandoPrescripcion, setGenerandoPrescripcion] = useState(false)
+  const [prescripcionError, setPrescripcionError] = useState('')
 
   useEffect(() => {
     if (!loteId || !vueloId) return
@@ -77,6 +79,15 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
       .finally(() => setGenerandoOrden(false))
   }
 
+  function handleDescargarPrescripcion(maquina) {
+    setGenerandoPrescripcion(true)
+    setPrescripcionError('')
+    descargarPaquetePrescripcion(loteId, vueloId, maquina)
+      .then((blob) => descargarBlob(blob, `prescripcion_${maquina}_${vueloId}.zip`))
+      .catch(async (err) => setPrescripcionError(await extraerMensajeErrorBlob(err, 'No se pudo generar la prescripción.')))
+      .finally(() => setGenerandoPrescripcion(false))
+  }
+
   return {
     zonas, loading, error,
     tab, setTab,
@@ -85,5 +96,6 @@ export default function useResultadoVuelo(loteId, vueloId, nombreLote) {
     generandoOrden, ordenError,
     previewPdf, cerrarPreviewPdf: () => setPreviewPdf(null),
     handleGenerarOrdenTrabajo,
+    generandoPrescripcion, prescripcionError, handleDescargarPrescripcion,
   }
 }

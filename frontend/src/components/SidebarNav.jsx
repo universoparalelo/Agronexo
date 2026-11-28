@@ -20,12 +20,6 @@ const IconDiagnostico = () => (
     <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
   </svg>
 )
-const IconInformes = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
-  </svg>
-)
 const IconConfig = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3"/>
@@ -57,7 +51,6 @@ export default function SidebarNav({ user, onVerDiagnosticos, plegable = false }
       label: 'RESULTADOS',
       items: [
         { id: 'diagnostico', icon: <IconDiagnostico />, label: 'Diagnósticos', onClick: onVerDiagnosticos, bloqueado: !onVerDiagnosticos },
-        { id: 'informes',    icon: <IconInformes />,    label: 'Informes',     proximamente: true },
       ],
     },
     {

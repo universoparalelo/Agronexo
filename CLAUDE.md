@@ -2,8 +2,8 @@
 
 ## Estado actual del proyecto
 
-**Release activa:** v4.0.0 (en desarrollo) — seguimiento en `docs/release-v4.0.0.md`
-**Release anterior:** v3.0.0 — seguimiento en `docs/release-v3.0.0.md`
+**Release activa:** v4.1.0 (en desarrollo) — seguimiento en `docs/release-v4.1.0.md`
+**Release anterior:** v4.0.0 — seguimiento en `docs/release-v4.0.0.md`, documentación formal en `docs/releases/release-v4.0.0.md`
 **Plan de trabajo completo:** `docs/4_Plan_de_trabajo.html` — incluye todos los sprints y releases con checkboxes interactivos para marcar el avance.
 
 ### Qué está implementado y funcionando
@@ -43,7 +43,8 @@
 | Dashboard de resultados (tabla stats + UX) | ✅ | Tabla compacta + cards toggle, KPIs reales, spinner diagnóstico, link zonas→diagnóstico |
 | Tests unitarios del motor de diagnóstico | ✅ | engine, forma, texto, zonificación, bayes, revisiones, API. `pytest tests/test_diagnostico_*.py tests/test_texto.py tests/test_zonificacion.py tests/test_forma.py tests/test_bayes.py tests/test_revisiones_api.py` |
 | Reporte ejecutivo PDF | ✅ | `GET /lotes/{id}/vuelos/{id}/reporte/pdf` — motor de diagnóstico → mapa PNG estático (Pillow) → template Jinja2 → WeasyPrint (`app/reportes/`). Sin botón en el dashboard todavía (ver tarjeta Trello "Integración en el dashboard") |
-| Exportación Shapefile | ❌ | Pendiente |
+| Exportación de zonas (Shapefile / GeoJSON) | ✅ | `app/reportes/exportacion.py`: zonas del diagnóstico **sin dosis**, para QGIS. No es una prescripción |
+| Paquete de prescripción para maquinaria (RFSA-02) | ✅ | `GET /lotes/{id}/vuelos/{id}/prescripcion?maquina=dron\|mosquito` → .zip con un mapa por producto (Shapefile + `TASKDATA/TASKDATA.XML` ISO 11783-10 v3), recorrido sugerido (GeoJSON/KML), `resumen.json` y `LEEME.txt`. `app/prescripcion/`. Dosis de la orden de trabajo; margen y ancho de labor por máquina (`maquinas.py`). Sin máquina real: la verificación es `tests/test_prescripcion.py` (cantidades = orden de trabajo, simulación de cobertura del recorrido, control estructural del ISO-XML) |
 | App de escritorio para Windows | ✅ | Instalador sin Docker: `escritorio/electron` (lanzador Electron que arranca Postgres, la API y el worker) y `escritorio/empaquetado` (scripts para armar el instalador, README paso a paso). Decisiones en `docs/decisiones-app-escritorio.md`, cambios de arquitectura en `docs/cambios-arquitectura-escritorio.md` |
 | Actualizaciones automáticas + GitHub Releases | ✅ | La app instalada busca versiones nuevas en las releases de `universoparalelo/Agronexo` (`electron-updater`). v4.0.0 publicada. Cómo publicar: paso 8 de `escritorio/empaquetado/README.md` |
 
@@ -135,7 +136,7 @@ POST /lotes/{id}/vuelos → subir GeoTIFF → encola Celery → 202 Accepted
 GET  /lotes/{id}/vuelos/{id}/estado → polling progreso
 GET  /lotes/{id}/vuelos/{id}/diagnostico → diagnóstico agronómico por zona
 GET  /productos-fitosanitarios → catálogo de productos (?causa=...&tipo=...)
-GET  /analisis/{id}/reportes/shapefile → .zip para maquinaria
+GET  /lotes/{id}/vuelos/{id}/prescripcion?maquina=dron|mosquito → .zip para maquinaria
 ```
 
 ---
@@ -180,11 +181,14 @@ Cada release tiene su propio archivo de seguimiento en `docs/`. **Una release = 
 | v1.0.0 | `docs/release-v1.0.0.md` | Cerrada |
 | v2.0.0 | `docs/release-v2.0.0.md` | Cerrada |
 | v3.0.0 | `docs/release-v3.0.0.md` | Cerrada |
-| v4.0.0 | `docs/release-v4.0.0.md` | En desarrollo |
+| v4.0.0 | `docs/release-v4.0.0.md` | Cerrada |
+| v4.1.0 | `docs/release-v4.1.0.md` | En desarrollo |
 
 Al iniciar una release nueva, crear `docs/release-vX.X.X.md` copiando la estructura de la release anterior. El archivo de la release anterior no se modifica una vez cerrada.
 
-**El archivo activo ahora es: `docs/release-v4.0.0.md`**
+Cada release tiene además una **documentación formal** para la cátedra en `docs/releases/release-vX.X.X.md`, que se escribe al cerrarla a partir de `docs/releases/_TEMPLATE-release.md`. No es la bitácora: no se actualiza tarea por tarea.
+
+**El archivo activo ahora es: `docs/release-v4.1.0.md`**
 
 **Actualizar el archivo AL TERMINAR CADA TAREA — obligatorio, no opcional** (skill `release-tracking`: qué sección tocar, qué no documentar y formato exacto de entrada).
 

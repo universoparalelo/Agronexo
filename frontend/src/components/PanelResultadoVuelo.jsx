@@ -30,9 +30,11 @@ export default function PanelResultadoVuelo({
     generandoOrden, ordenError,
     previewPdf, cerrarPreviewPdf,
     handleGenerarOrdenTrabajo,
+    generandoPrescripcion, prescripcionError, handleDescargarPrescripcion,
   } = useResultadoVuelo(loteId, vueloId, lote?.nombre)
 
   const [mapaAmpliado, setMapaAmpliado] = useState(false)
+  const [maquina, setMaquina] = useState('mosquito')
   const [precioForm, setPrecioForm] = useState(null) // { productoId, nombre, unidad } | null
   // Avisa al padre (ResultadosVuelo) cada vez que cambian las zonas de este
   // panel — en modo comparación, cuando ambos paneles reportaron sus zonas
@@ -112,7 +114,34 @@ export default function PanelResultadoVuelo({
         )}
       </div>
 
+      {!loading && (
+        <div className="resultados-prescripcion">
+          <span className="resultados-prescripcion-titulo">Prescripción para maquinaria</span>
+          <select
+            value={maquina}
+            onChange={(e) => setMaquina(e.target.value)}
+            aria-label="Máquina para la prescripción"
+            disabled={generandoPrescripcion || sinUnidadesDeManejo}
+          >
+            <option value="mosquito">Mosquito (pulverizadora)</option>
+            <option value="dron">Dron pulverizador</option>
+          </select>
+          <button
+            type="button"
+            className="btn-orden-trabajo"
+            onClick={() => handleDescargarPrescripcion(maquina)}
+            disabled={generandoPrescripcion || sinUnidadesDeManejo}
+            title={sinUnidadesDeManejo
+              ? 'No hay zonas para tratar: todas están dentro de rangos normales'
+              : 'Mapa de prescripción por producto (Shapefile e ISO-XML) y recorrido sugerido, en un .zip'}
+          >
+            {generandoPrescripcion ? 'Generando...' : 'Descargar (.zip)'}
+          </button>
+        </div>
+      )}
+
       {ordenError && <p className="error-message">{ordenError}</p>}
+      {prescripcionError && <p className="error-message">{prescripcionError}</p>}
 
       {tab === 'zonas' && !loading && (
         features.length > 0

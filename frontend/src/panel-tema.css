@@ -1363,6 +1363,16 @@
 .btn-orden-trabajo--destacado:hover:not(:disabled) { background: #f0f4f0; border-color: #3f5246; }
 .btn-orden-trabajo--destacado:disabled { background: #f3f4f6; border-color: #d1d5db; color: #9ca3af; box-shadow: none; }
 
+/* Fila "Prescripción para maquinaria", debajo de las pestañas. */
+.resultados-prescripcion {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem;
+  margin: 0.25rem 0 0.5rem;
+}
+.resultados-prescripcion-titulo { font-size: 0.8rem; font-weight: 600; color: #12261a; }
+.resultados-prescripcion select {
+  font-size: 0.8rem; padding: 0.3rem 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; background: #fff;
+}
+
 /* El panel de la derecha reserva siempre el lugar de la barra de scroll: al abrir una pestaña con mucho contenido
    (Diagnóstico) la barra aparece sin quitarle ancho al contenido ni correr nada. */
 .resultados-shell--fija .resultados-main--dividida .resultados-sidebar { scrollbar-gutter: stable; }
