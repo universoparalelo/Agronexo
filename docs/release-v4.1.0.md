@@ -43,6 +43,12 @@ Verificación sin máquina real: `tests/test_prescripcion.py` (21 tests) y `test
 - `TASKDATA.XML` pasa `validar_taskdata()` y lleva las dosis escaladas, las coordenadas y los huecos;
 - el Shapefile se vuelve a leer con pyshp y zonas más resto cubren el lote.
 
+**Prueba manual sobre un lote real (2026-11-27).** Ningún vuelo cargado tenía una causa con producto: "Lote Cele" tiene una sola unidad de manejo (41,52 ha, estrés hídrico, sin fitosanitario) y "campo abuelo" no tiene unidades. Por eso, fuera de la app, se armó un paquete de prueba sobre esa unidad real asignándole Clorpirifos 0,8 L/ha. La orden pide 33,2 L; el mapa con margen, 36,2 L (dron) y 36,6 L (mosquito). La simulación cubre el 100 % y `TASKDATA.XML` sale sin errores de validación. Abierto en Google Earth, el recorrido del mosquito (18 pasadas de norte a sur, separadas 28 m) cae sobre el lote, sin desplazamiento:
+
+![Recorrido del mosquito y zona a aplicar del paquete de prueba de "Lote Cele", abiertos en Google Earth](image/release-v4.1.0/prescripcion-mosquito-google-earth.png)
+
+La zona se pasa un poco de los caminos del norte y del este porque se recorta al límite del lote cargado en la app, que está dibujado algo más grande que el campo. La primera pasada del oeste se extiende fuera de la zona porque la barra se abre si cualquier parte de su ancho la toca (ver decisiones).
+
 **Decisiones tomadas:**
 - Un mapa por producto (decisión del equipo), porque la máquina carga un producto por tanque. En ISO-XML es una tarea (TSK) por producto en el mismo `TASKDATA.XML`.
 - Producto y dosis salen de `generar_orden_trabajo()` y no de un cálculo propio, para que el PDF de la orden y el mapa no puedan dar cantidades distintas. Las unidades sin producto o sin dosis quedan fuera de los mapas y se listan en `resumen.json` y `LEEME.txt`.
