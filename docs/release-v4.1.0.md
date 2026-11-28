@@ -25,7 +25,10 @@ Hasta v4.0.0 la orden de trabajo calculaba producto y dosis por unidad de manejo
 - el recorrido sugerido en GeoJSON y KML (pasadas paralelas al lado más largo del lote, tramos de aplicación y de traslado);
 - `resumen.json` (cantidades, recorrido, cargas de tanque y simulación de cobertura) y `LEEME.txt` (cómo usar cada archivo y limitaciones).
 
-Código en `app/prescripcion/` (`maquinas.py`, `mapa.py`, `ruta.py`, `isoxml.py`, `paquete.py`, `router.py`). En el frontend, `ResumenVuelo.jsx` suma el botón "Prescripción para maquinaria" con selector de máquina, y el botón anterior pasa a llamarse "Zonas (SHP)".
+Código en `app/prescripcion/` (`maquinas.py`, `mapa.py`, `ruta.py`, `isoxml.py`, `paquete.py`, `router.py`). En el frontend, la página de resultados del vuelo (`PanelResultadoVuelo.jsx`, `/lotes/{id}/vuelos/{id}`) suma debajo de las pestañas la fila "Prescripción para maquinaria", con selector de máquina y descarga del `.zip`.
+
+**Error encontrado — el botón no se veía en la app**
+El primer intento puso el botón en `ResumenVuelo.jsx`, que se abre desde `VuelosCalendario.jsx`, pero ninguna página monta `VuelosCalendario` desde el PR #123. Se detectó en la prueba manual y se movió a `PanelResultadoVuelo.jsx`, al lado de "Generar orden de trabajo". `ResumenVuelo` y `VuelosCalendario` quedan como código sin uso.
 
 | Parámetro por defecto | Dron | Mosquito |
 |---|---|---|

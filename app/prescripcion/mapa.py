@@ -132,13 +132,17 @@ def armar_mapa_prescripcion(
     for item in orden.get("items", []):
         uid = item.get("unidad_id")
         if uid not in geoms_local:
-            sin_prescripcion.append({"unidad_id": uid, "motivo": "La unidad no tiene geometría."})
+            sin_prescripcion.append({"unidad_id": uid, "motivo": "la unidad no tiene geometría."})
         elif not item.get("producto"):
-            sin_prescripcion.append({"unidad_id": uid, "motivo": "Sin producto sugerido para la causa."})
+            causa = item.get("causa_indice") or "sin causa"
+            sin_prescripcion.append({
+                "unidad_id": uid,
+                "motivo": f"la causa '{causa}' no tiene producto fitosanitario sugerido.",
+            })
         elif item.get("dosis_por_ha") is None:
             sin_prescripcion.append({
                 "unidad_id": uid,
-                "motivo": f"{item['producto']}: sin dosis cargada en el catálogo.",
+                "motivo": f"{item['producto']} no tiene dosis cargada en el catálogo.",
             })
         else:
             items_por_producto.setdefault(item["producto"], []).append(item)

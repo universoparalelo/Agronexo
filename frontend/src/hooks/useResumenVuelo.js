@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { obtenerDiagnostico } from '../api/analisis'
-import { descargarReportePdf, descargarOrdenTrabajoPdf, descargarPaquetePrescripcion, exportarZonas } from '../api/reportes'
+import { descargarReportePdf, descargarOrdenTrabajoPdf, exportarZonas } from '../api/reportes'
 import { descargarBlob, extraerMensajeErrorBlob } from '../utils/descargarArchivo'
 
 const SEVERIDAD_ORDEN = ['critica', 'moderada', 'leve', 'normal', 'vigorosa']
@@ -74,7 +74,7 @@ export default function useResumenVuelo(loteId, vueloId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [descargando, setDescargando] = useState(null) // 'informe' | 'orden' | 'prescripcion' | 'zonas' | null
+  const [descargando, setDescargando] = useState(null) // 'informe' | 'orden' | 'prescripcion' | null
   const [descargaError, setDescargaError] = useState('')
 
   useEffect(() => {
@@ -107,30 +107,21 @@ export default function useResumenVuelo(loteId, vueloId) {
       .finally(() => setDescargando(null))
   }
 
-  function descargarPrescripcion(maquina) {
-    setDescargando('prescripcion')
-    setDescargaError('')
-    descargarPaquetePrescripcion(loteId, vueloId, maquina)
-      .then(blob => descargarBlob(blob, `prescripcion_${maquina}_${vueloId}.zip`))
-      .catch(async (err) => setDescargaError(await extraerMensajeErrorBlob(err, 'No se pudo generar la prescripción.')))
-      .finally(() => setDescargando(null))
-  }
-
   // A diferencia de los PDF, el export de zonas devuelve una URL firmada de
   // MinIO — no hay blob que armar, el navegador la abre directo (ver
   // comentario en api/reportes.js).
-  function descargarZonasShp() {
-    setDescargando('zonas')
+  function descargarPrescripcion() {
+    setDescargando('prescripcion')
     setDescargaError('')
     exportarZonas(loteId, vueloId, 'shapefile')
       .then(({ url }) => window.open(url, '_blank'))
-      .catch(async (err) => setDescargaError(await extraerMensajeErrorBlob(err, 'No se pudieron exportar las zonas (SHP).')))
+      .catch(async (err) => setDescargaError(await extraerMensajeErrorBlob(err, 'No se pudo generar la prescripción (SHP).')))
       .finally(() => setDescargando(null))
   }
 
   return {
     diagnostico, stats, loading, error,
     descargando, descargaError,
-    descargarInforme, descargarOrden, descargarPrescripcion, descargarZonasShp,
+    descargarInforme, descargarOrden, descargarPrescripcion,
   }
 }

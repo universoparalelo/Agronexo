@@ -72,9 +72,13 @@ async def paquete_prescripcion(
         # que las exportaciones de app/reportes/router.py.
         mapa = await run_in_threadpool(armar_mapa_prescripcion, unidades_manejo, orden, limite, perfil.margen_m)
         if not mapa.productos:
+            motivos = "; ".join(f"unidad {s['unidad_id']}: {s['motivo']}" for s in mapa.sin_prescripcion)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Ninguna unidad de manejo tiene producto con dosis: no hay nada que prescribir.",
+                detail=(
+                    "Ninguna unidad de manejo tiene producto con dosis: no hay nada que prescribir "
+                    f"({motivos})."
+                ),
             )
         zip_bytes, _ = await run_in_threadpool(
             generar_paquete_prescripcion, mapa, perfil, diagnostico.get("metadata", {}), request.app.version,

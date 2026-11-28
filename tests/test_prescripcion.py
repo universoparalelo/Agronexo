@@ -124,7 +124,7 @@ def test_unidad_sin_dosis_queda_fuera_y_avisada():
     mapa, _ = _mapa()
     assert all(z.unidad_id != 4 for p in mapa.productos for z in p.zonas)
     assert [s["unidad_id"] for s in mapa.sin_prescripcion] == [4]
-    assert "sin dosis" in mapa.sin_prescripcion[0]["motivo"]
+    assert "no tiene dosis" in mapa.sin_prescripcion[0]["motivo"]
 
 
 def test_margen_agranda_sin_superponer_ni_salir_del_lote():

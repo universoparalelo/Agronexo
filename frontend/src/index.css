@@ -3003,16 +3003,6 @@ body {
 .resumen-vuelo-acciones button:hover:not(:disabled) { background: #f0f5ec; border-color: #27500a; }
 .resumen-vuelo-acciones button:disabled { cursor: not-allowed; opacity: 0.55; }
 
-.resumen-vuelo-prescripcion { margin-top: 0.5rem; align-items: center; }
-.resumen-vuelo-prescripcion select {
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  font-size: 0.72rem;
-  color: #1a3a2a;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-}
-
 .mapa-dibujo-wrapper {
   position: relative;
 }
