@@ -3,6 +3,7 @@
 **Estado:** En desarrollo
 **Rama principal:** `main`
 **Inicio:** 2026-11-27
+**Versión de la app de escritorio:** 4.1.0 en `escritorio/electron/package.json` (subida en `feat/prescripcion-maquinaria`; falta armar el instalador desde `main`, el tag `v4.1.0` y publicar la release)
 
 Release corta para la prescripción para maquinaria que pidió la cátedra: un archivo de salida que una pulverizadora autopropulsada (mosquito) o un dron pulverizador puedan usar para aplicar, con los productos, sus cantidades y el recorrido. Sprints e historias: a confirmar por el equipo.
 
